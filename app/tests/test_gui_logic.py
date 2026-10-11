@@ -74,7 +74,7 @@ class TestPlanAction(unittest.TestCase):
         return logic.plan_action(action, [PN("HCR", b, 1) for b in bases], BY_PN)
 
     def test_nothing_selected(self):
-        self.assertEqual(self.plan("checkout").message, "Select a part first.")
+        self.assertEqual(self.plan("checkout").message, "Select a part first (use its box on the left).")
 
     def test_checkout_uses_only_available_parts(self):
         plan = self.plan("checkout", 1, 2, 3)
@@ -612,7 +612,7 @@ class TestTeamText(unittest.TestCase):
         p = self.people
         self.assertEqual(logic.identity_banner(p.Identity(p.LEGACY))[1], "normal")
         text, tone = logic.identity_banner(p.resolve(self.d, "alexs"))
-        self.assertEqual((tone, "Alex Smith" in text, "Owner" in text, "Quality" in text), ("normal", True, True, True))
+        self.assertEqual((tone, "Alex Smith" in text, "Owner" in text, "Quality" in text), ("normal", True, False, False))
         for host in ("stranger", "", ):
             self.assertEqual(logic.identity_banner(p.resolve(self.d, host))[1], "warn")
         self.assertEqual(logic.identity_banner(p.Identity(p.INACTIVE))[1], "warn")
@@ -795,25 +795,39 @@ class TestWorkflowHistory(unittest.TestCase):
 class TestTicks(unittest.TestCase):
     A, B, C = PN("HCR", 1, 1), PN("HCR", 2, 1), PN("HCR", 3, 1)
 
-    def test_ticked_parts_are_used_for_multi_part_actions(self):
-        for action in ("checkout", "checkin", "save", "undo"):
+    def test_actions_that_change_things_use_only_the_selected_boxes(self):
+        for action in ("checkout", "checkin", "save", "undo", "release", "edit", "revise", "void"):
             self.assertEqual(logic.choose_targets(action, [self.A, self.B], [self.C]), [self.A, self.B])
+            self.assertEqual(logic.choose_targets(action, [], [self.C]), [])
 
-    def test_single_part_actions_use_the_highlighted_row(self):
-        self.assertEqual(logic.choose_targets("release", [self.A, self.B], [self.C]), [self.C])
+    def test_looking_at_a_part_uses_the_highlighted_row(self):
+        for action in ("open", "open_drawing", "references"):
+            self.assertEqual(logic.choose_targets(action, [self.A, self.B], [self.C]), [self.C])
 
-    def test_a_single_part_action_falls_back_to_the_only_ticked_part(self):
-        self.assertEqual(logic.choose_targets("release", [self.A], []), [self.A])
-        self.assertEqual(logic.choose_targets("release", [self.A, self.B], []), [])
+    def test_looking_falls_back_to_the_only_selected_part(self):
+        self.assertEqual(logic.choose_targets("open", [self.A], []), [self.A])
+        self.assertEqual(logic.choose_targets("open", [self.A, self.B], []), [])
 
-    def test_no_ticks_means_the_highlighted_rows(self):
-        self.assertEqual(logic.choose_targets("checkout", [], [self.C]), [self.C])
-        self.assertEqual(logic.choose_targets("checkout", [], []), [])
+    def test_row_tags(self):
+        self.assertEqual(logic.row_tags("mine", False), ("mine",))
+        self.assertEqual(logic.row_tags("mine", True), ("mine", "ticked"))
+
+    def test_undo_prompt_lists_each_part_on_its_own_line(self):
+        text = logic.undo_prompt([self.A, self.B])
+        self.assertTrue(text.startswith("This will discard changes and release the lock on these parts:"))
+        self.assertIn(f"\n{self.A}\n{self.B}\n", text)
+        self.assertTrue(text.endswith("Continue?"))
+
+    def test_the_banner_shows_only_the_name(self):
+        import people
+        who = people.Person("bea", "Bea Jones", "", ["Bea"], "member", ["Quality"])
+        self.assertEqual(people.Identity.describe(type("I", (), {"state": people.OK, "person": who})()),
+                         "Bea Jones")
 
     def test_tick_text(self):
-        self.assertEqual(logic.tick_text(0), "Nothing ticked.")
-        self.assertTrue(logic.tick_text(1).startswith("1 part ticked."))
-        self.assertTrue(logic.tick_text(3).startswith("3 parts ticked."))
+        self.assertEqual(logic.tick_text(0), "Nothing selected.")
+        self.assertTrue(logic.tick_text(1).startswith("1 part selected."))
+        self.assertTrue(logic.tick_text(3).startswith("3 parts selected."))
 
     def test_person_unchanged(self):
         import people

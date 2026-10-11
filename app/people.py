@@ -275,8 +275,7 @@ class Identity:
         if self.state == LEGACY:
             return "Team not set up - everyone can do everything"
         if self.state == OK:
-            roles = f", {', '.join(self.person.roles)}" if self.person.roles else ""
-            return f"{self.person.name} ({self.person.label}{roles})"
+            return self.person.name
         if self.state == NOT_LISTED:
             return "Not on the team list - read-only"
         if self.state == INACTIVE:

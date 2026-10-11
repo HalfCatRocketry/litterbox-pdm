@@ -77,6 +77,11 @@ class FakeTree(Anything):
     def exists(self, iid):
         return iid in self.rows
 
+    def item(self, iid, option=None, **changes):
+        if "tags" in changes:
+            self.rows[iid]["tags"] = changes["tags"]
+        return tuple(self.rows[iid]["tags"]) if option == "tags" else None
+
     def selection(self):
         return self.chosen
 
@@ -602,17 +607,48 @@ class TickAndSaveWiring(unittest.TestCase):
         self.assertEqual(self.app.tree.selection(), ("HCR-00003-001",) if isinstance(self.app.tree.selection(), tuple)
                          else ["HCR-00003-001"])
 
-    def test_multi_actions_use_the_ticks_and_others_the_highlight(self):
+    def test_changing_actions_use_the_ticks_and_looking_uses_the_highlight(self):
         self.app._set_ticks(["HCR-00001-001", "HCR-00002-001"], True)
         self.app.tree.selection_set("HCR-00003-001")
         got = [str(p) for p in self.app._selected_pns("checkout")]
         self.assertEqual(got, ["HCR-00001-001", "HCR-00002-001"])
-        self.assertEqual([str(p) for p in self.app._selected_pns("release")], ["HCR-00003-001"])
+        self.assertEqual(self.app._selected_pns("release") and [str(p) for p in self.app._selected_pns("release")],
+                         ["HCR-00001-001", "HCR-00002-001"])
+        self.assertEqual([str(p) for p in self.app._selected_pns("open")], ["HCR-00003-001"])
 
     def test_a_tick_on_a_part_that_left_the_list_is_ignored(self):
         self.app._set_ticks(["HCR-00001-001"], True)
         self.app.tree.delete("HCR-00001-001")
         self.assertEqual(self.app._selected_pns("checkout"), [])
+
+    def test_ticked_rows_get_the_ticked_tag_and_keep_their_colour(self):
+        self.app.tree.rows["HCR-00001-001"]["tags"] = ("mine",)
+        self.app._set_ticks(["HCR-00001-001"], True)
+        self.assertEqual(self.app.tree.item("HCR-00001-001", "tags"), ("mine", "ticked"))
+        self.app._set_ticks(["HCR-00001-001"], False)
+        self.assertEqual(self.app.tree.item("HCR-00001-001", "tags"), ("mine",))
+
+    def _click(self, iid, shift=False):
+        tree = self.app.tree
+        tree.identify_region = lambda x, y: "cell"
+        tree.identify_column = lambda x: "#1"
+        tree.identify_row = lambda y: iid
+        return self.app._on_tree_click(self.SimpleNamespace(x=1, y=1, state=1 if shift else 0))
+
+    def test_shift_click_ticks_everything_between(self):
+        from types import SimpleNamespace
+        self.SimpleNamespace = SimpleNamespace
+        self._click("HCR-00001-001")
+        self._click("HCR-00003-001", shift=True)
+        self.assertEqual(self.app.ticked, {"HCR-00001-001", "HCR-00002-001", "HCR-00003-001"})
+
+    def test_shift_click_after_an_untick_unticks_the_range(self):
+        from types import SimpleNamespace
+        self.SimpleNamespace = SimpleNamespace
+        self.app._set_ticks(["HCR-00001-001", "HCR-00002-001", "HCR-00003-001"], True)
+        self._click("HCR-00001-001")                    # unticks the first
+        self._click("HCR-00003-001", shift=True)        # and the range to the last
+        self.assertEqual(self.app.ticked, set())
 
     def test_tick_all_then_none(self):
         self.app._toggle_all_ticks()

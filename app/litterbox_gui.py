@@ -56,6 +56,7 @@ BG_PANEL = "#2b2b2b"
 ACCENT = "#1f6aa5"
 GRAY = "#3a3a3a"
 GRAY_HOVER = "#4a4a4a"
+TICK_BG = "#4d4d4d"                 # a ticked (selected) row in the parts list: lighter than the list background
 GREEN, GREEN_HOVER = "#2e8b57", "#256f45"
 TEAL, TEAL_HOVER = "#2f7d8c", "#256673"
 RED, RED_HOVER = "#8b3a3a", "#6f2e2e"
@@ -252,6 +253,11 @@ def style_tables():
     )
     style.map("Treeview", background=[("selected", ACCENT)])
     style.map("Treeview.Heading", background=[("active", "#333333")])
+    # The parts list: one blue highlighted row (for looking at a part), and lighter gray for rows with a box ticked.
+    style.configure("Parts.Treeview", background=BG_PANEL, foreground="#e6e6e6", fieldbackground=BG_PANEL,
+                    borderwidth=0, rowheight=30, font=("Segoe UI", 10))
+    style.map("Parts.Treeview", background=[("selected", ACCENT)])
+    style.layout("Parts.Treeview", style.layout("Treeview"))
 
 
 def click_log(text):
@@ -1106,7 +1112,7 @@ class ImportWindow(ctk.CTkToplevel):
     1. Pick folders (or open a saved scan). Litterbox scans them (read-only), reads what each
        assembly references, and proposes new part numbers.
     2. The table lists every item with its new part number, name and description. Click the
-       first column to tick / untick an item. Double-click a part number, name or description to
+       first column to select / deselect an item. Double-click a part number, name or description to
        edit it. Clear a part number to let Litterbox choose one again.
     3. Finish & Import checks the numbers against the newest records and imports. If a number you
        typed has been taken, nothing is imported: the window stays on the table with those rows
@@ -1231,8 +1237,8 @@ class ImportWindow(ctk.CTkToplevel):
         bar.columnconfigure(0, weight=1)
         self.summary = ctk.CTkLabel(bar, text="", anchor="w")
         self.summary.grid(row=0, column=0, sticky="w")
-        for column, (text, command) in enumerate((("Tick all", lambda: self._tick_all(True)),
-                                                  ("Untick all", lambda: self._tick_all(False)),
+        for column, (text, command) in enumerate((("Select all", lambda: self._tick_all(True)),
+                                                  ("Select none", lambda: self._tick_all(False)),
                                                   ("Refresh numbers", self._refresh_numbers))):
             ReleaseButton(bar, text=text, command=command, width=110, height=30, fg_color=GRAY,
                           hover_color=GRAY_HOVER).grid(row=0, column=1 + column, padx=(6, 0))
@@ -1260,7 +1266,7 @@ class ImportWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(page, text="\u2611 = will be imported.   \u2610 = left out: no part number, nothing copied, and "
                                 "it stays in the saved scan so you can import it later.   Click the first column to "
-                                "tick or untick.\nDouble-click a part number, name or description to edit it "
+                                "select or deselect.\nDouble-click a part number, name or description to edit it "
                                 "(clear a part number to let Litterbox choose one).",
                      text_color=MUTED, anchor="w", justify="left", wraplength=1050).grid(
             row=2, column=0, sticky="ew", padx=26, pady=(6, 0))
@@ -1651,7 +1657,7 @@ class ImportWindow(ctk.CTkToplevel):
                 self._cots_confirmed = confirmed
                 self._finish()
             else:
-                self._say("Nothing was imported. Tick the missing items, or scan their folder too, and try again.",
+                self._say("Nothing was imported. Select the missing items, or scan their folder too, and try again.",
                           "warn")
             return
         if error is None:
@@ -1790,7 +1796,7 @@ class HistoryWindow(ctk.CTkToplevel):
 
 
 class ReferencesWindow(ctk.CTkToplevel):
-    """What a part uses and where it is used. Click a tick box to choose, then replace the chosen
+    """What a part uses and where it is used. Click a box to select, then replace the chosen
     references with the latest released revision. Only assemblies that are still in work can change.
 
     The window stays open while references are being updated: set_busy() greys it out with a message,
@@ -1886,8 +1892,8 @@ class ReferencesWindow(ctk.CTkToplevel):
         buttons = ctk.CTkFrame(body, fg_color="transparent")
         buttons.grid(row=5, column=0, sticky="ew", padx=20, pady=14)
         for column, (text, width, color, hover, command) in enumerate((
-                ("Tick all that can change", 190, GRAY, GRAY_HOVER, self._tick_all),
-                ("Replace ticked with latest released", 250, PURPLE, PURPLE_HOVER, self._replace))):
+                ("Select all that can change", 190, GRAY, GRAY_HOVER, self._tick_all),
+                ("Replace selected with latest released", 250, PURPLE, PURPLE_HOVER, self._replace))):
             button = ReleaseButton(buttons, text=text, width=width, fg_color=color, hover_color=hover,
                                    command=command)
             button.grid(row=0, column=column, padx=(0, 8))
@@ -1952,7 +1958,7 @@ class ReferencesWindow(ctk.CTkToplevel):
                         seen.add(key)
                         chosen.append(references.Replacement(use.parent, use.child, use.child_revision))
         if not chosen:
-            messagebox.showinfo("Nothing ticked", "Tick at least one reference to replace.")
+            messagebox.showinfo("Nothing selected", "Select at least one reference to replace.")
             return
         self.destroy()
         self.on_replace(chosen)
@@ -2558,10 +2564,14 @@ class TeamWindow(ctk.CTkToplevel):
         self.reload()
         self.after(100, self.lift)
 
+    BUTTONS_PER_ROW = 5                 # more than this and the buttons start a new row instead of running off
+
     def _button(self, text, command, color=GRAY, hover=GRAY_HOVER, width=130):
         button = ReleaseButton(self.buttons, text=text, width=width, fg_color=color, hover_color=hover,
                                command=command)
-        button.grid(row=0, column=len(self.buttons.winfo_children()) - 1, padx=(0, 6))
+        index = len(self.buttons.winfo_children()) - 1
+        button.grid(row=index // self.BUTTONS_PER_ROW, column=index % self.BUTTONS_PER_ROW, padx=(0, 6),
+                    pady=(0, 6), sticky="w")
         return button
 
     def close(self):
@@ -2618,8 +2628,7 @@ class TeamWindow(ctk.CTkToplevel):
             for iid, values in logic.people_table(directory):
                 self.tree.insert("", "end", iid=iid, values=values)
             unsaved = self.draft.summary() if self.draft is not None else ""
-            self.summary.configure(text=f"You: {identity.describe()}.   Roles this org uses: "
-                                        f"{', '.join(directory.roles) or 'none yet'}."
+            self.summary.configure(text=f"You: {identity.describe()}."
                                         + (f"\n{unsaved}. Press Save to upload them." if unsaved else ""))
             if identity.allows("manage_people")[0]:
                 self._button("Add Person", lambda: self.app.edit_person(self, None, adding=True))
@@ -2844,7 +2853,8 @@ class App(ctk.CTk):
         frame.rowconfigure(0, weight=1)
         style_tables()
         self.tree = ttk.Treeview(frame, columns=("tick", "pn", "name", "description", "cots", "rev", "state", "files"),
-                                 show="headings", selectmode="extended")
+                                 show="headings", selectmode="browse",
+                                 style="Parts.Treeview")
         main_columns = (("pn", "Part number", 140, False),
                         ("name", "Name", 240, True),
                         ("description", "Description", 220, True),
@@ -2863,6 +2873,7 @@ class App(ctk.CTk):
         self.tree.bind("<space>", self._tick_highlighted)
         for kind, color in ROW_COLORS.items():
             self.tree.tag_configure(kind, foreground=color)
+        self.tree.tag_configure("ticked", background=TICK_BG)       # last, so it wins for the background only
         self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
         self.tree.bind("<Double-1>", self.show_history)
         scroll = ctk.CTkScrollbar(frame, command=self.tree.yview)
@@ -3090,7 +3101,14 @@ class App(ctk.CTk):
             return None
         iid = self.tree.identify_row(event.y)
         if iid:
-            self._set_ticks([iid], iid not in self.ticked)
+            shown = list(self.tree.get_children())
+            anchor = getattr(self, "last_tick", None)
+            if event.state & 0x1 and anchor in shown:        # Shift: tick everything from the last click to here
+                a, b = sorted((shown.index(anchor), shown.index(iid)))
+                self._set_ticks(shown[a:b + 1], anchor in self.ticked)
+            else:
+                self._set_ticks([iid], iid not in self.ticked)
+            self.last_tick = iid
         return "break"
 
     def _tick_highlighted(self, event=None):
@@ -3107,6 +3125,8 @@ class App(ctk.CTk):
         for iid in iids:
             (self.ticked.add if on else self.ticked.discard)(iid)
             self.tree.set(iid, "tick", logic.TICK_ON if on else logic.TICK_OFF)
+            kinds = [t for t in self.tree.item(iid, "tags") if t != "ticked"]
+            self.tree.item(iid, tags=logic.row_tags(kinds[0], on) if kinds else ())
         shown = self.tree.get_children()
         self.tree.heading("tick", text=logic.TICK_ON if shown and all(i in self.ticked for i in shown) else logic.TICK_OFF)
         self._say(logic.tick_text(len(self._ticked_pns())))
@@ -3258,7 +3278,7 @@ class App(ctk.CTk):
         previous = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
         for row in rows:
-            self.tree.insert("", "end", iid=str(row.pn), tags=(row.kind,), values=(
+            self.tree.insert("", "end", iid=str(row.pn), tags=logic.row_tags(row.kind, str(row.pn) in self.ticked), values=(
                 logic.TICK_ON if str(row.pn) in self.ticked else logic.TICK_OFF,
                 row.pn.short, row.name, row.description, "Yes" if row.cots else "", row.revision, row.state,
                 logic.file_types(row.files)))
@@ -3665,10 +3685,7 @@ class App(ctk.CTk):
         plan = self._plan("undo")
         if not plan:
             return
-        names = ", ".join(str(pn) for pn in plan.targets)
-        if not messagebox.askyesno(
-                "Undo checkout",
-                f"This throws away your changes to {names} and releases the lock.\n\nContinue?"):
+        if not messagebox.askyesno("Undo checkout", logic.undo_prompt(plan.targets)):
             return
         self._run_batch("undo", plan, engine.undo_checkout)
 
@@ -3967,9 +3984,9 @@ class App(ctk.CTk):
     def show_history(self, event=None):
         if event is not None and self.tree.identify_column(event.x) == "#1":
             return                                              # double-clicking a tick box isn't asking for history
-        chosen = self._selected_pns()
+        chosen = self._selected_pns("open")                    # the highlighted row, or the one selected part
         if len(chosen) != 1:
-            self._say("Select one part to see its history.", "warn")
+            self._say("Click one part to see its history.", "warn")
             return
         try:
             record = registry.load(self.repo(), chosen[0])

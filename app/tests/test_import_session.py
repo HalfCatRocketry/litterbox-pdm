@@ -142,7 +142,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             for name in ("p1", "p3", "sub", "top"):
                 self.wait(lambda d, p, n=name: self.session.include(self.id_of(n), False, d))
             _, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
-            self.assertIn("Nothing is ticked", str(error))
+            self.assertIn("Nothing is selected", str(error))
 
     # -- numbers and finishing ---------------------------------------------------
     def test_refresh_reports_typed_numbers_that_are_taken(self):
@@ -255,7 +255,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertIn("can't be edited", logic.edit_import_cell(prepared, 9999, "name", "x"))
         with self.user("Alex"):
             self.wait(lambda d, p: self.session.include(top, False, d))
-        self.assertIn("Tick the row first", edit("pn", "HCR-00800-001"))
+        self.assertIn("Select the row first", edit("pn", "HCR-00800-001"))
         self.assertEqual(edit("name", "Renamed while unticked"), "")           # name and description still editable
         with self.user("Alex"):
             self.wait(lambda d, p: self.session.include(top, True, d))
@@ -356,7 +356,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual(next(r for r in self.rows() if r.item_id == top).tag, "ok")
         with self.user("Alex"):
             self.wait(lambda d, p: self.session.include(top, False, d))
-        self.assertIn("Tick the row first", edit("00700", "001"))
+        self.assertIn("Select the row first", edit("00700", "001"))
         self.assertIn("can't be edited", logic.edit_import_pn(prepared, 9999, "00700", "001"))
 
     def test_conflict_rows_are_marked_and_explained(self):

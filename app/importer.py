@@ -917,7 +917,7 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
     mf, backend, proposal = prepared.manifest, prepared.backend, prepared.proposal
     items = prepared.items
     if not items:
-        raise ImportFailed("Nothing is ticked, so there is nothing to import.")
+        raise ImportFailed("Nothing is selected, so there is nothing to import.")
     originals = _snapshot([p for item in items for p in _item_files(item)])
     last_error = None
     renumbered = []

@@ -122,7 +122,7 @@ def plan_action(action, selected, rows_by_pn):
     `selected` is a list of PN objects; `rows_by_pn` maps PN -> PartStatus.
     """
     if not selected:
-        return ActionPlan(message="Select a part first.")
+        return ActionPlan(message="Select a part first (use its box on the left)." if action not in VIEW_ONLY else "Click a part first.")
     if action not in MULTI and len(selected) > 1:
         return ActionPlan(message=f"Select just one part to {NAME[action]}.")
 
@@ -148,24 +148,36 @@ def plan_action(action, selected, rows_by_pn):
 TICK_ON, TICK_OFF = "\u2611", "\u2610"          # the box glyphs in the list's first column
 
 
+VIEW_ONLY = {"open", "open_drawing", "references"}      # these only look at a part, so the blue highlighted row will do
+
+
 def choose_targets(action, ticked, highlighted):
-    """Which parts an action applies to. Actions that work on several parts (MULTI) use the ticked parts when any
-    are ticked, otherwise the highlighted rows. Single-part actions use the highlighted row, or the one ticked part
-    if nothing is highlighted, so a forgotten tick never changes what Open or Release does."""
-    if ticked and action in MULTI:
-        return list(ticked)
-    if highlighted:
-        return list(highlighted)
-    if len(ticked) == 1:
-        return list(ticked)
-    return []
+    """Which parts an action applies to. Looking at a part (VIEW_ONLY) uses the highlighted row, or the one
+    selected part if nothing is highlighted. Everything else, which changes or proposes a change, uses only the
+    parts whose boxes are selected, so a stray click on a row can never be what Release or Check Out acts on."""
+    if action in VIEW_ONLY:
+        if highlighted:
+            return list(highlighted)
+        return list(ticked) if len(ticked) == 1 else []
+    return list(ticked)
 
 
 def tick_text(count):
     if not count:
-        return "Nothing ticked."
-    return (f"{count} part{'s' if count != 1 else ''} ticked. Check Out, Check In, Save Progress and Undo Checkout "
-            "apply to the ticked parts.")
+        return "Nothing selected."
+    return (f"{count} part{'s' if count != 1 else ''} selected. Check Out, Check In, Save Progress and Undo Checkout "
+            "apply to the selected parts.")
+
+
+def row_tags(kind, ticked):
+    """The list row's tags: its colour, plus 'ticked' when its box is ticked."""
+    return (kind, "ticked") if ticked else (kind,)
+
+
+def undo_prompt(targets):
+    """The question asked before Undo Checkout."""
+    return ("This will discard changes and release the lock on these parts:\n\n"
+            + "\n".join(str(pn) for pn in targets) + "\n\nContinue?")
 
 
 def person_unchanged(person, fields):
@@ -532,7 +544,7 @@ class ImportRow:
 def import_rows(candidates, proposal, conflicts=(), duplicates=None):
     """One ImportRow per item that could be imported, in order. `conflicts` come from importer.Refresh/PNConflict.
 
-    Rows that are ticked show their new part number; unticked rows show none and are greyed.
+    Rows that are selected show their new part number; unticked rows show none and are greyed.
     """
     placed = {id(entry.item): (index, entry) for index, entry in enumerate(proposal.entries)}
     problems = {c.index: c for c in conflicts}
@@ -589,7 +601,7 @@ def edit_import_cell(prepared, item_id, column, text):
     text = " ".join(str(text).split()) if column != "pn" else str(text).strip()
     if column == "pn":
         if index is None:
-            return "Tick the row first: unticked rows are not given a part number."
+            return "Select the row first: unselected rows are not given a part number."
         if not text:
             prepared.proposal.reset_pn(index)
             return ""
@@ -659,7 +671,7 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
     if item is None:
         return "That cell can't be edited."
     if index is None:
-        return "Tick the row first: unticked rows are not given a part number."
+        return "Select the row first: unselected rows are not given a part number."
     try:
         base = parse_typed_number(base_text, "part number", pn_module.BASE_DIGITS)
         variant = parse_typed_number(variant_text, "variant number", pn_module.VARIANT_DIGITS)
@@ -696,7 +708,7 @@ def import_external_text(error):
     lines += ["", "If you continue, the imported copies will still depend on those original files. They will only "
               "open completely on computers that have them at those paths, and the vault will not be "
               "self-contained.", "",
-              "Usually it is better to say No, tick the missing items (or scan their folder as well) and import again.",
+              "Usually it is better to say No, select the missing items (or scan their folder as well) and import again.",
               "", "Import anyway?"]
     return "\n".join(lines)
 
