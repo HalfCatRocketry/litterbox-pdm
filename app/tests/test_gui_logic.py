@@ -711,5 +711,86 @@ class TestVaultCreatedText(unittest.TestCase):
         self.assertIn("Mind the gap.", text)
 
 
+class TestWorkflowText(unittest.TestCase):
+    def template(self, allow_self=True):
+        import workflow
+        return workflow.Template("release", [workflow.Step("Quality", 1), workflow.Step("Responsible Engineer", 2)],
+                                 allow_self)
+
+    def plan(self, warnings=()):
+        from types import SimpleNamespace
+        return SimpleNamespace(pn="HCR-00001-001", name="Upright", files=["cad/a.SLDPRT"], warnings=list(warnings))
+
+    def test_the_request_question_lists_who_must_sign_and_what_they_see(self):
+        text = logic.request_release_text(self.plan(), self.template())
+        self.assertIn("Ask for sign-offs to release HCR-00001-001 (Upright)", text)
+        self.assertIn("  Quality\n", text)
+        self.assertIn("Responsible Engineer (2 people)", text)
+        self.assertIn("cad/a.SLDPRT", text)
+        self.assertNotIn("own request", text)
+
+    def test_the_request_question_mentions_self_signoff_warnings_and_notes(self):
+        text = logic.request_release_text(self.plan(["uses an old part"]), self.template(False), ["Nobody has Quality."])
+        self.assertIn("can't sign off your own request", text)
+        self.assertIn("uses an old part", text)
+        self.assertIn("Nobody has Quality.", text)
+
+    def test_pending_parts_can_be_looked_at_and_released_from_but_nothing_else(self):
+        for action in ("open", "open_drawing", "references", "release"):
+            self.assertIn("pending", logic.ALLOWED_KINDS[action])
+        for action in ("checkout", "checkin", "revise", "void", "make_cots", "reopen", "cancel_revision", "undo"):
+            self.assertNotIn("pending", logic.ALLOWED_KINDS[action])
+
+    def test_task_table_and_button_text(self):
+        from types import SimpleNamespace
+        task = SimpleNamespace(pn="HCR-00001-001", name="Upright", revision="A", requested_by="Alex Smith",
+                               requested_at="2026-10-11T00:00:00Z", summary="Release pending: Quality 0/1")
+        (iid, values), = logic.tasks_table([task], local=False)
+        self.assertEqual(iid, "HCR-00001-001")
+        self.assertEqual(values, ("HCR-00001-001", "Upright", "A", "Alex Smith", "2026-10-11 00:00",
+                                  "Release pending: Quality 0/1"))
+        self.assertEqual(logic.tasks_button_text(0), "My Tasks")
+        self.assertEqual(logic.tasks_button_text(3), "My Tasks (3)")
+
+    def test_signoff_counts(self):
+        self.assertEqual([logic.parse_signoff_count(t) for t in ("1", " 20 ", "0", "21", "x", "", "-1", "1.5")],
+                         [1, 20, None, None, None, None, None, None])
+
+    def test_workflow_rows(self):
+        self.assertEqual(logic.workflow_rows(None), [])
+        self.assertEqual(logic.workflow_rows(self.template()), [("Quality", 1), ("Responsible Engineer", 2)])
+
+    def test_signoff_failure_text_says_it_is_saved(self):
+        text = logic.signoff_failure_text("HCR-00001-001", "offline")
+        self.assertIn("is saved", text)
+        self.assertIn("offline", text)
+
+
+class TestWorkflowHistory(unittest.TestCase):
+    def history(self, *events):
+        import registry
+        from pn import parse
+        record = registry.Record(parse("HCR-00001-001"), "Upright", "Alex", "2026-10-11T00:00:00Z")
+        for event in events:
+            record.history.append(dict({"by": "Bea", "at": "2026-10-11T01:00:00Z", "revision": "A"}, **event))
+        return logic.format_history(record, local=False)
+
+    def test_labels_and_details(self):
+        rows = self.history(
+            {"event": "release_requested", "waiting_on": ["Quality (0 of 1)"]},
+            {"event": "release_signed", "roles": ["Quality"], "comment": "ok"},
+            {"event": "release_rejected", "reason": "Missing tolerance", "signed": ["Alex Smith"]},
+            {"event": "release_withdrawn", "reason": "Wrong rev"},
+            {"event": "released", "signoffs": ["Alex Smith", "Bea Jones"]},
+            {"event": "released", "override": True, "reason": "Urgent"})
+        by_label = {r[2]: r[3] for r in rows}
+        self.assertEqual(by_label["Release requested"], "needs Quality (0 of 1)")
+        self.assertEqual(by_label["Signed off"], "ok  -  as Quality")
+        self.assertEqual(by_label["Release rejected"], "Missing tolerance  -  had been signed by Alex Smith")
+        self.assertEqual(by_label["Request withdrawn"], "Wrong rev")
+        self.assertEqual(by_label["Released"], "signed off by Alex Smith, Bea Jones")
+        self.assertEqual(by_label["Released (Admin override)"], "Urgent")
+
+
 if __name__ == "__main__":
     unittest.main()

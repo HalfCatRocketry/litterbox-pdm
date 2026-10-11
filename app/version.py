@@ -18,7 +18,7 @@ Missing values mean format 1 and no minimum, so vaults made before these existed
 
 import sys
 
-VERSION = "0.1.1"
+VERSION = "0.2.0"
 VAULT_FORMAT = 1
 
 

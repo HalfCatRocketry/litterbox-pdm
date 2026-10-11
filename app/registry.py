@@ -57,6 +57,10 @@ EVENT_MADE_COTS = "made_cots"
 EVENT_EDITED = "edited"
 EVENT_REVISED = "revised"
 EVENT_REVISION_CANCELLED = "revision_cancelled"
+EVENT_RELEASE_REQUESTED = "release_requested"
+EVENT_RELEASE_SIGNED = "release_signed"
+EVENT_RELEASE_REJECTED = "release_rejected"
+EVENT_RELEASE_WITHDRAWN = "release_withdrawn"
 
 
 class RegistryError(Exception):
@@ -107,7 +111,7 @@ def _clean_event(event):
 
 _KNOWN_FIELDS = {
     "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "status", "cots",
-    "imported", "import_path", "created_by", "created_at", "approvals", "references", "references_outdated", "history",
+    "imported", "import_path", "created_by", "created_at", "approvals", "pending", "references", "references_outdated", "history",
 }
 
 
@@ -132,7 +136,8 @@ class Record:
     cots: bool = False          # a purchased part: can never be checked out
     imported: bool = False      # came in through the importer rather than New Part / New Variant
     import_path: str = ""       # where the file was imported from (only for imported parts)
-    approvals: list = field(default_factory=list)   # reserved for future sign-offs
+    approvals: list = field(default_factory=list)   # one entry per completed workflow (see workflow.py): who signed, when, and how it ended
+    pending: dict = field(default_factory=dict)     # a request waiting for sign-offs (see workflow.py); empty when there is none
     references_outdated: list = field(default_factory=list)  # revisions whose assembly changed but whose list of parts could not be read
     references: dict = field(default_factory=dict)  # revision -> the parts that revision's assembly uses, e.g. {'A': ['HCR-00005-001_A']}
     history: list = field(default_factory=list)     # list of event dicts
@@ -157,6 +162,8 @@ class Record:
             "created_at": self.created_at,
             "approvals": list(self.approvals),
         })
+        if self.pending:
+            data["pending"] = self.pending
         if self.references_outdated:
             data["references_outdated"] = sorted(self.references_outdated, key=revision_number)
         if self.references:
@@ -203,6 +210,19 @@ class Record:
         if not isinstance(approvals, list):
             raise RegistryError(f"{pn}: 'approvals' must be a list.")
 
+        pending = data.get("pending") or {}
+        if not isinstance(pending, dict):
+            raise RegistryError(f"{pn}: 'pending' must be a request with its sign-offs.")
+        if pending:
+            for key in ("action", "revision", "requested_by", "template", "signoffs"):
+                if key not in pending:
+                    raise RegistryError(f"{pn}: the pending request has no '{key}'.")
+            if not isinstance(pending["signoffs"], list) or not isinstance(pending["template"], dict):
+                raise RegistryError(f"{pn}: the pending request is malformed.")
+            pending = {k: (_as_text(v) if k in ("requested_at",) else v) for k, v in pending.items()}
+            pending["signoffs"] = [dict(e, at=_as_text(e.get("at"))) if isinstance(e, dict) else e
+                                   for e in pending["signoffs"]]
+
         for key in ("cots", "imported"):
             if not isinstance(data.get(key, False), bool):
                 raise RegistryError(f"{pn}: '{key}' must be true or false.")
@@ -246,6 +266,7 @@ class Record:
             imported=bool(data.get("imported", False)),
             import_path=_as_text(data.get("import_path")),
             approvals=list(approvals),
+            pending=pending,
             references=clean_refs,
             references_outdated=outdated,
             history=[_clean_event(e) for e in history],
@@ -492,9 +513,16 @@ def _require_reason(reason, action):
     return reason
 
 
+def _require_not_pending(record, action):
+    if record.pending:
+        raise RegistryError(f"Cannot {action} {record.pn}: it is waiting for sign-offs on a release request. "
+                            "Withdraw the request first.")
+
+
 def record_checkout(record, by, files):
     """Log a check-out. Released, void and COTS parts can't be checked out."""
     _require_status(record, STATUS_IN_WORK, "check out")
+    _require_not_pending(record, "check out")
     if record.cots:
         raise RegistryError(f"Cannot check out {record.pn}: it is a COTS (purchased) part.")
     return add_event(record, EVENT_CHECKED_OUT, by, files=list(files))
@@ -536,14 +564,16 @@ def record_checkin(record, by, files, comment="", references=None):
                      references=list(record.references.get(record.revision, [])) if changed else None)
 
 
-def mark_released(record, by, files):
-    """in_work -> released. `files` is the list of files being frozen."""
+def mark_released(record, by, files, **details):
+    """in_work -> released. `files` is the list of files being frozen. Extra details (who signed off, an
+    override reason...) go on the history event. This does not look at a pending request: workflow.py,
+    which owns those, clears it."""
     _require_status(record, STATUS_IN_WORK, "release")
     if record.cots:
         raise RegistryError(f"Cannot release {record.pn}: it is a COTS (purchased) part.")
     record.status = STATUS_RELEASED
     record.released_revision = record.revision
-    return add_event(record, EVENT_RELEASED, by, files=list(files))
+    return add_event(record, EVENT_RELEASED, by, files=list(files), **details)
 
 
 def edit_details(record, by, name, description):
@@ -570,6 +600,7 @@ def edit_details(record, by, name, description):
 def mark_cots(record, by, files):
     """Turn an in-work part into a COTS (purchased) part. `files` is the list of files it covers."""
     _require_status(record, STATUS_IN_WORK, "make COTS")
+    _require_not_pending(record, "make COTS")
     if record.cots:
         raise RegistryError(f"{record.pn} is already a COTS part.")
     if record.released_revision or record.revision != FIRST_REVISION:
@@ -629,6 +660,7 @@ def can_cancel_revision(record):
 def mark_revision_cancelled(record, by, reason, files):
     """in_work revision -> gone; the part goes back to its latest released revision.
     `files` are the names the cancelled revision's files were kept under."""
+    _require_not_pending(record, "cancel the revision of")
     problem = can_cancel_revision(record)
     if problem:
         raise RegistryError(f"Cannot cancel the revision of {record.pn}. {problem}")
@@ -668,6 +700,7 @@ def mark_void(record, by, reason):
     Only a part that has never been released can be voided. Once a revision has been released
     the part can't disappear: an unwanted new revision is cancelled instead."""
     _require_status(record, STATUS_IN_WORK, "void")
+    _require_not_pending(record, "void")
     if record.released_revision:
         raise RegistryError(f"Cannot void {record.pn}: Rev {record.released_revision} was released. "
                             "Use Cancel Revision to throw away the revision that is in work.")

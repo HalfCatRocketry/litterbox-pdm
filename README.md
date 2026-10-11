@@ -1,7 +1,6 @@
 # Litterbox PDM
 
-A lightweight, program-agnostic product data manager (PDM) for small teams. It uses Git and Git LFS locking to
-check CAD parts in and out, track revisions and references, and release parts, with a simple Windows app on top.
+A lightweight product data manager (PDM) for small teams using Solidworks. It uses Git and Git LFS locking to check CAD parts in and out, track revisions and references, and release parts, with a simple Windows app on top.
 
 ## Install (Windows)
 

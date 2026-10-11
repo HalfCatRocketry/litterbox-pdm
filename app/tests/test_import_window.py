@@ -95,7 +95,7 @@ class FakeBox:
     def __getattr__(self, name):
         def call(*a, **k):
             self.calls.append((name, a, k))
-            return self.answer if name == "askyesno" else None
+            return self.answer if name in ("askyesno", "askokcancel") else None
         return call
 
 
@@ -113,7 +113,7 @@ def load_gui_with_fakes(box):
     dialogs.askdirectory = lambda **k: ""
     dialogs.askopenfilename = lambda **k: ""
     mbox = types.ModuleType("tkinter.messagebox")
-    for name in ("showinfo", "showwarning", "showerror", "askyesno"):
+    for name in ("showinfo", "showwarning", "showerror", "askyesno", "askokcancel"):
         setattr(mbox, name, getattr(box, name))
     tk.filedialog, tk.messagebox, tk.ttk = dialogs, mbox, ttk
     fakes = {"customtkinter": ctk, "tkinter": tk, "tkinter.ttk": ttk, "tkinter.filedialog": dialogs,
@@ -371,6 +371,207 @@ class CreateVaultWiring(unittest.TestCase):
         self.assertEqual(self.switched, ["HCR"])
         self.assertEqual(self.app.settings["orgs"], {"HCR": "C:\\Litterbox\\hcr"})
         self.assertTrue(self.shown("showinfo"))
+
+
+class WorkflowWiring(unittest.TestCase):
+    """The window side of release sign-offs: the Release button, My Tasks and the Workflows dialog."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+        self.SimpleNamespace = SimpleNamespace
+        self.box = FakeBox()
+        self.gui = load_gui_with_fakes(self.box)
+        self.wf = self.gui.workflow
+        app = self.gui.App.__new__(self.gui.App)
+        self.tasks, self.said = [], []
+        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False: self.tasks.append(
+            (work, done, on_success))
+        app._say = lambda text, tone="normal": self.said.append(text)
+        app.repo = lambda: "C:/vault"
+        app.rows, app.rows_by_pn = [], {}
+        app.identity = SimpleNamespace(state="legacy", directory=None, person=None)
+        app.note = ""
+        self.asked = []
+        app._ask = lambda text, title: self.asked.append((text, title)) or self.answer
+        self.answer = ""
+        self.app = app
+        self.template = self.wf.Template("release", [self.wf.Step("Quality", 1)])
+        replace(self, self.wf, "template_for", lambda repo, action: self.template)
+
+    def plan(self, ok=True):
+        return self.SimpleNamespace(pn="HCR-00001-001", name="Upright", files=["cad/a.SLDPRT"], warnings=[],
+                                    problems=[] if ok else ["It is checked out by Bea."], ok=ok)
+
+    def row(self, kind, pending=None):
+        return self.SimpleNamespace(pn="HCR-00001-001", name="Upright", kind=kind, state=kind, pending=pending or {})
+
+    def pending(self, signed=False):
+        return {"action": "release", "revision": "A", "requested_by": "Alex", "requested_by_id": "alex",
+                "requested_at": "2026-10-11T00:00:00Z",
+                "template": {"allow_self_signoff": True, "signoffs": [{"role": "Quality", "count": 1}]},
+                "files": {}, "signoffs": [{"by": "Bea", "id": "bea", "roles": ["Quality"]}] if signed else []}
+
+    def shown(self, name):
+        return [call for call in self.box.calls if call[0] == name]
+
+    def test_release_in_a_vault_with_a_workflow_asks_for_sign_offs(self):
+        calls = []
+        replace(self, self.wf, "request_release", lambda repo, pn: calls.append((repo, pn)) or "pending")
+        self.app._plan = lambda action: self.SimpleNamespace(targets=["HCR-00001-001"])
+        self.app.release()
+        work, done, on_success = self.tasks.pop()
+        on_success(self.plan())                                   # the plan came back fine: the question is asked
+        self.assertIn("Ask for sign-offs", self.shown("askokcancel")[0][1][0])
+        work, done, on_success = self.tasks.pop()
+        work()
+        self.assertEqual(calls, [("C:/vault", "HCR-00001-001")])
+        self.assertIn("Asked for sign-offs", done)
+
+    def test_declining_the_question_does_nothing(self):
+        self.box.answer = False
+        self.app._confirm_release("C:/vault", self.plan(), self.template)
+        self.assertEqual(self.tasks, [])
+
+    def test_blockers_are_shown_instead_of_asking(self):
+        self.app._confirm_release("C:/vault", self.plan(ok=False), self.template)
+        self.assertEqual(self.tasks, [])
+        self.assertIn("checked out by Bea", self.shown("showwarning")[0][1][1])
+
+    def test_without_a_workflow_release_works_as_before(self):
+        self.template = None
+        released = []
+        replace(self, self.gui.engine, "release", lambda repo, pn: released.append(pn))
+        self.app._confirm_release("C:/vault", self.plan(), None)
+        self.tasks.pop()[0]()
+        self.assertEqual(released, ["HCR-00001-001"])
+
+    def test_release_on_a_waiting_part_says_what_is_missing(self):
+        row = self.row("pending", self.pending())
+        self.app._plan = lambda action: self.SimpleNamespace(targets=["HCR-00001-001"])
+        self.app.rows_by_pn = {"HCR-00001-001": row}
+        self.app.release()
+        self.assertEqual(self.tasks, [])
+        self.assertIn("Quality (0 of 1)", self.shown("showinfo")[0][1][1])
+
+    def test_release_on_an_approved_part_completes_it(self):
+        row = self.row("pending", self.pending(signed=True))
+        self.app._plan = lambda action: self.SimpleNamespace(targets=["HCR-00001-001"])
+        self.app.rows_by_pn = {"HCR-00001-001": row}
+        done = []
+        replace(self, self.wf, "complete_release", lambda repo, pn: done.append(pn))
+        self.app.release()
+        self.tasks.pop()[0]()
+        self.assertEqual(done, ["HCR-00001-001"])
+
+    def test_approving_passes_the_comment_and_reports_a_failed_completion(self):
+        self.answer = "Looks right"
+        seen = []
+        replace(self, self.wf, "sign_off", lambda repo, pn, comment: seen.append(comment) or "result")
+        self.app.task_sign("HCR-00001-001")
+        work, done, on_success = self.tasks.pop()
+        self.assertEqual(work(), "result")
+        self.assertEqual(seen, ["Looks right"])
+        on_success(self.SimpleNamespace(completed=False, error="offline", summary=""))
+        self.assertIn("offline", self.shown("showwarning")[0][1][1])
+        on_success(self.SimpleNamespace(completed=True, error="", summary=""))
+        self.assertIn("released", self.app.note)
+
+    def test_cancelling_the_comment_box_cancels_the_approval(self):
+        self.answer = None
+        self.app.task_sign("HCR-00001-001")
+        self.assertEqual(self.tasks, [])
+
+    def test_rejecting_needs_a_reason(self):
+        self.answer = "   "
+        self.app.task_reject("HCR-00001-001")
+        self.assertEqual(self.tasks, [])
+        self.assertIn("A reason is required", self.shown("showwarning")[0][1][1])
+        self.answer = "Missing tolerance"
+        seen = []
+        replace(self, self.wf, "reject", lambda repo, pn, reason: seen.append(reason))
+        self.app.task_reject("HCR-00001-001")
+        self.tasks.pop()[0]()
+        self.assertEqual(seen, ["Missing tolerance"])
+
+    def test_withdrawing_asks_first(self):
+        self.box.answer = False
+        self.app.task_withdraw("HCR-00001-001")
+        self.assertEqual(self.tasks, [])
+        self.box.answer = True
+        gone = []
+        replace(self, self.wf, "withdraw", lambda repo, pn: gone.append(pn))
+        self.app.task_withdraw("HCR-00001-001")
+        self.tasks.pop()[0]()
+        self.assertEqual(gone, ["HCR-00001-001"])
+
+    def test_an_override_needs_a_reason_and_a_confirmation(self):
+        self.answer = ""
+        self.app.task_override("HCR-00001-001")
+        self.assertEqual(self.tasks, [])
+        self.answer = "Quality is away"
+        self.box.answer = False
+        self.app.task_override("HCR-00001-001")
+        self.assertEqual(self.tasks, [])
+        self.box.answer = True
+        seen = []
+        replace(self, self.wf, "override_release", lambda repo, pn, reason: seen.append(reason))
+        self.app.task_override("HCR-00001-001")
+        self.tasks.pop()[0]()
+        self.assertEqual(seen, ["Quality is away"])
+
+    def test_the_button_shows_how_many_things_need_you(self):
+        shown = []
+        self.app.tasks_button = self.SimpleNamespace(configure=lambda **k: shown.append(k["text"]))
+        self.app._task_windows = lambda: []
+        self.app.identity = self.SimpleNamespace(
+            state="ok", directory=None,
+            person=self.gui.people.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"]))
+        self.app.rows = [self.row("pending", self.pending())]
+        self.app._refresh_tasks()
+        self.assertEqual(shown[-1], "My Tasks (1)")
+        self.app.rows = []
+        self.app._refresh_tasks()
+        self.assertEqual(shown[-1], "My Tasks")
+
+    def test_saving_the_workflow_dialog_result(self):
+        self.app._may = lambda action: True
+        self.app.identity = self.SimpleNamespace(state="ok", directory=self.SimpleNamespace(
+            roles=["Quality", "Manager"], people=[]), person=None)
+        window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: None)
+        self.gui.WorkflowDialog = lambda *a, **k: self.SimpleNamespace(show=lambda: (True, [("Quality", 2)], False))
+        self.gui.messagebox.askyesno = lambda *a, **k: True
+        self.app.edit_workflow(window)
+        work, done, on_success = self.tasks.pop()
+        self.assertEqual(done, "Saved the release workflow")
+        saved = {}
+        replace(self, self.wf, "edit_templates", lambda repo, change, message: change(saved, None))
+        work()
+        self.assertEqual([(s.role, s.count) for s in saved["release"].steps], [("Quality", 2)])
+        self.assertFalse(saved["release"].allow_self_signoff)
+
+    def test_turning_the_workflow_off(self):
+        self.app._may = lambda action: True
+        self.app.identity = self.SimpleNamespace(state="ok", directory=self.SimpleNamespace(
+            roles=["Quality"], people=[]), person=None)
+        window = self.SimpleNamespace(winfo_exists=lambda: False, reload=lambda: None)
+        self.gui.WorkflowDialog = lambda *a, **k: self.SimpleNamespace(show=lambda: (False, [], True))
+        self.app.edit_workflow(window)
+        work, done, on_success = self.tasks.pop()
+        self.assertEqual(done, "Releases no longer need sign-offs")
+        saved = {"release": object()}
+        replace(self, self.wf, "edit_templates", lambda repo, change, message: change(saved, None))
+        work()
+        self.assertEqual(saved, {})
+
+    def test_roles_nobody_holds_ask_for_a_second_thought(self):
+        self.app._may = lambda action: True
+        self.app.identity = self.SimpleNamespace(state="ok", directory=self.SimpleNamespace(
+            roles=["Quality"], people=[]), person=None)
+        window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: None)
+        self.gui.WorkflowDialog = lambda *a, **k: self.SimpleNamespace(show=lambda: (True, [("Quality", 1)], True))
+        self.gui.messagebox.askyesno = lambda *a, **k: False
+        self.app.edit_workflow(window)
+        self.assertEqual(self.tasks, [])
 
 
 class UpdateWiring(unittest.TestCase):

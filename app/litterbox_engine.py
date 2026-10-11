@@ -308,6 +308,7 @@ class PartStatus:
     released_revision: str = ""         # the latest released revision, if any
     revisions: dict = field(default_factory=dict)   # {revision: [files]} for every revision that has files
     refs_outdated: bool = False         # an assembly whose list of parts used is missing or out of date
+    pending: dict = field(default_factory=dict)     # a release request waiting for sign-offs (see workflow.py)
 
 
 def get_status(repo):
@@ -343,6 +344,9 @@ def get_status(repo):
             state, kind = "Void", "void"
         elif not_downloaded:
             state, kind = "Not downloaded", "missing"
+        elif record.pending:
+            import workflow
+            state, kind = workflow.describe_pending(record.pending), "pending"
         elif record.status == registry.STATUS_RELEASED:
             if changed:
                 state, kind = "Released, but its files were modified", "stray"
@@ -372,7 +376,7 @@ def get_status(repo):
 
         rows.append(PartStatus(pn, record.name, record.status, state, kind, owner, files,
                                record.description, record.cots, record.import_path,
-                               record.revision, record.released_revision, revisions, outdated))
+                               record.revision, record.released_revision, revisions, outdated, record.pending))
     return rows
 
 
@@ -738,7 +742,8 @@ class ReleasePlan:
         return not self.problems
 
 
-def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, required_label="in-work"):
+def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, required_label="in-work",
+              allow_pending=False):
     """Shared by release, Make COTS and Revise: the working revision's CAD files, and the reasons
     the part can't go ahead yet (checked out, modified, behind the vault...)."""
     record_path = record_relpath(pn)
@@ -748,6 +753,8 @@ def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, r
 
     if record.status != required:
         problems.append(f"Its status is '{record.status}'. Only {required_label} parts can be {verb}.")
+    if record.pending and not allow_pending:
+        problems.append("It is waiting for sign-offs on a release request.")
     if not cad:
         problems.append("There are no CAD files for it in the cad folder.")
 
@@ -777,7 +784,7 @@ def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, r
 
 
 @_converts_errors
-def release_plan(repo, pn, fetch=True):
+def release_plan(repo, pn, fetch=True, allow_pending=False):
     """Work out what a release would freeze and whether anything blocks it.
 
     Show plan.files to the user for confirmation, and plan.problems if it isn't ok.
@@ -785,7 +792,7 @@ def release_plan(repo, pn, fetch=True):
     validate_repo(repo)
     pn = _as_pn(pn)
     record = registry.load(repo, pn)
-    cad, problems = _blockers(repo, pn, record, "released", fetch)
+    cad, problems = _blockers(repo, pn, record, "released", fetch, allow_pending=allow_pending)
     if record.cots:
         problems.insert(0, "It is a COTS (purchased) part, which is never released.")
     warnings = []
@@ -867,6 +874,10 @@ def release(repo, pn):
     Returns the list of files that were released.
     """
     pn = _as_pn(pn)
+    import workflow
+    if workflow.template_for(repo, "release") is not None:
+        raise LitterboxError("Releases in this vault need sign-offs. Use Release to ask for them; the part is "
+                             "released when everyone required has signed.")
     plan = release_plan(repo, pn)
     if not plan.ok:
         raise LitterboxError(f"{pn} can't be released yet:\n- " + "\n- ".join(plan.problems))

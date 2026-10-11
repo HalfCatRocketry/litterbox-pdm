@@ -85,15 +85,15 @@ ALLOWED_KINDS = {
     "save": {"mine"},
     "undo": {"mine"},
     "edit": {"mine"},
-    "open": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void"},    # anything downloaded
-    "open_drawing": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void"},
-    "release": {"ok"},
+    "open": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},    # anything downloaded
+    "open_drawing": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
+    "release": {"ok", "pending"},            # on a pending part it completes an approved request (see the window)
     "make_cots": {"ok"},
     "revise": {"released"},
     "cancel_revision": {"ok", "mine"},
     "reopen": {"released", "cots"},
     "void": {"ok", "cots"},
-    "references": {"ok", "mine", "theirs", "unclaimed", "stray", "released", "cots", "void", "missing"},
+    "references": {"ok", "mine", "theirs", "unclaimed", "stray", "released", "cots", "void", "missing", "pending"},
 }
 
 # These can be done to several parts at once; the rest need exactly one part selected.
@@ -261,6 +261,8 @@ EVENT_LABELS = {
     "released": "Released", "reopened": "Reopened", "voided": "Voided", "made_cots": "Made COTS",
     "edited": "Edited details", "revised": "Revised", "revision_cancelled": "Revision cancelled",
     "references_updated": "Parts used updated",
+    "release_requested": "Release requested", "release_signed": "Signed off", "release_rejected": "Release rejected",
+    "release_withdrawn": "Request withdrawn",
 }
 
 
@@ -297,14 +299,25 @@ def format_history(record, local=True):
         changes = event.get("changes") or []
         if changes:
             parts.append("; ".join(str(c) for c in changes))
+        if event.get("event") == "release_signed" and event.get("roles"):
+            parts.append("as " + ", ".join(event["roles"]))
+        if event.get("event") == "release_requested" and event.get("waiting_on"):
+            parts.append("needs " + ", ".join(event["waiting_on"]))
+        if event.get("event") == "release_rejected" and event.get("signed"):
+            parts.append("had been signed by " + ", ".join(event["signed"]))
+        if event.get("event") == "released" and event.get("signoffs"):
+            parts.append("signed off by " + ", ".join(event["signoffs"]))
         files = event.get("files") or []
         if files:
             parts.append(", ".join(PurePosixPath(f).name for f in files))
         name = event.get("event", "")
+        label = EVENT_LABELS.get(name, str(name))
+        if name == "released" and event.get("override"):
+            label = "Released (Admin override)"
         rows.append((
             to_display_time(event.get("at", ""), local),
             str(event.get("by", "")),
-            EVENT_LABELS.get(name, str(name)),
+            label,
             "  -  ".join(parts),
         ))
     return rows
@@ -866,6 +879,55 @@ def release_confirm_text(plan):
                  + "\n".join("- " + w for w in plan.warnings)
                  + "\n\nReleasing now freezes the assembly with those parts.")
     return text
+
+
+def request_release_text(plan, template, warnings=()):
+    """The question asked before a release request is made (a vault with a release workflow)."""
+    listing = "\n".join("  " + f for f in plan.files)
+    needs = "\n".join(f"  {step.role}" + (f" ({step.count} people)" if step.count != 1 else "") for step in template.steps)
+    text = (f"Ask for sign-offs to release {plan.pn} ({plan.name})?\n\nIt will be released when these have signed:\n"
+            f"{needs}\n\nThey are shown these files:\n{listing}\n\nWhile it waits, nobody can check the part out. "
+            "You can withdraw the request until it is released.")
+    if not template.allow_self_signoff:
+        text += "\n\nYou can't sign off your own request."
+    if plan.warnings:
+        text += ("\n\nWARNING - the parts it uses are not all final:\n" + "\n".join("- " + w for w in plan.warnings))
+    if warnings:
+        text += "\n\nNOTE:\n" + "\n".join("- " + w for w in warnings)
+    return text
+
+
+TASK_COLUMNS = (("part", "Part", 130), ("name", "Name", 220), ("rev", "Rev", 40), ("by", "Asked by", 130),
+                ("when", "Asked", 120), ("status", "Status", 330))
+
+
+def tasks_table(tasks, local=True):
+    """Rows of (iid, values) for the My Tasks window."""
+    return [(str(t.pn), (str(t.pn), t.name, t.revision, t.requested_by, to_display_time(t.requested_at, local),
+                         t.summary)) for t in tasks]
+
+
+def tasks_button_text(count):
+    return f"My Tasks ({count})" if count else "My Tasks"
+
+
+def signoff_failure_text(pn, error):
+    return (f"Your sign-off on {pn} is saved, and everyone needed has now signed, but the release itself did not "
+            f"go through:\n\n{error}\n\nWhoever asked for the release (or anyone) can finish it from My Tasks "
+            "or with the Release button.")
+
+
+def workflow_rows(template):
+    """[(role, count)] for the Workflows dialog from a workflow.Template (or None)."""
+    return [(s.role, s.count) for s in template.steps] if template else []
+
+
+def parse_signoff_count(text):
+    """Whole number 1 to 20 from the box, or None."""
+    text = str(text).strip()
+    if text.isdigit() and 1 <= int(text) <= 20:
+        return int(text)
+    return None
 
 
 def stale_open_text(pn, uses_list):

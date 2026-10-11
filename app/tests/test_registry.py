@@ -455,5 +455,59 @@ class TestStatusChanges(RegistryTestCase):
             registry.add_event(record, "checked_in", "  ")
 
 
+class TestPendingRequests(RegistryTestCase):
+    PENDING = {"action": "release", "revision": "A", "requested_by": "Alex", "requested_at": "2026-10-11T00:00:00Z",
+               "template": {"allow_self_signoff": True, "signoffs": [{"role": "Quality", "count": 1}]},
+               "files": {"cad/x.SLDPRT": "abc"}, "signoffs": []}
+
+    def pending(self, base=7):
+        record = self.make(base)
+        record.pending = dict(self.PENDING)
+        registry.save(self.repo, record)
+        return registry.load(self.repo, record.pn)
+
+    def test_a_pending_request_survives_saving_and_loading(self):
+        loaded = self.pending()
+        self.assertEqual(loaded.pending, self.PENDING)
+
+    def test_a_record_without_one_writes_no_pending_field(self):
+        record = self.make(8)
+        self.assertNotIn("pending", record.to_dict())
+        self.assertEqual(record.pending, {})
+
+    def test_pending_parts_cannot_be_checked_out_voided_cots_or_have_their_revision_cancelled(self):
+        record = self.pending()
+        for action in (lambda: registry.record_checkout(record, "Jo", []), lambda: registry.mark_void(record, "Jo", "x"),
+                       lambda: registry.mark_cots(record, "Jo", []),
+                       lambda: registry.mark_revision_cancelled(record, "Jo", "x", [])):
+            with self.assertRaises(RegistryError) as ctx:
+                action()
+            self.assertIn("waiting for sign-offs", str(ctx.exception))
+
+    def test_a_malformed_request_is_refused(self):
+        record = self.make(9)
+        for bad in ("text", {"action": "release"}, {**self.PENDING, "signoffs": "none"},
+                    {**self.PENDING, "template": []}):
+            data = record.to_dict()
+            data["pending"] = bad
+            with self.assertRaises(RegistryError):
+                registry.Record.from_dict(data)
+
+    def test_unquoted_timestamps_in_a_hand_edited_request_become_text(self):
+        import datetime
+        data = self.make(10).to_dict()
+        data["pending"] = {**self.PENDING, "requested_at": datetime.datetime(2026, 10, 11, 0, 0, 0),
+                           "signoffs": [{"by": "Bea", "at": datetime.datetime(2026, 10, 11, 1, 0, 0)}]}
+        loaded = registry.Record.from_dict(data)
+        self.assertEqual(loaded.pending["requested_at"], "2026-10-11T00:00:00Z")
+        self.assertEqual(loaded.pending["signoffs"][0]["at"], "2026-10-11T01:00:00Z")
+
+    def test_release_details_go_on_the_event(self):
+        record = self.make(11)
+        event = registry.mark_released(record, "Jo", ["cad/x.SLDPRT"], signoffs=["Bea"], override=None)
+        self.assertEqual(event["signoffs"], ["Bea"])
+        self.assertNotIn("override", event)
+
+
 if __name__ == "__main__":
     unittest.main()
