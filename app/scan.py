@@ -373,7 +373,7 @@ def main(argv=None):
     out = Path(args.out).resolve()
     try:
         for folder in args.folders:
-            if _inside(out, os.path.abspath(folder)):
+            if _inside(out, str(Path(folder).resolve())):         # resolved the same way as `out` (Windows short names)
                 raise ScanError(f"The manifest can't be written inside a folder being scanned ({folder}). "
                                 "Choose another place with --out.")
         if out.exists() and not args.force:

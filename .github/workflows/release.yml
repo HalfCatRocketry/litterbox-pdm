@@ -15,7 +15,30 @@ permissions:
   contents: write
 
 jobs:
+  # The full test suite. It runs on Linux because the Git LFS tests use a stand-in git-lfs script that needs a
+  # Unix-like system (on Windows those tests are skipped). A failing test here stops the release.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run the tests
+        working-directory: app
+        env:
+          PYTHONPATH: ".:tests"
+        run: python -m unittest discover -s tests -p "test_*.py"
+
   build:
+    needs: test
     runs-on: windows-latest
     env:
       LITTERBOX_SIGNING_KEY: ${{ secrets.LITTERBOX_SIGNING_KEY }}
@@ -35,9 +58,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: python packaging/check_version.py ${{ github.ref_name }}
 
-      - name: Run the tests (informational for now)
-        # Written and run in a Linux sandbox so far. Once this passes here too, delete the next line so a failing
-        # test stops a release.
+      - name: Run the tests on Windows too (informational)
+        # Many tests are skipped on Windows (see the test job above), but the rest catch Windows-only problems, such
+        # as how paths and line endings behave. Once this is green, delete the next line so it blocks a release too.
         continue-on-error: true
         working-directory: app
         env:

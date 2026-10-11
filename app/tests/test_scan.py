@@ -305,11 +305,15 @@ class TestManifest(ScanTestCase):
 
     def test_hand_edits_are_read(self):
         mf.save(self.make(), self.out)
-        text = self.out.read_text(encoding="utf-8").replace("name: bolt", "name: Hex bolt M6", 1)
-        self.out.write_text(text.replace("include: true", "include: false", 1), encoding="utf-8")
-        loaded = mf.load(self.out)
-        self.assertEqual(loaded.items[0].name, "Hex bolt M6")
-        self.assertFalse(loaded.items[0].include)
+        text = self.out.read_text(encoding="utf-8")
+        at = text.index("name: bolt")                       # which item comes first depends on the system
+        flag = text.rindex("include: true", 0, at)           # "include" is written just before "name"
+        text = text[:flag] + "include: false" + text[flag + len("include: true"):]
+        self.out.write_text(text.replace("name: bolt", "name: Hex bolt M6", 1), encoding="utf-8")
+        loaded = {item.name: item for item in mf.load(self.out).items}
+        self.assertIn("Hex bolt M6", loaded)
+        self.assertFalse(loaded["Hex bolt M6"].include)
+        self.assertTrue(loaded["valve"].include)
 
     def test_mistakes_are_reported_with_the_item_they_are_in(self):
         mf.save(self.make(), self.out)
