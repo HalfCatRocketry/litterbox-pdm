@@ -57,7 +57,7 @@ end;
 
 function InitializeSetup(): Boolean;
 var
-  Missing: String;
+  Missing, NewLine, Text: String;
 begin
   Result := True;
   if WizardSilent then
@@ -68,7 +68,13 @@ begin
   else if not CommandWorks('git lfs version') then
     Missing := 'Git LFS (it comes with Git for Windows)';
   if Missing <> '' then
-    MsgBox('Litterbox needs ' + Missing + ', which was not found on this computer.' + #13#10 + #13#10 +
-           'You can install Litterbox now and Git afterwards. Get Git for Windows (it includes Git LFS) from:' +
-           #13#10 + 'https://git-scm.com/download/win', mbInformation, MB_OK);
+  begin
+    // NewLine is built here, and no line below starts with a "#": the Inno Setup preprocessor would read that as
+    // one of its own directives.
+    NewLine := Chr(13) + Chr(10);
+    Text := 'Litterbox needs ' + Missing + ', which was not found on this computer.' + NewLine + NewLine;
+    Text := Text + 'You can install Litterbox now and Git afterwards. Get Git for Windows (it includes Git LFS) from:';
+    Text := Text + NewLine + 'https://git-scm.com/download/win';
+    MsgBox(Text, mbInformation, MB_OK);
+  end;
 end;
