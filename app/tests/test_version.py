@@ -22,8 +22,8 @@ class Versions(unittest.TestCase):
         self.assertFalse(version.is_newer("0.1.0", "0.1.0"))
         self.assertFalse(version.is_newer("0.1.0", "0.1.1"))
 
-    def test_the_starting_version(self):
-        self.assertEqual(version.VERSION, "0.1.0")
+    def test_the_version_is_well_formed_and_not_older_than_the_first_release(self):
+        self.assertFalse(version.is_newer("0.1.0", version.VERSION))
         self.assertEqual(version.VAULT_FORMAT, 1)
         version.parse(version.VERSION)
 
