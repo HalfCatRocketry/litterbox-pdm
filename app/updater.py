@@ -21,6 +21,7 @@ import json
 import re
 import subprocess
 import tempfile
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,6 +145,10 @@ def http_get(url, limit=MAX_MANIFEST_BYTES):
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             data = response.read(limit + 1)
+    except urllib.error.HTTPError as e:
+        raise UpdateError(f"GitHub answered {e.code} for {url}" + (
+            " (no release with that file was found; is the repository public and the release published?)"
+            if e.code == 404 else "")) from None
     except Exception as e:
         raise UpdateError(f"Could not reach GitHub to check for updates ({type(e).__name__}).") from None
     if len(data) > limit:
@@ -189,6 +194,8 @@ def stream_to_file(url, destination, progress=None):
                 written += len(chunk)
                 if progress:
                     progress(written)
+    except urllib.error.HTTPError as e:
+        raise UpdateError(f"The update could not be downloaded: GitHub answered {e.code} for {url}.") from None
     except Exception as e:
         raise UpdateError(f"The update could not be downloaded ({type(e).__name__}). Try again later.") from None
     return written, digest.hexdigest()

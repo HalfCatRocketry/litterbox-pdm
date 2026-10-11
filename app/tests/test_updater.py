@@ -102,6 +102,22 @@ class FindingUpdates(unittest.TestCase):
             updater.find_update("", "", "0.1.0", fetch=lambda url: b"")
 
 
+class ReadingErrors(unittest.TestCase):
+    def test_a_http_error_says_which_one_and_for_what(self):
+        import urllib.error
+        original = updater.urllib.request.urlopen
+        updater.urllib.request.urlopen = lambda request, timeout=0: (_ for _ in ()).throw(
+            urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None))
+        try:
+            with self.assertRaises(updater.UpdateError) as caught:
+                updater.http_get("https://github.com/x/y/releases/latest/download/latest.json")
+        finally:
+            updater.urllib.request.urlopen = original
+        self.assertIn("404", str(caught.exception))
+        self.assertIn("latest.json", str(caught.exception))
+        self.assertIn("public", str(caught.exception))
+
+
 class Downloading(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
