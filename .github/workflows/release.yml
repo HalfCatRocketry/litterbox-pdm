@@ -1,0 +1,93 @@
+# Builds the installer and publishes a release.
+#
+#   Release:     push a tag like v0.1.0 (docs/RELEASING.md has the steps). The tag must match VERSION in app/version.py.
+#   Test build:  Actions tab -> "Release" -> Run workflow. Builds everything and attaches the installer to the run
+#                (download it from the run's page); publishes nothing.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      LITTERBOX_SIGNING_KEY: ${{ secrets.LITTERBOX_SIGNING_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: The tag matches app/version.py
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python packaging/check_version.py ${{ github.ref_name }}
+
+      - name: Run the tests (informational for now)
+        # Written and run in a Linux sandbox so far. Once this passes here too, delete the next line so a failing
+        # test stops a release.
+        continue-on-error: true
+        working-directory: app
+        env:
+          PYTHONPATH: ".;tests"
+        run: python -m unittest discover -s tests -p "test_*.py"
+
+      - name: Tell the program where its updates come from
+        run: python packaging/write_build_info.py --repo ${{ github.repository }}
+
+      - name: Build the program
+        run: pyinstaller packaging/litterbox.spec --noconfirm --distpath dist --workpath build
+
+      - name: Check the built program (opens no window)
+        shell: pwsh
+        run: |
+          $result = Join-Path $env:RUNNER_TEMP "selftest.txt"
+          $p = Start-Process -FilePath "dist\Litterbox\Litterbox.exe" -ArgumentList @("--self-test", $result) -Wait -PassThru
+          if (Test-Path $result) { Get-Content $result } else { Write-Host "The program wrote no result." }
+          if ($p.ExitCode -ne 0) { throw "The built program failed its self-test." }
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $v = (python packaging/check_version.py --print).Trim()
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" packaging\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed." }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Sign the update information
+        run: >
+          python packaging/make_manifest.py --version ${{ env.VERSION }} --repo ${{ github.repository }}
+          --installer dist/installer/Litterbox-Setup-${{ env.VERSION }}.exe --out dist/release
+
+      - name: Keep the installer with this run (test builds)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Litterbox-Setup-${{ env.VERSION }}
+          path: |
+            dist/installer/*.exe
+            dist/release/latest.json
+            dist/release/latest.json.sig
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create ${{ github.ref_name }}
+          "dist/installer/Litterbox-Setup-${{ env.VERSION }}.exe"
+          dist/release/latest.json dist/release/latest.json.sig
+          --title "Litterbox ${{ env.VERSION }}" --notes-file dist/release/notes.md
