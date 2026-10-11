@@ -34,6 +34,7 @@ import references
 import revise
 import signing
 import create
+import init_vault
 import import_session
 import importer
 import manifest as manifest_module
@@ -276,6 +277,26 @@ def left_button_down():
         return None
 
 
+def pointer_inside(widget):
+    """Is the mouse pointer over this widget right now? True / False, or None if this system can't say.
+
+    Asked straight of Windows: the pointer position and the widget's window rectangle come from the same
+    place, so they always agree. Tk's own numbers (event.x_root and winfo_rootx) can disagree on screens
+    with display scaling, which made clicks near a button's edge do nothing while the middle worked."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        point, rect = wintypes.POINT(), wintypes.RECT()
+        if not user32.GetCursorPos(ctypes.byref(point)):
+            return None
+        if not user32.GetWindowRect(wintypes.HWND(widget.winfo_id()), ctypes.byref(rect)):
+            return None
+        return rect.left <= point.x < rect.right and rect.top <= point.y < rect.bottom
+    except Exception:
+        return None
+
+
 class ReleaseButton(ctk.CTkButton):
     """A button that acts when the mouse button is RELEASED over it (like most programs), not when it is pressed.
     Pressing and then moving off the button before letting go cancels the click.
@@ -332,12 +353,24 @@ class ReleaseButton(ctk.CTkButton):
             return
         self._finish(event.x_root, event.y_root, "Tk release event")
 
+    EDGE_SLACK = 3                  # pixels of benefit of the doubt around the button, for Tk's own numbers
+
+    def _over_button(self, x, y):
+        """Was the mouse released over this button? Windows' answer or Tk's, whichever says yes."""
+        windows = pointer_inside(self)
+        left, top = self.winfo_rootx(), self.winfo_rooty()
+        slack = self.EDGE_SLACK
+        tk_says = (left - slack <= x < left + self.winfo_width() + slack
+                   and top - slack <= y < top + self.winfo_height() + slack)
+        click_log(f"release at ({x}, {y}); button at ({left}, {top}) size {self.winfo_width()}x{self.winfo_height()}; "
+                  f"Windows says {windows}, Tk says {tk_says}")
+        return bool(windows) or tk_says
+
     def _finish(self, x, y, how):
         armed, self._armed = self._armed, False
         if not armed:
             return                                         # the other path already dealt with this press
-        left, top = self.winfo_rootx(), self.winfo_rooty()
-        if left <= x < left + self.winfo_width() and top <= y < top + self.winfo_height():
+        if self._over_button(x, y):
             click_log(f"release '{self._label()}' -> running ({how})")
             super()._clicked(None)
         else:
@@ -418,7 +451,8 @@ class OrgDialog(ctk.CTkToplevel):
         # None if cancelled, else (org, folder, start, base_digits, variant_digits)
     """
 
-    def __init__(self, parent, org="", folder="", start=1, base_digits=5, variant_digits=3, title="Org setup"):
+    def __init__(self, parent, org="", folder="", start=1, base_digits=5, variant_digits=3, title="Org setup",
+                 save_text="Save"):
         super().__init__(parent)
         set_window_icon(self)
         self.result = None
@@ -470,7 +504,7 @@ class OrgDialog(ctk.CTkToplevel):
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
                       command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ReleaseButton(buttons, text="Save", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+        ReleaseButton(buttons, text=save_text, height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
                       command=self._save).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
         self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -2557,6 +2591,8 @@ class App(ctk.CTk):
         """The dropdown changed: switch org (everything reloads) or open the setup pop-up."""
         if choice == logic.ADD_ORG:
             self._org_setup(None)
+        elif choice == logic.CREATE_VAULT:
+            self.create_vault()
         elif choice == logic.EDIT_ORG:
             self._org_setup(self.org)
         elif choice != self.org:
@@ -2605,6 +2641,33 @@ class App(ctk.CTk):
         settings.save(self.settings)
         self.note = ("Saved. Commit and push .litterbox/config.yaml so your team gets the same org setup")
         self.switch_org(new_org)
+
+    def create_vault(self):
+        """Create new vault...: turn an empty cloned repository into a vault (see init_vault.py)."""
+        if not messagebox.askyesno("Create new vault", logic.CREATE_VAULT_INTRO, parent=self):
+            return
+        result = OrgDialog(self, "", "", 1, pnmod.DEFAULT_BASE_DIGITS, pnmod.DEFAULT_VARIANT_DIGITS,
+                           title="Create new vault", save_text="Create").show()
+        if not result:
+            return
+        org, folder, start, base_digits, variant_digits = result
+        checked = init_vault.plan(folder, org, start, base_digits, variant_digits)
+        if not checked.ok:
+            messagebox.showerror("Create new vault", "\n\n".join(checked.problems), parent=self)
+            return
+        if checked.warnings and not messagebox.askyesno(
+                "Create new vault", "\n\n".join(checked.warnings) + "\n\nCreate the vault anyway?", parent=self):
+            return
+
+        def made(created):
+            logic.remember_org(self.settings, created.org, folder)
+            settings.save(self.settings)
+            self._reload_org_menu()
+            self.switch_org(created.org)
+            messagebox.showinfo("Create new vault", logic.vault_created_text(created), parent=self)
+
+        self.run_task(lambda: init_vault.create(folder, org, start, base_digits, variant_digits),
+                      f"Created the {checked.org} vault", on_success=made, refresh=False)
 
     def _say(self, text, tone="normal"):
         color = {"normal": MUTED, "warn": WARN, "error": ERROR}[tone]

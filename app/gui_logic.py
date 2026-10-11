@@ -320,6 +320,7 @@ def format_history(record, local=True):
 # ---------------------------------------------------------------------------
 
 ADD_ORG = "Add org..."
+CREATE_VAULT = "Create new vault..."
 EDIT_ORG = "Org setup..."
 
 
@@ -358,7 +359,28 @@ def current_org(data):
 
 def org_menu_values(data):
     """The dropdown entries: every known org, then the two setup actions."""
-    return list(known_orgs(data)) + [ADD_ORG, EDIT_ORG]
+    return list(known_orgs(data)) + [ADD_ORG, CREATE_VAULT, EDIT_ORG]
+
+
+CREATE_VAULT_INTRO = (
+    "A new vault starts as an empty repository on your Git host (Azure DevOps, GitHub or GitLab).\n\n"
+    "1. Create the empty repository on the host.\n"
+    "2. Clone it to this computer (for example into C:\\Litterbox).\n"
+    "3. Come back here and choose the cloned folder.\n\n"
+    "Litterbox will then add its settings, upload them, and make you the team's Owner. "
+    "Have you cloned the empty repository?")
+
+
+def vault_created_text(result):
+    """What to tell the user after init_vault.create() worked. `result` is an init_vault.InitResult."""
+    lines = [f"The {result.org} vault is set up" + (" and uploaded." if result.pushed else " on this computer only.")]
+    if result.owner is not None:
+        lines.append(f"{result.owner.name} is the team's Owner.")
+    elif result.team_error:
+        lines.append("The team could not be set up just now, so everyone can still do everything. "
+                     f"Use Team... to set it up later.\n\n{shorten(result.team_error)}")
+    lines.extend(result.warnings)
+    return "\n\n".join(lines)
 
 
 def remember_org(data, org, folder):

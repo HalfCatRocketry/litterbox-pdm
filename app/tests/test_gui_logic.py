@@ -434,7 +434,7 @@ class TestOrgs(unittest.TestCase):
         data = {}
         logic.remember_org(data, "HCR", "C:/a")
         logic.remember_org(data, "SAE", "C:/b")
-        self.assertEqual(logic.org_menu_values(data), ["HCR", "SAE", logic.ADD_ORG, logic.EDIT_ORG])
+        self.assertEqual(logic.org_menu_values(data), ["HCR", "SAE", logic.ADD_ORG, logic.CREATE_VAULT, logic.EDIT_ORG])
 
 
 class TestSearchFields(unittest.TestCase):
@@ -647,8 +647,6 @@ class TestTeamText(unittest.TestCase):
         self.assertIn("email", logic.person_form_result(None, dict(form, email="nope"), [])[0])
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestRoleHelpers(unittest.TestCase):
@@ -688,3 +686,30 @@ class TestDebugMode(unittest.TestCase):
             path.write_text("debug_mode: true\n", encoding="utf-8")
             self.assertTrue(settings.is_debug(settings.load(path)))
             self.assertFalse(settings.is_debug(settings.load(Path(d) / "missing.yaml")))
+
+
+class TestVaultCreatedText(unittest.TestCase):
+    def result(self, **changes):
+        from types import SimpleNamespace
+        base = dict(org="HCR", pushed=True, owner=SimpleNamespace(name="Alex Smith"), team_error="", warnings=[])
+        base.update(changes)
+        return SimpleNamespace(**base)
+
+    def test_a_complete_set_up(self):
+        text = logic.vault_created_text(self.result())
+        self.assertIn("The HCR vault is set up and uploaded.", text)
+        self.assertIn("Alex Smith is the team's Owner.", text)
+
+    def test_team_trouble_is_explained_and_not_fatal(self):
+        text = logic.vault_created_text(self.result(owner=None, team_error="The host didn't answer."))
+        self.assertIn("Use Team... to set it up later", text)
+        self.assertIn("didn't answer", text)
+
+    def test_local_only_and_warnings(self):
+        text = logic.vault_created_text(self.result(pushed=False, warnings=["Mind the gap."]))
+        self.assertIn("on this computer only", text)
+        self.assertIn("Mind the gap.", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -88,5 +88,11 @@ elif command == "locks":
     else:
         print(json.dumps(locks))
 
+elif command == "version":
+    print("git-lfs/3.0.0 (fake)")
+
+elif command == "install":
+    print("Updated Git hooks. (fake)")
+
 else:
     fail(f"fake git-lfs: unsupported command '{command}'")
