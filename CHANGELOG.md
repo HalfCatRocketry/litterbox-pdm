@@ -7,6 +7,10 @@
 - **My Tasks** lists the sign-offs waiting on you. Reject (with a reason), withdraw, and Admin override (with a
   recorded reason) are all there.
 - Vaults that use a workflow ask everyone to update to 0.2.0 first.
+- Team changes are saved together. The Person, Roles and Workflows windows have an OK button that keeps your change in a draft; the Team window's Save uploads everything at once. Cancel or Close with unsaved changes asks "Discard changes?" (Discard / Keep editing). Discarding in a sub-window drops only that window's changes.
+- Tick boxes down the left of the part list pick several parts at once for Check Out, Check In, Save Progress and Undo Checkout.
+- Saving when nothing changed now shows an information message instead of an error.
+- Pop-ups opened from the Team window stay on top of it (for example Who am I?).
 
 ## 0.1.1
 

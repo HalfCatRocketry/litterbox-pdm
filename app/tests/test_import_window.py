@@ -83,7 +83,9 @@ class FakeTree(Anything):
     def selection_set(self, *ids):
         self.chosen = ids
 
-    def set(self, iid, column):
+    def set(self, iid, column, value=None):
+        if value is not None:
+            self.rows[iid]["values"][self.columns.index(column)] = value
         return self.rows[iid]["values"][self.columns.index(column)]
 
 
@@ -189,7 +191,7 @@ class TeamWiring(unittest.TestCase):
                          revisions={"A": ["cad/HCR-00007-001_A.SLDPRT"]})
         app = self.gui.App.__new__(self.gui.App)
         app.rows_by_pn = {self.pn: row}
-        app._selected_pns = lambda: [self.pn]
+        app._selected_pns = lambda action=None: [self.pn]
         self.said = []
         app._say = lambda text, tone="normal": self.said.append((text, tone))
         self.app = app
@@ -533,45 +535,102 @@ class WorkflowWiring(unittest.TestCase):
         self.app._refresh_tasks()
         self.assertEqual(shown[-1], "My Tasks")
 
-    def test_saving_the_workflow_dialog_result(self):
+    def _draft_window(self, roles, templates=None):
+        directory = self.gui.people.Directory(
+            [self.gui.people.Person("bea", "Bea", "", ["Bea"], "owner", list(roles))], list(roles))
+        draft = self.gui.TeamDraft(directory, templates or {}, "bea")
+        reloaded = []
+        window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: reloaded.append(1), draft=draft)
         self.app._may = lambda action: True
-        self.app.identity = self.SimpleNamespace(state="ok", directory=self.SimpleNamespace(
-            roles=["Quality", "Manager"], people=[]), person=None)
-        window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: None)
-        self.gui.WorkflowDialog = lambda *a, **k: self.SimpleNamespace(show=lambda: (True, [("Quality", 2)], False))
-        self.gui.messagebox.askyesno = lambda *a, **k: True
-        self.app.edit_workflow(window)
-        work, done, on_success = self.tasks.pop()
-        self.assertEqual(done, "Saved the release workflow")
-        saved = {}
-        replace(self, self.wf, "edit_templates", lambda repo, change, message: change(saved, None))
-        work()
-        self.assertEqual([(s.role, s.count) for s in saved["release"].steps], [("Quality", 2)])
-        self.assertFalse(saved["release"].allow_self_signoff)
+        return window, draft, reloaded
 
-    def test_turning_the_workflow_off(self):
-        self.app._may = lambda action: True
-        self.app.identity = self.SimpleNamespace(state="ok", directory=self.SimpleNamespace(
-            roles=["Quality"], people=[]), person=None)
-        window = self.SimpleNamespace(winfo_exists=lambda: False, reload=lambda: None)
-        self.gui.WorkflowDialog = lambda *a, **k: self.SimpleNamespace(show=lambda: (False, [], True))
+    def _dialog_result(self, result):
+        """Make the fake WorkflowDialog hand `result` to the apply callback; returns what apply answered."""
+        out = []
+        self.gui.WorkflowDialog = lambda parent, roles, current, apply=None: self.SimpleNamespace(
+            show=lambda: out.append(apply(result)))
+        return out
+
+    def test_the_workflow_dialog_result_is_staged_not_saved(self):
+        window, draft, reloaded = self._draft_window(["Quality", "Manager"])
+        out = self._dialog_result((True, [("Quality", 2)], False))
         self.app.edit_workflow(window)
-        work, done, on_success = self.tasks.pop()
-        self.assertEqual(done, "Releases no longer need sign-offs")
-        saved = {"release": object()}
-        replace(self, self.wf, "edit_templates", lambda repo, change, message: change(saved, None))
-        work()
-        self.assertEqual(saved, {})
+        self.assertEqual(out, [""])
+        self.assertEqual(self.tasks, [])
+        self.assertEqual([(s.role, s.count) for s in draft.templates["release"].steps], [("Quality", 2)])
+        self.assertEqual(draft.labels, ["Release workflow"])
+        self.assertEqual(reloaded, [1])
+
+    def test_turning_the_workflow_off_is_staged(self):
+        tpl = self.wf.Template("release", [self.wf.Step("Quality", 1)])
+        window, draft, _ = self._draft_window(["Quality"], {"release": tpl})
+        self._dialog_result((False, [], True))
+        self.app.edit_workflow(window)
+        self.assertEqual(draft.templates, {})
+        self.assertEqual(self.tasks, [])
+        self.assertTrue(draft.dirty)
 
     def test_roles_nobody_holds_ask_for_a_second_thought(self):
-        self.app._may = lambda action: True
-        self.app.identity = self.SimpleNamespace(state="ok", directory=self.SimpleNamespace(
-            roles=["Quality"], people=[]), person=None)
-        window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: None)
-        self.gui.WorkflowDialog = lambda *a, **k: self.SimpleNamespace(show=lambda: (True, [("Quality", 1)], True))
+        window, draft, _ = self._draft_window(["Quality", "Empty"])
+        draft.directory.people[0].roles = ["Quality"]
+        out = self._dialog_result((True, [("Empty", 1)], True))
         self.gui.messagebox.askyesno = lambda *a, **k: False
         self.app.edit_workflow(window)
-        self.assertEqual(self.tasks, [])
+        self.assertTrue(out[0])
+        self.assertFalse(draft.dirty)
+
+
+class TickAndSaveWiring(unittest.TestCase):
+    def setUp(self):
+        from types import SimpleNamespace
+        self.gui = load_gui_with_fakes(FakeBox())
+        from pn import PN
+        self.PN = PN
+        app = self.gui.App.__new__(self.gui.App)
+        app.ticked = set()
+        app.tree = SortableFakeTree(["tick", "pn"])
+        for pn in ("HCR-00001-001", "HCR-00002-001", "HCR-00003-001"):
+            app.tree.insert("", "end", iid=pn, values=["\u2610", pn])
+        self.said = []
+        app._say = lambda text, tone="normal": self.said.append(text)
+        self.app = app
+
+    def test_ticking_leaves_the_highlight_alone(self):
+        self.app.tree.selection_set("HCR-00003-001")
+        self.app._set_ticks(["HCR-00001-001", "HCR-00002-001"], True)
+        self.assertEqual(self.app.tree.rows["HCR-00001-001"]["values"][0], "\u2611")
+        self.assertEqual(self.app.tree.selection(), ("HCR-00003-001",) if isinstance(self.app.tree.selection(), tuple)
+                         else ["HCR-00003-001"])
+
+    def test_multi_actions_use_the_ticks_and_others_the_highlight(self):
+        self.app._set_ticks(["HCR-00001-001", "HCR-00002-001"], True)
+        self.app.tree.selection_set("HCR-00003-001")
+        got = [str(p) for p in self.app._selected_pns("checkout")]
+        self.assertEqual(got, ["HCR-00001-001", "HCR-00002-001"])
+        self.assertEqual([str(p) for p in self.app._selected_pns("release")], ["HCR-00003-001"])
+
+    def test_a_tick_on_a_part_that_left_the_list_is_ignored(self):
+        self.app._set_ticks(["HCR-00001-001"], True)
+        self.app.tree.delete("HCR-00001-001")
+        self.assertEqual(self.app._selected_pns("checkout"), [])
+
+    def test_tick_all_then_none(self):
+        self.app._toggle_all_ticks()
+        self.assertEqual(len(self.app.ticked), 3)
+        self.app._toggle_all_ticks()
+        self.assertEqual(self.app.ticked, set())
+
+    def test_nothing_to_save_is_information_not_an_error(self):
+        shown = []
+        self.gui.messagebox.showinfo = lambda *a, **k: shown.append(("info", k.get("parent")))
+        self.gui.messagebox.showerror = lambda *a, **k: shown.append(("error", None))
+        app = self.app
+        app._set_busy = lambda busy: None
+        app._popup_parent = lambda: "TEAM"
+        app._log = lambda text: None
+        app.note = "x"
+        app._finish(None, self.gui.engine.NothingToSaveError("Nothing was different."), "", None, False, False)
+        self.assertEqual(shown, [("info", "TEAM")])
 
 
 class UpdateWiring(unittest.TestCase):
@@ -675,7 +734,7 @@ class OpenWiring(unittest.TestCase):
                               released_revision="A", revisions={"A": self.A, "B": self.B})
         app = self.gui.App.__new__(self.gui.App)
         app.rows_by_pn = {self.pn: self.row}
-        app._selected_pns = lambda: [self.pn]
+        app._selected_pns = lambda action=None: [self.pn]
         app.repo = lambda: "C:/vault"
         app.settings = {"open_with": {".pdf": "x"}}
         self.said = []
@@ -789,11 +848,12 @@ class ListAndFilenameWiring(unittest.TestCase):
         app.search = types.SimpleNamespace(get=lambda: "")
         app.view = types.SimpleNamespace(get=lambda: "All")
         app.void_box = types.SimpleNamespace(get=lambda: 0)
-        app.tree = SortableFakeTree(["pn", "name", "description", "cots", "rev", "state", "files"])
+        app.ticked = set()
+        app.tree = SortableFakeTree(["tick", "pn", "name", "description", "cots", "rev", "state", "files"])
         app.sorter = self.gui.TableSorter(app.tree, [])
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
-                         ["00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
+                         ["\u2610", "00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
 
     def test_search_finds_a_part_by_the_short_or_the_full_number(self):
         for text in ("00007-001", "HCR-00007-001"):

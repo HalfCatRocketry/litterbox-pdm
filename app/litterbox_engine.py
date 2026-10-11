@@ -60,6 +60,11 @@ class LitterboxError(Exception):
     """Raised when something goes wrong. The message is safe to show to a user."""
 
 
+class NothingToSaveError(LitterboxError):
+    """A save found nothing different from what the vault already has, so there was nothing to commit. This is not
+    a failure: the window shows it as information."""
+
+
 class NoChangesError(LitterboxError):
     """A check-in found nothing to upload. Nothing was changed: the part is still checked out.
 
@@ -109,6 +114,11 @@ SLOW_SECONDS = 2.0
 DEBUG = False                  # set from settings.yaml (debug_mode); slow commands are logged only when on
 
 
+def _nothing_to_commit(text):
+    text = text.lower()
+    return "nothing to commit" in text or "no changes added to commit" in text or "nothing added to commit" in text
+
+
 def run(command, repo, quiet=False):
     """Run a command inside the repo folder and return its text output.
 
@@ -135,6 +145,9 @@ def run(command, repo, quiet=False):
         LOG(f"(slow: {elapsed:.1f}s) " + " ".join(command))
     if result.returncode != 0:
         details = result.stderr.strip() or result.stdout.strip()
+        if command[:2] == ["git", "commit"] and _nothing_to_commit(result.stdout + "\n" + result.stderr):
+            raise NothingToSaveError("Nothing was different from what is already saved in the vault, so there was "
+                                     "nothing to save.")
         raise LitterboxError(f"Command failed: {' '.join(command)}\n\n{details}")
     return result.stdout.strip()
 

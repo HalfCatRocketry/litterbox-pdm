@@ -145,6 +145,38 @@ def plan_action(action, selected, rows_by_pn):
     return plan
 
 
+TICK_ON, TICK_OFF = "\u2611", "\u2610"          # the box glyphs in the list's first column
+
+
+def choose_targets(action, ticked, highlighted):
+    """Which parts an action applies to. Actions that work on several parts (MULTI) use the ticked parts when any
+    are ticked, otherwise the highlighted rows. Single-part actions use the highlighted row, or the one ticked part
+    if nothing is highlighted, so a forgotten tick never changes what Open or Release does."""
+    if ticked and action in MULTI:
+        return list(ticked)
+    if highlighted:
+        return list(highlighted)
+    if len(ticked) == 1:
+        return list(ticked)
+    return []
+
+
+def tick_text(count):
+    if not count:
+        return "Nothing ticked."
+    return (f"{count} part{'s' if count != 1 else ''} ticked. Check Out, Check In, Save Progress and Undo Checkout "
+            "apply to the ticked parts.")
+
+
+def person_unchanged(person, fields):
+    """True if the Edit Person form's fields (from person_form_result) are what the person already has."""
+    return (fields.get("name") == person.name and fields.get("email", "") == person.email
+            and list(fields.get("host_names", [])) == list(person.host_names)
+            and fields.get("access", person.access) == person.access
+            and list(fields.get("roles", [])) == list(person.roles)
+            and list(fields.get("signing_keys", [])) == list(person.signing_keys))
+
+
 def run_batch(targets, func):
     """Run func(pn) for each part, carrying on if one fails.
 

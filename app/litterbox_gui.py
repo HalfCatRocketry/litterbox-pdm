@@ -42,6 +42,7 @@ import scan as scan_module
 import settings
 import updater
 import workflow
+from team_draft import TeamDraft
 import pn as pnmod
 from pn import PNError, check_org
 from pn import parse as parse_pn
@@ -376,6 +377,55 @@ class ReleaseButton(ctk.CTkButton):
             super()._clicked(None)
         else:
             click_log(f"release '{self._label()}' ignored: mouse moved off the button")
+
+
+class DiscardDialog(ctk.CTkToplevel):
+    """'Discard changes?' with Discard and Keep editing. Use ask_discard(parent, what)."""
+
+    def __init__(self, parent, what):
+        super().__init__(parent)
+        set_window_icon(self)
+        self.discard = False
+        width, height = 420, 170
+        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
+        self.title("Discard changes?")
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.columnconfigure((0, 1), weight=1, uniform="d")
+        ctk.CTkLabel(self, text=f"Discard {what}?", font=ctk.CTkFont(size=15, weight="bold"), anchor="w",
+                     wraplength=380, justify="left").grid(row=0, column=0, columnspan=2, sticky="ew", padx=20,
+                                                          pady=(20, 4))
+        ctk.CTkLabel(self, text="This can't be undone.", text_color=MUTED, anchor="w").grid(
+            row=1, column=0, columnspan=2, sticky="ew", padx=20)
+        ReleaseButton(self, text="Keep editing", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self.destroy).grid(row=2, column=0, sticky="ew", padx=(20, 6), pady=22)
+        ReleaseButton(self, text="Discard", height=38, fg_color=RED, hover_color=RED_HOVER,
+                      command=self._discard).grid(row=2, column=1, sticky="ew", padx=(6, 20), pady=22)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.bind("<Escape>", lambda event: self.destroy())
+        self.after(150, self._grab)
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
+    def _discard(self):
+        self.discard = True
+        self.destroy()
+
+    def show(self):
+        self.wait_window(self)
+        return self.discard
+
+
+def ask_discard(parent, what="these changes"):
+    """True if the user chose Discard, False for Keep editing (or closing the question)."""
+    return DiscardDialog(parent, what).show()
 
 
 class ConfirmDialog(ctk.CTkToplevel):
@@ -1917,10 +1967,11 @@ class PersonDialog(ctk.CTkToplevel):
 
     ADD_ROLE = "Add a role..."
 
-    def __init__(self, parent, person, roles, existing_ids, can_set_access, host_name_hint=""):
+    def __init__(self, parent, person, roles, existing_ids, can_set_access, host_name_hint="", apply=None):
         super().__init__(parent)
         set_window_icon(self)
         self.result = None
+        self.apply = apply          # apply(fields) -> problem text, or "" when the change was taken
         self.person, self.existing_ids = person, existing_ids
         width, height = 520, 700
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
@@ -1987,12 +2038,22 @@ class PersonDialog(ctk.CTkToplevel):
         buttons.grid(row=13, column=0, sticky="ew", padx=20, pady=(8, 18))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
-                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ReleaseButton(buttons, text="Save", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._cancel).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="OK", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
                       command=self._save).grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.bind("<Escape>", lambda event: self.destroy())
+        self.initial = self._snapshot()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)
+
+    def _snapshot(self):
+        return (self.name_entry.get(), self.email_entry.get(), self.host_entry.get(), self.access_var.get(),
+                tuple(self.chosen_roles), self.keys_box.get("1.0", "end").strip())
+
+    def _cancel(self):
+        if self._snapshot() != self.initial and not ask_discard(self, "your changes to this person"):
+            return
+        self.destroy()
 
     def _grab(self):
         try:
@@ -2030,6 +2091,11 @@ class PersonDialog(ctk.CTkToplevel):
         self.problem.configure(text=problem)
         if problem:
             return
+        if self.apply is not None:
+            problem = self.apply(dict(fields))
+            self.problem.configure(text=problem)
+            if problem:
+                return
         self.result = fields
         self.destroy()
 
@@ -2102,11 +2168,13 @@ class RolesDialog(ctk.CTkToplevel):
         # None if cancelled, else the new list of roles. Nothing is saved until the caller saves it.
     """
 
-    def __init__(self, parent, roles, holders_of):
+    def __init__(self, parent, roles, holders_of, apply=None):
         super().__init__(parent)
         set_window_icon(self)
         self.result = None
+        self.apply = apply          # apply(roles) -> problem text, or "" when the change was taken
         self.roles = list(roles)
+        self.initial = list(roles)
         self.holders_of = holders_of
         width, height = 460, 560
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
@@ -2149,13 +2217,18 @@ class RolesDialog(ctk.CTkToplevel):
         buttons.grid(row=5, column=0, sticky="ew", padx=20, pady=(6, 18))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
-                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ReleaseButton(buttons, text="Save", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._cancel).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="OK", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
                       command=self._save).grid(row=0, column=1, sticky="ew", padx=(6, 0))
         self._show()
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.bind("<Escape>", lambda event: self.destroy())
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)
+
+    def _cancel(self):
+        if self.roles != self.initial and not ask_discard(self, "your changes to the roles"):
+            return
+        self.destroy()
 
     def _grab(self):
         try:
@@ -2198,6 +2271,14 @@ class RolesDialog(ctk.CTkToplevel):
         self._show()
 
     def _save(self):
+        if self.roles == self.initial:                  # nothing changed: nothing to keep
+            self.destroy()
+            return
+        if self.apply is not None:
+            problem = self.apply(list(self.roles))
+            self.problem.configure(text=problem)
+            if problem:
+                return
         self.result = list(self.roles)
         self.destroy()
 
@@ -2213,10 +2294,11 @@ class WorkflowDialog(ctk.CTkToplevel):
         # None if cancelled, else (needs_signoffs, [(role, count), ...], allow_self_signoff)
     """
 
-    def __init__(self, parent, roles, template):
+    def __init__(self, parent, roles, template, apply=None):
         super().__init__(parent)
         set_window_icon(self)
         self.result = None
+        self.apply = apply          # apply(result) -> problem text, or "" when the change was taken
         self.roles = list(roles)
         width, height = 520, 520
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
@@ -2254,13 +2336,23 @@ class WorkflowDialog(ctk.CTkToplevel):
         buttons.grid(row=7, column=0, sticky="ew", padx=20, pady=(6, 18))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
-                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ReleaseButton(buttons, text="Save", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._cancel).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="OK", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
                       command=self._save).grid(row=0, column=1, sticky="ew", padx=(6, 0))
         self._redraw()
-        self.protocol("WM_DELETE_WINDOW", self.destroy)
-        self.bind("<Escape>", lambda event: self.destroy())
+        self.initial = self._snapshot()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+        self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)
+
+    def _snapshot(self):
+        return (bool(self.enabled_var.get()), tuple((role.get(), count.get()) for role, count in self.rows),
+                bool(self.self_var.get()))
+
+    def _cancel(self):
+        if self._snapshot() != self.initial and not ask_discard(self, "your changes to the workflow"):
+            return
+        self.destroy()
 
     def _grab(self):
         try:
@@ -2302,9 +2394,11 @@ class WorkflowDialog(ctk.CTkToplevel):
         self._redraw()
 
     def _save(self):
-        if not self.enabled_var.get():
-            self.result = (False, [], True)
+        if self._snapshot() == self.initial:             # nothing changed: nothing to keep
             self.destroy()
+            return
+        if not self.enabled_var.get():
+            self._finish((False, [], True))
             return
         steps, seen = [], set()
         for role_var, count_var in self.rows:
@@ -2320,7 +2414,15 @@ class WorkflowDialog(ctk.CTkToplevel):
         if not steps:
             self.problem.configure(text="Add at least one sign-off, or untick the box if releases need none.")
             return
-        self.result = (True, steps, bool(self.self_var.get()))
+        self._finish((True, steps, bool(self.self_var.get())))
+
+    def _finish(self, result):
+        if self.apply is not None:
+            problem = self.apply(result)
+            self.problem.configure(text=problem)
+            if problem:
+                return
+        self.result = result
         self.destroy()
 
     def show(self):
@@ -2449,6 +2551,10 @@ class TeamWindow(ctk.CTkToplevel):
         self.status = ctk.CTkLabel(self, text="", text_color=MUTED, anchor="w", justify="left", wraplength=940)
         self.status.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 12))
         self.busy = False
+        self.draft = None               # your unsaved changes (team_draft.TeamDraft); None until the team exists
+        self.save_button = None
+        self.protocol("WM_DELETE_WINDOW", self.close)
+        self.bind("<Escape>", lambda event: self.close())
         self.reload()
         self.after(100, self.lift)
 
@@ -2456,6 +2562,23 @@ class TeamWindow(ctk.CTkToplevel):
         button = ReleaseButton(self.buttons, text=text, width=width, fg_color=color, hover_color=hover,
                                command=command)
         button.grid(row=0, column=len(self.buttons.winfo_children()) - 1, padx=(0, 6))
+        return button
+
+    def close(self):
+        """Close the window; if there are unsaved changes, ask first."""
+        if self.draft is not None and self.draft.dirty and not ask_discard(self, "all the unsaved team changes"):
+            return
+        self.destroy()
+
+    def _new_draft(self):
+        identity = self.app.identity
+        if identity.state == people.LEGACY or identity.directory is None:
+            return None
+        try:
+            templates = workflow.load(self.app.repo())
+        except engine.LitterboxError:
+            templates = {}
+        return TeamDraft(identity.directory, templates, identity.person.id if identity.person else "")
 
     def say(self, text, tone="normal"):
         """Show what Litterbox is doing, so you can see a click did something."""
@@ -2463,8 +2586,11 @@ class TeamWindow(ctk.CTkToplevel):
 
     def set_busy(self, busy):
         self.busy = busy
+        if not busy:
+            self.reload()                        # also puts the Save button back to the right state
+            return
         for button in self.buttons.winfo_children():
-            button.configure(state="disabled" if busy else "normal")
+            button.configure(state="disabled")
 
     def reload(self):
         """Redraw from the vault's team file and the current identity."""
@@ -2473,7 +2599,9 @@ class TeamWindow(ctk.CTkToplevel):
         identity = self.app.identity
         keep = self.tree.selection()
         self.tree.delete(*self.tree.get_children())
-        directory = identity.directory
+        if self.draft is None or not self.draft.dirty:      # nothing unsaved: show the vault as it is now
+            self.draft = self._new_draft()
+        directory = self.draft.directory if self.draft is not None else identity.directory
         if identity.state == people.LEGACY:
             directory = None
         elif directory is None:
@@ -2481,6 +2609,7 @@ class TeamWindow(ctk.CTkToplevel):
                 directory = people.load(self.app.repo())
             except engine.LitterboxError:
                 directory = None
+        self.save_button = None
         if directory is None:
             self.summary.configure(text="This vault has no team list yet, so everyone can do everything. Setting "
                                         "one up makes you the Owner; then only people you add can change anything.")
@@ -2488,8 +2617,10 @@ class TeamWindow(ctk.CTkToplevel):
         else:
             for iid, values in logic.people_table(directory):
                 self.tree.insert("", "end", iid=iid, values=values)
+            unsaved = self.draft.summary() if self.draft is not None else ""
             self.summary.configure(text=f"You: {identity.describe()}.   Roles this org uses: "
-                                        f"{', '.join(directory.roles) or 'none yet'}.")
+                                        f"{', '.join(directory.roles) or 'none yet'}."
+                                        + (f"\n{unsaved}. Press Save to upload them." if unsaved else ""))
             if identity.allows("manage_people")[0]:
                 self._button("Add Person", lambda: self.app.edit_person(self, None, adding=True))
                 self._button("Edit", lambda: self.app.edit_person(self, self._selected()))
@@ -2502,12 +2633,16 @@ class TeamWindow(ctk.CTkToplevel):
                              PURPLE_HOVER, 150)
         self._button("Who am I?", self.app.who_am_i)
         self._button("Signing...", lambda: SigningDialog(self.app, self.app.repo()))
-        self._button("Close", self.destroy)
+        if self.draft is not None and (identity.allows("manage_people")[0] or identity.allows("manage_workflows")[0]):
+            self.save_button = self._button("Save", lambda: self.app.save_team(self), GREEN, GREEN_HOVER, 100)
+            self.save_button.configure(state="normal" if self.draft.dirty and not self.busy else "disabled")
+        self._button("Close", self.close)
         for iid in keep:                                    # keep the same person selected after a change
             if self.tree.exists(iid):
                 self.tree.selection_set(iid)
         if self.busy:
-            self.set_busy(True)
+            for button in self.buttons.winfo_children():
+                button.configure(state="disabled")
 
     def _selected(self):
         chosen = self.tree.selection()
@@ -2708,7 +2843,7 @@ class App(ctk.CTk):
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         style_tables()
-        self.tree = ttk.Treeview(frame, columns=("pn", "name", "description", "cots", "rev", "state", "files"),
+        self.tree = ttk.Treeview(frame, columns=("tick", "pn", "name", "description", "cots", "rev", "state", "files"),
                                  show="headings", selectmode="extended")
         main_columns = (("pn", "Part number", 140, False),
                         ("name", "Name", 240, True),
@@ -2720,6 +2855,12 @@ class App(ctk.CTk):
         for name, title, width, stretch in main_columns:
             self.tree.column(name, width=width, anchor="w", stretch=stretch)
         self.sorter = TableSorter(self.tree, [(name, title) for name, title, _w, _s in main_columns])
+        # The tick boxes: tick parts to act on several at once without worrying about the highlight.
+        self.ticked = set()
+        self.tree.column("tick", width=40, minwidth=40, anchor="center", stretch=False)
+        self.tree.heading("tick", text=logic.TICK_OFF, anchor="center", command=self._toggle_all_ticks)
+        self.tree.bind("<Button-1>", self._on_tree_click, add="+")
+        self.tree.bind("<space>", self._tick_highlighted)
         for kind, color in ROW_COLORS.items():
             self.tree.tag_configure(kind, foreground=color)
         self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
@@ -2892,6 +3033,16 @@ class App(ctk.CTk):
         for window in self._team_windows():
             window.say(text, tone)
 
+    def _popup_parent(self):
+        """Where a pop-up should open. From a Team or My Tasks window it opens over that window, so closing it
+        doesn't leave the main window in front."""
+        try:
+            focused = self.focus_get()
+            top = focused.winfo_toplevel() if focused is not None else self
+        except Exception:
+            return self
+        return top if isinstance(top, (TeamWindow, TasksWindow, WorkflowDialog, RolesDialog, PersonDialog)) else self
+
     def _team_windows(self):
         return [w for w in self.winfo_children() if isinstance(w, TeamWindow) and w.winfo_exists()]
 
@@ -2921,8 +3072,44 @@ class App(ctk.CTk):
         """Ask for one line of text. Returns None if the user cancels."""
         return InputDialog(text=text, title=title).get_input()
 
-    def _selected_pns(self):
-        return [parse_pn(iid) for iid in self.tree.selection()]
+    def _ticked_pns(self):
+        """The ticked parts that are shown in the list right now (a tick on a filtered-out part is ignored)."""
+        ticked = getattr(self, "ticked", set())
+        return [parse_pn(iid) for iid in self.tree.get_children() if iid in ticked]
+
+    def _selected_pns(self, action=None):
+        """The parts an action applies to: see logic.choose_targets."""
+        highlighted = [parse_pn(iid) for iid in self.tree.selection()]
+        if action is None:
+            return highlighted
+        return logic.choose_targets(action, self._ticked_pns(), highlighted)
+
+    def _on_tree_click(self, event):
+        """A click in the tick column flips that row's box and leaves the highlight alone."""
+        if self.tree.identify_region(event.x, event.y) != "cell" or self.tree.identify_column(event.x) != "#1":
+            return None
+        iid = self.tree.identify_row(event.y)
+        if iid:
+            self._set_ticks([iid], iid not in self.ticked)
+        return "break"
+
+    def _tick_highlighted(self, event=None):
+        chosen = list(self.tree.selection())
+        if chosen:
+            self._set_ticks(chosen, not all(iid in self.ticked for iid in chosen))
+        return "break"
+
+    def _toggle_all_ticks(self):
+        shown = list(self.tree.get_children())
+        self._set_ticks(shown, not (shown and all(iid in self.ticked for iid in shown)))
+
+    def _set_ticks(self, iids, on):
+        for iid in iids:
+            (self.ticked.add if on else self.ticked.discard)(iid)
+            self.tree.set(iid, "tick", logic.TICK_ON if on else logic.TICK_OFF)
+        shown = self.tree.get_children()
+        self.tree.heading("tick", text=logic.TICK_ON if shown and all(i in self.ticked for i in shown) else logic.TICK_OFF)
+        self._say(logic.tick_text(len(self._ticked_pns())))
 
     def _plan(self, action):
         """Work out what the selected parts allow. Shows the reason and returns None if nothing can be done."""
@@ -2930,7 +3117,7 @@ class App(ctk.CTk):
         if not allowed:
             self._say(why, "warn")
             return None
-        plan = logic.plan_action(action, self._selected_pns(), self.rows_by_pn)
+        plan = logic.plan_action(action, self._selected_pns(action), self.rows_by_pn)
         if plan.message:
             self._say(plan.message, "warn")
             return None
@@ -2953,6 +3140,8 @@ class App(ctk.CTk):
         def worker():
             try:
                 result, error = work(), None
+            except engine.NothingToSaveError as e:     # not a failure: nothing was different
+                result, error = None, e
             except engine.LitterboxError as e:
                 result, error = None, str(e)
             except Exception as e:                      # anything unexpected
@@ -2997,11 +3186,15 @@ class App(ctk.CTk):
 
     def _finish(self, result, error, done_text, on_success, refresh, is_refresh):
         self._set_busy(False)
-        if error:
+        if isinstance(error, engine.NothingToSaveError):
+            self.note = ""
+            self._say("Nothing to save: nothing was different.")
+            messagebox.showinfo("Nothing to save", str(error), parent=self._popup_parent())
+        elif error:
             self.note = ""
             self._log("ERROR: " + error)
             self._say("Something went wrong. See the message, or the log below.", "error")
-            messagebox.showerror("Litterbox", logic.shorten(error))
+            messagebox.showerror("Litterbox", logic.shorten(error), parent=self._popup_parent())
         else:
             if not is_refresh:
                 self.note = done_text
@@ -3054,15 +3247,19 @@ class App(ctk.CTk):
             self._say("No parts found. Check that this is your vault folder (it should contain a PN-logs folder).", "warn")
             return
         count = f"{shown} of {len(rows)} parts shown" if shown != len(rows) else f"{len(rows)} parts"
+        ticked = len(self._ticked_pns())
+        count += f"   |   {ticked} ticked" if ticked else ""
         self._say((self.note + "   |   " if self.note else "") + count)
 
     def _render(self):
         """Redraw the list using the search box and filters. Returns how many rows are shown."""
         rows = logic.filter_rows(self.rows, self.search.get(), self.view.get(), bool(self.void_box.get()))
+        self.ticked &= {str(row.pn) for row in self.rows}                     # parts that no longer exist lose their tick
         previous = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
         for row in rows:
             self.tree.insert("", "end", iid=str(row.pn), tags=(row.kind,), values=(
+                logic.TICK_ON if str(row.pn) in self.ticked else logic.TICK_OFF,
                 row.pn.short, row.name, row.description, "Yes" if row.cots else "", row.revision, row.state,
                 logic.file_types(row.files)))
         keep = [str(row.pn) for row in rows if str(row.pn) in previous]
@@ -3220,46 +3417,6 @@ class App(ctk.CTk):
                                                    f"{reason}\n\nThis is recorded as an Admin override."):
             self.run_task(lambda: workflow.override_release(repo, pn, reason), f"Released {pn} (Admin override)")
 
-    def edit_workflow(self, window):
-        if not self._may("manage_workflows"):
-            return
-        directory = self.identity.directory
-        repo = self.repo()
-        try:
-            current = workflow.template_for(repo, "release")
-        except engine.LitterboxError as e:
-            messagebox.showerror("Workflows", logic.shorten(str(e)), parent=window)
-            return
-        if directory is None or not directory.roles:
-            messagebox.showinfo("Workflows", "This org has no roles yet. Add some in Team... > Roles first.",
-                                parent=window)
-            return
-        result = WorkflowDialog(window, directory.roles, current).show()
-        if result is None:
-            return
-        enabled, steps, allow_self = result
-        if enabled:
-            notes = workflow.role_warnings(workflow.Template("release", [workflow.Step(r, c) for r, c in steps],
-                                                             allow_self), directory)
-            if notes and not messagebox.askyesno(
-                    "Workflows", "\n".join(notes) + "\n\nUntil that is fixed a release will wait for an Admin "
-                    "override. Save anyway?", parent=window):
-                return
-
-        def change(templates, _directory):
-            if enabled:
-                workflow.set_template(templates, "release", steps, allow_self)
-            else:
-                workflow.remove_template(templates, "release")
-
-        def saved(_result):
-            if window.winfo_exists():
-                window.reload()
-
-        self.run_task(lambda: workflow.edit_templates(repo, change, "Workflow: change the release workflow"),
-                      "Saved the release workflow" if enabled else "Releases no longer need sign-offs",
-                      on_success=saved, refresh=False)
-
     def _may(self, action):
         """True if you may do `action`; otherwise says why in the status line."""
         allowed, why = self.identity.allows(action)
@@ -3274,12 +3431,13 @@ class App(ctk.CTk):
 
     def who_am_i(self):
         repo = self.repo()
+        parent = self._popup_parent()                   # the Team window if that's where you pressed it
 
         def show(who):
             self.identity = who
             self._show_identity()
             messagebox.showinfo("Who am I?", logic.who_am_i_text(who) if who.state != people.UNVERIFIED
-                                else who.message())
+                                else who.message(), parent=parent)
 
         self.run_task(lambda: people.current(repo, refresh=True), "Checked who you are", on_success=show,
                       refresh=False)
@@ -3302,71 +3460,126 @@ class App(ctk.CTk):
             if isinstance(child, TeamWindow) and child.winfo_exists():
                 child.reload()
 
-    def _change_team(self, change, message, done_text, action="manage_people"):
-        repo = self.repo()
-
-        def work():
-            people.edit_directory(repo, change, message, action=action)
-            return people.current(repo, probe=False)
-
-        self.run_task(work, done_text, on_success=self._team_changed, refresh=False)
+    def _stage(self, window, label, change, needs_owner=False):
+        """Add a change to the Team window's unsaved changes. Returns "" if it was taken, else why not."""
+        draft = window.draft
+        if draft is None:
+            return "The team isn't set up yet."
+        try:
+            draft.stage_people(label, change, needs_owner)
+        except engine.LitterboxError as e:
+            return logic.shorten(str(e))
+        window.reload()
+        return ""
 
     def edit_person(self, window, person_id, adding=False):
         if not self._may("manage_people"):
             return
-        directory = self.identity.directory
+        directory = window.draft.directory if window.draft is not None else self.identity.directory
         person = None if adding else (directory.get(person_id) if person_id else None)
         if person is None and not adding:
             self._say("Select a person first.", "warn")
             return
-        result = PersonDialog(window, person, directory.roles, [p.id for p in directory.people],
-                              self.identity.access == people.OWNER).show()
-        if result is None:
-            return
-        if person is None:
-            new_id = result.pop("id")
-            self._change_team(lambda d, who: people.add_person(d, who, new_id, **result),
-                              f"Team: add {result['name']}", f"Added {result['name']}")
-        else:
-            self._change_team(lambda d, who: people.update_person(d, who, person.id, **result),
-                              f"Team: update {person.name}", f"Updated {person.name}")
+
+        def apply(fields):
+            if person is None:
+                new_id = fields.pop("id")
+                return self._stage(window, f"Add {fields['name']}",
+                                   lambda d, who: people.add_person(d, who, new_id, **fields))
+            if logic.person_unchanged(person, fields):
+                return ""
+            pid = person.id
+            return self._stage(window, f"Edit {person.name}", lambda d, who: people.update_person(d, who, pid, **fields))
+
+        PersonDialog(window, person, directory.roles, [p.id for p in directory.people],
+                     self.identity.access == people.OWNER, apply=apply).show()
 
     def toggle_person(self, window, person_id):
         if not self._may("manage_people"):
             return
-        person = self.identity.directory.get(person_id) if person_id else None
+        person = window.draft.directory.get(person_id) if person_id and window.draft is not None else None
         if person is None:
             self._say("Select a person first.", "warn")
             return
-        turn_on = not person.active
-        self._change_team(lambda d, who: people.set_active(d, who, person.id, turn_on),
-                          f"Team: {'switch on' if turn_on else 'switch off'} {person.name}",
-                          f"{person.name} is now {'on' if turn_on else 'off'}")
+        turn_on, pid = not person.active, person.id
+        problem = self._stage(window, f"Switch {'on' if turn_on else 'off'} {person.name}",
+                              lambda d, who: people.set_active(d, who, pid, turn_on))
+        if problem:
+            messagebox.showwarning("Team", problem, parent=window)
 
     def edit_roles(self, window):
-        if not self._may("manage_people"):
+        if not self._may("manage_people") or window.draft is None:
             return
-        directory = self.identity.directory
-        roles = RolesDialog(window, directory.roles, lambda role: people.holders_of(directory, role)).show()
-        if roles is None:
-            return
-        self._change_team(lambda d, who: people.set_roles(d, who, roles, scrub=True), "Team: change roles",
-                          "Updated the roles")
+        directory = window.draft.directory
+        RolesDialog(window, directory.roles, lambda role: people.holders_of(window.draft.directory, role),
+                    apply=lambda roles: self._stage(window, "Roles", lambda d, who: people.set_roles(
+                        d, who, roles, scrub=True))).show()
 
     def transfer_owner(self, window, person_id):
         if not self._may("transfer_owner"):
             return
-        person = self.identity.directory.get(person_id) if person_id else None
+        person = window.draft.directory.get(person_id) if person_id and window.draft is not None else None
         if person is None:
             self._say("Select the person who will become the Owner.", "warn")
             return
         if not messagebox.askokcancel(
                 "Transfer ownership",
                 f"Make {person.name} the Owner? You will become an Admin, and only {person.name} will be able to "
-                "hand ownership on again."):
+                "hand ownership on again.\n\nThis takes effect when you press Save.", parent=window):
             return
-        self._change_team(lambda d, who: people.transfer_owner(d, who, person.id), f"Team: {person.name} is the new Owner",
-                          f"{person.name} is now the Owner", action="transfer_owner")
+        pid = person.id
+        problem = self._stage(window, f"{person.name} becomes the Owner",
+                              lambda d, who: people.transfer_owner(d, who, pid), needs_owner=True)
+        if problem:
+            messagebox.showwarning("Team", problem, parent=window)
+
+    def edit_workflow(self, window):
+        if not self._may("manage_workflows") or window.draft is None:
+            return
+        draft = window.draft
+        if not draft.directory.roles:
+            messagebox.showinfo("Workflows", "This org has no roles yet. Add some in Team... > Roles first.",
+                                parent=window)
+            return
+        current = draft.templates.get("release")
+
+        def apply(result):
+            enabled, steps, allow_self = result
+            if enabled:
+                notes = workflow.role_warnings(workflow.Template("release", [workflow.Step(r, c) for r, c in steps],
+                                                                 allow_self), draft.directory)
+                if notes and not messagebox.askyesno(
+                        "Workflows", "\n".join(notes) + "\n\nUntil that is fixed a release will wait for an Admin "
+                        "override. Keep this change anyway?", parent=window):
+                    return "Change the roles or numbers, or press Cancel."
+
+            def change(templates, _directory):
+                if enabled:
+                    workflow.set_template(templates, "release", steps, allow_self)
+                else:
+                    workflow.remove_template(templates, "release")
+
+            try:
+                draft.stage_workflow("Release workflow" if enabled else "Remove the release workflow", change)
+            except engine.LitterboxError as e:
+                return logic.shorten(str(e))
+            window.reload()
+            return ""
+
+        WorkflowDialog(window, draft.directory.roles, current, apply=apply).show()
+
+    def save_team(self, window):
+        """The Team window's Save: upload every staged change in one go."""
+        draft = window.draft
+        if draft is None or not draft.dirty:
+            return
+        repo = self.repo()
+
+        def work():
+            draft.save(repo)
+            return people.current(repo, probe=False)
+
+        self.run_task(work, "Saved the team changes", on_success=self._team_changed, refresh=False)
 
     def _run_batch(self, action, plan, func):
         repo = self.repo()
@@ -3752,6 +3965,8 @@ class App(ctk.CTk):
         self.run_task(lambda: engine.void(repo, pn, reason), f"Voided {pn}")
 
     def show_history(self, event=None):
+        if event is not None and self.tree.identify_column(event.x) == "#1":
+            return                                              # double-clicking a tick box isn't asking for history
         chosen = self._selected_pns()
         if len(chosen) != 1:
             self._say("Select one part to see its history.", "warn")

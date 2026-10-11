@@ -792,5 +792,37 @@ class TestWorkflowHistory(unittest.TestCase):
         self.assertEqual(by_label["Released (Admin override)"], "Urgent")
 
 
+class TestTicks(unittest.TestCase):
+    A, B, C = PN("HCR", 1, 1), PN("HCR", 2, 1), PN("HCR", 3, 1)
+
+    def test_ticked_parts_are_used_for_multi_part_actions(self):
+        for action in ("checkout", "checkin", "save", "undo"):
+            self.assertEqual(logic.choose_targets(action, [self.A, self.B], [self.C]), [self.A, self.B])
+
+    def test_single_part_actions_use_the_highlighted_row(self):
+        self.assertEqual(logic.choose_targets("release", [self.A, self.B], [self.C]), [self.C])
+
+    def test_a_single_part_action_falls_back_to_the_only_ticked_part(self):
+        self.assertEqual(logic.choose_targets("release", [self.A], []), [self.A])
+        self.assertEqual(logic.choose_targets("release", [self.A, self.B], []), [])
+
+    def test_no_ticks_means_the_highlighted_rows(self):
+        self.assertEqual(logic.choose_targets("checkout", [], [self.C]), [self.C])
+        self.assertEqual(logic.choose_targets("checkout", [], []), [])
+
+    def test_tick_text(self):
+        self.assertEqual(logic.tick_text(0), "Nothing ticked.")
+        self.assertTrue(logic.tick_text(1).startswith("1 part ticked."))
+        self.assertTrue(logic.tick_text(3).startswith("3 parts ticked."))
+
+    def test_person_unchanged(self):
+        import people
+        who = people.Person("bea", "Bea", "b@x.com", ["Bea"], "member", ["Quality"])
+        same = {"name": "Bea", "email": "b@x.com", "host_names": ["Bea"], "access": "member", "roles": ["Quality"]}
+        self.assertTrue(logic.person_unchanged(who, same))
+        self.assertFalse(logic.person_unchanged(who, dict(same, roles=[])))
+        self.assertFalse(logic.person_unchanged(who, dict(same, name="Bea J")))
+
+
 if __name__ == "__main__":
     unittest.main()
