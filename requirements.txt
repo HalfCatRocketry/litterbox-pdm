@@ -1,0 +1,5 @@
+# What Litterbox needs to run from source (pip install -r requirements.txt). Git and Git LFS are separate installs.
+customtkinter>=5.2.2
+PyYAML>=6.0
+cryptography>=42.0
+pywin32>=306; sys_platform == "win32"
