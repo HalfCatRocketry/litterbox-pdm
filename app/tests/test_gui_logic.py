@@ -95,7 +95,7 @@ class TestPlanAction(unittest.TestCase):
         self.assertIn("None of the selected", self.plan("checkout", 3, 4).message)
 
     def test_single_part_actions_refuse_multiple_selection(self):
-        for action in ("release", "reopen", "void"):
+        for action in ("edit", "revise", "open"):
             with self.subTest(action=action):
                 self.assertIn("just one", self.plan(action, 1, 6).message)
 
@@ -120,7 +120,6 @@ class TestPlanAction(unittest.TestCase):
         self.assertEqual(logic.plan_action("reopen", [cots.pn], by_pn).targets, [cots.pn])
         self.assertIn("checked out", logic.reopen_cots_warning("HCR-00007-001"))
         self.assertEqual(logic.plan_action("void", [cots.pn], by_pn).targets, [cots.pn])
-        self.assertIn("just one", logic.plan_action("make_cots", [ROWS[0].pn, ROWS[5].pn], by_pn).message)
 
     def test_edit_details_needs_one_part_you_have_checked_out(self):
         self.assertEqual([p.base for p in self.plan("edit", 2).targets], [2])
@@ -712,58 +711,157 @@ class TestVaultCreatedText(unittest.TestCase):
 
 
 class TestWorkflowText(unittest.TestCase):
-    def template(self, allow_self=True):
+    def template(self):
         import workflow
-        return workflow.Template("release", [workflow.Step("Quality", 1), workflow.Step("Responsible Engineer", 2)],
-                                 allow_self)
+        return workflow.Template("release", "T1", [workflow.Row(["Quality"]), workflow.Row(["Manager", "Chief"])])
 
-    def plan(self, warnings=()):
-        from types import SimpleNamespace
-        return SimpleNamespace(pn="HCR-00001-001", name="Upright", files=["cad/a.SLDPRT"], warnings=list(warnings))
+    def slots(self):
+        return [{"roles": ["Quality"], "id": "bea", "name": "Bea Jones"},
+                {"roles": ["Manager", "Chief"], "id": "cy", "name": "Cy Day"},
+                {"roles": ["Analysis"], "id": "dee", "name": "Dee", "extra": True}]
 
-    def test_the_request_question_lists_who_must_sign_and_what_they_see(self):
-        text = logic.request_release_text(self.plan(), self.template())
-        self.assertIn("Ask for sign-offs to release HCR-00001-001 (Upright)", text)
-        self.assertIn("  Quality\n", text)
-        self.assertIn("Responsible Engineer (2 people)", text)
-        self.assertIn("cad/a.SLDPRT", text)
-        self.assertNotIn("own request", text)
+    def test_the_request_question_lists_parts_and_signers(self):
+        text = logic.request_confirm_text("release", [("HCR-00001-001", "Upright"), ("HCR-00002-001", "Arm")],
+                                          self.template(), self.slots())
+        self.assertIn("Start the Release workflow (T1)", text)
+        self.assertIn("  HCR-00001-001  Upright\n  HCR-00002-001  Arm", text)
+        self.assertIn("  Quality: Bea Jones\n", text)
+        self.assertIn("  Manager or Chief: Cy Day\n", text)
+        self.assertIn("  Analysis (extra): Dee", text)
+        self.assertIn("as soon as the last person signs", text)
 
-    def test_the_request_question_mentions_self_signoff_warnings_and_notes(self):
-        text = logic.request_release_text(self.plan(["uses an old part"]), self.template(False), ["Nobody has Quality."])
-        self.assertIn("can't sign off your own request", text)
-        self.assertIn("uses an old part", text)
+    def test_make_cots_waits_for_a_second_press_and_reasons_and_notes_show(self):
+        text = logic.request_confirm_text("make_cots", [("HCR-00001-001", "Upright")], self.template(), self.slots(),
+                                          "Because", ["Nobody has Quality."])
+        self.assertIn("press the button again", text)
+        self.assertIn("Reason: Because", text)
         self.assertIn("Nobody has Quality.", text)
 
-    def test_pending_parts_can_be_looked_at_and_released_from_but_nothing_else(self):
-        for action in ("open", "open_drawing", "references", "release"):
+    def test_standard_actions_route_pending_parts_to_their_buttons(self):
+        for action in ("open", "open_drawing", "references", "release", "reopen", "void", "make_cots"):
             self.assertIn("pending", logic.ALLOWED_KINDS[action])
-        for action in ("checkout", "checkin", "revise", "void", "make_cots", "reopen", "cancel_revision", "undo"):
+        for action in ("checkout", "checkin", "revise", "cancel_revision", "undo"):
             self.assertNotIn("pending", logic.ALLOWED_KINDS[action])
 
-    def test_task_table_and_button_text(self):
+    def test_task_table_detail_and_button_text(self):
         from types import SimpleNamespace
-        task = SimpleNamespace(pn="HCR-00001-001", name="Upright", revision="A", requested_by="Alex Smith",
-                               requested_at="2026-10-11T00:00:00Z", summary="Release pending: Quality 0/1")
+        task = SimpleNamespace(id="ab12", label="HCR-00001-001 +1 more", action="reopen",
+                               parts=[("HCR-00001-001", "Upright", "A"), ("HCR-00002-001", "Arm", "A")],
+                               requested_by="Alex Smith", requested_at="2026-10-11T00:00:00Z",
+                               summary="Reopen pending 0/1: waiting on Cy", reason="Drawing error",
+                               slots=[{"text": "Manager", "name": "Cy", "done": False},
+                                      {"text": "Quality", "name": "Bea", "done": True}])
         (iid, values), = logic.tasks_table([task], local=False)
-        self.assertEqual(iid, "HCR-00001-001")
-        self.assertEqual(values, ("HCR-00001-001", "Upright", "A", "Alex Smith", "2026-10-11 00:00",
-                                  "Release pending: Quality 0/1"))
+        self.assertEqual(iid, "ab12")
+        self.assertEqual(values, ("HCR-00001-001 +1 more", "2 parts", "Reopen", "Alex Smith", "2026-10-11 00:00",
+                                  "Reopen pending 0/1: waiting on Cy"))
+        detail = logic.task_detail(task)
+        self.assertIn("HCR-00001-001, HCR-00002-001", detail)
+        self.assertIn("… Manager: Cy (waiting)", detail)
+        self.assertIn("✓ Quality: Bea", detail)
+        self.assertIn("Reason: Drawing error", detail)
         self.assertEqual(logic.tasks_button_text(0), "My Tasks")
         self.assertEqual(logic.tasks_button_text(3), "My Tasks (3)")
 
-    def test_signoff_counts(self):
-        self.assertEqual([logic.parse_signoff_count(t) for t in ("1", " 20 ", "0", "21", "x", "", "-1", "1.5")],
-                         [1, 20, None, None, None, None, None, None])
+    def test_signoff_result_text_is_empty_unless_something_failed(self):
+        from types import SimpleNamespace
+        self.assertEqual(logic.signoff_result_text(SimpleNamespace(errors={})), ("", False))
+        text, warn = logic.signoff_result_text(SimpleNamespace(errors={"HCR-00001-001": "offline"}))
+        self.assertTrue(warn)
+        self.assertIn("HCR-00001-001: offline", text)
 
-    def test_workflow_rows(self):
-        self.assertEqual(logic.workflow_rows(None), [])
-        self.assertEqual(logic.workflow_rows(self.template()), [("Quality", 1), ("Responsible Engineer", 2)])
+    def test_people_drop_downs(self):
+        import people
+        directory = people.Directory(
+            [people.Person("a", "Alex", "", [], "owner", ["Quality"]), people.Person("b", "Alex", "", [], "member",
+                                                                                      ["Manager"]),
+             people.Person("c", "Cy", "", [], "member", ["Quality"], active=False)], ["Quality", "Manager"])
+        self.assertEqual(logic.row_choices(directory, ["Quality", "Manager"]), [("Alex (a)", "a"), ("Alex (b)", "b")])
+        self.assertEqual(logic.row_choices(directory, ["Quality"], "a", False), [])
+        self.assertEqual(logic.row_choices(directory, ["Manager"]), [("Alex", "b")])
 
-    def test_signoff_failure_text_says_it_is_saved(self):
-        text = logic.signoff_failure_text("HCR-00001-001", "offline")
-        self.assertIn("is saved", text)
-        self.assertIn("offline", text)
+
+class TestWorkflowEditor(unittest.TestCase):
+    ROLES = ["Responsible Engineer", "Quality", "Manager", "Chief"]
+
+    def templates(self):
+        import workflow
+        t = {}
+        workflow.set_template(t, "release", "T1", [["Responsible Engineer"], ["Quality"]])
+        workflow.set_template(t, "release", "T2", [["Responsible Engineer"]])
+        return t
+
+    def test_nothing_changed_means_no_ops(self):
+        editor = logic.WorkflowEditor(self.templates())
+        self.assertFalse(editor.dirty)
+        self.assertEqual(editor.ops(), [])
+        self.assertEqual(editor.names("release"), ["T1", "T2"])
+        self.assertEqual(editor.names("void"), [])
+
+    def test_adding_changing_and_deleting(self):
+        editor = logic.WorkflowEditor(self.templates())
+        i = editor.add("void", self.ROLES)
+        self.assertEqual((editor.names("void"), editor.items["void"][i]["rows"]), (["T1"], [["Responsible Engineer"]]))
+        editor.add_row("release", 0, self.ROLES)
+        editor.set_role("release", 0, 2, 0, "Manager")
+        self.assertEqual(editor.add_or("release", 0, 2, self.ROLES), "Responsible Engineer")
+        editor.delete("release", 1)
+        self.assertTrue(editor.dirty)
+        ops = editor.ops()
+        self.assertEqual([(o["op"], o["action"], o["name"]) for o in ops],
+                         [("remove", "release", "T2"), ("set", "release", "T1"), ("set", "void", "T1")])
+        self.assertEqual(ops[1]["rows"], [["Responsible Engineer"], ["Quality"], ["Manager", "Responsible Engineer"]])
+        self.assertEqual(ops[1]["old"], "T1")
+        self.assertIsNone(ops[2]["old"])
+
+    def test_renaming_is_a_set_with_the_old_name(self):
+        editor = logic.WorkflowEditor(self.templates())
+        editor.items["release"][0]["name"] = "Flight"
+        (op,) = editor.ops()
+        self.assertEqual((op["name"], op["old"]), ("Flight", "T1"))
+
+    def test_the_ops_replay_on_newer_files(self):
+        import workflow
+        editor = logic.WorkflowEditor(self.templates())
+        editor.items["release"][0]["name"] = "Flight"
+        editor.delete("release", 1)
+        newer = self.templates()
+        workflow.set_template(newer, "release", "Other", [["Chief"]])       # someone else's change
+        workflow.apply_ops(newer, editor.ops())
+        self.assertEqual(list(newer["release"]), ["Flight", "Other"])
+
+    def test_or_rows(self):
+        editor = logic.WorkflowEditor(self.templates())
+        editor.add_or("release", 0, 0, self.ROLES)
+        editor.remove_or("release", 0, 0, 0)
+        self.assertEqual(len(editor.items["release"][0]["rows"][0]), 1)
+        editor.remove_or("release", 0, 0, 0)                         # the last role can't be removed
+        self.assertEqual(len(editor.items["release"][0]["rows"][0]), 1)
+
+    def test_problems(self):
+        editor = logic.WorkflowEditor(self.templates())
+        self.assertEqual(editor.problem(), "")
+        editor.items["release"][1]["name"] = "t1"
+        self.assertIn("two Release workflows", editor.problem())
+        editor.items["release"][1]["name"] = " "
+        self.assertIn("needs a name", editor.problem())
+        editor.items["release"][1]["name"] = "T2"
+        editor.items["release"][1]["rows"] = []
+        self.assertIn("at least one sign-off", editor.problem())
+        editor.items["release"][1]["rows"] = [["Chief", "chief"]]
+        self.assertIn("same role twice", editor.problem())
+
+    def test_standard_workflows_skip_what_lacks_roles(self):
+        editor = logic.WorkflowEditor({})
+        added, skipped = editor.add_standard(["Responsible Engineer", "Manager", "Chief"])
+        self.assertEqual(added, ["Release T3", "Reopen T1", "Void T1", "Make COTS T1"])
+        self.assertEqual([n for n, _ in skipped], ["Release T1", "Release T2"])
+        self.assertEqual(editor.add_standard(["Responsible Engineer", "Manager", "Chief"])[0], [])
+
+    def test_label_for_the_team_window(self):
+        self.assertEqual(logic.ops_label([]), "Workflows")
+        ops = [{"action": "release"}, {"action": "void"}, {"action": "release"}]
+        self.assertEqual(logic.ops_label(ops), "Workflows: Release, Void")
 
 
 class TestWorkflowHistory(unittest.TestCase):

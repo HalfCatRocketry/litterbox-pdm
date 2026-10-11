@@ -62,12 +62,12 @@ class VaultCompatibility(unittest.TestCase):
         config.check_compatible(self.dir)
 
     def test_a_minimum_version_is_enforced(self):
-        self.write("org: HCR\nmin_litterbox_version: 0.2.0\n")
-        with self.assertRaisesRegex(config.ConfigError, "needs Litterbox 0.2.0"):
+        self.write("org: HCR\nmin_litterbox_version: 9.0.0\n")
+        with self.assertRaisesRegex(config.ConfigError, "needs Litterbox 9.0.0"):
             config.check_compatible(self.dir)
-        version.VERSION = "0.2.0"
+        version.VERSION = "9.0.0"
         config.check_compatible(self.dir)
-        version.VERSION = "0.10.0"                                     # compared as numbers, not text
+        version.VERSION = "10.0.0"                                     # compared as numbers, not text
         config.check_compatible(self.dir)
 
     def test_nonsense_values_get_a_plain_message(self):

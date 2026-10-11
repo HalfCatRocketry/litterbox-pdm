@@ -767,7 +767,7 @@ def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, r
     if record.status != required:
         problems.append(f"Its status is '{record.status}'. Only {required_label} parts can be {verb}.")
     if record.pending and not allow_pending:
-        problems.append("It is waiting for sign-offs on a release request.")
+        problems.append("It is waiting for sign-offs.")
     if not cad:
         problems.append("There are no CAD files for it in the cad folder.")
 
@@ -821,13 +821,13 @@ def release_plan(repo, pn, fetch=True, allow_pending=False):
 
 
 @_converts_errors
-def make_cots_plan(repo, pn, fetch=True):
+def make_cots_plan(repo, pn, fetch=True, allow_pending=False):
     """Work out whether a part can be turned into a COTS part. Same checks as a release:
     nobody has it checked out, nothing is modified, and your copy is up to date."""
     validate_repo(repo)
     pn = _as_pn(pn)
     record = registry.load(repo, pn)
-    cad, problems = _blockers(repo, pn, record, "made COTS", fetch)
+    cad, problems = _blockers(repo, pn, record, "made COTS", fetch, allow_pending=allow_pending)
     if record.cots:
         problems.insert(0, "It is already a COTS part.")
     elif record.released_revision or record.revision != pn_module.FIRST_REVISION:
@@ -880,6 +880,14 @@ def _one_line(text):
     return " ".join((text or "").split())
 
 
+def _refuse_if_workflow(repo, action):
+    """An action that has workflow templates must go through them, so it can't be done directly."""
+    import workflow
+    if workflow.has_templates(repo, action):
+        raise LitterboxError(f"{workflow.label_of(action)} in this vault needs sign-offs. Use the Workflow window "
+                             "to ask for them; it happens when everyone required has signed.")
+
+
 @_converts_errors
 def release(repo, pn):
     """Freeze a part and its drawing. Call release_plan() first and get the user to confirm.
@@ -887,10 +895,7 @@ def release(repo, pn):
     Returns the list of files that were released.
     """
     pn = _as_pn(pn)
-    import workflow
-    if workflow.template_for(repo, "release") is not None:
-        raise LitterboxError("Releases in this vault need sign-offs. Use Release to ask for them; the part is "
-                             "released when everyone required has signed.")
+    _refuse_if_workflow(repo, "release")
     plan = release_plan(repo, pn)
     if not plan.ok:
         raise LitterboxError(f"{pn} can't be released yet:\n- " + "\n- ".join(plan.problems))
@@ -907,6 +912,7 @@ def make_cots(repo, pn):
     """Record an existing part as COTS (purchased): it can no longer be checked out.
     Call make_cots_plan() first and get the user to confirm. Returns the files it covers."""
     pn = _as_pn(pn)
+    _refuse_if_workflow(repo, "make_cots")
     plan = make_cots_plan(repo, pn)
     if not plan.ok:
         raise LitterboxError(f"{pn} can't be made COTS yet:\n- " + "\n- ".join(plan.problems))
@@ -922,6 +928,7 @@ def make_cots(repo, pn):
 def reopen(repo, pn, reason):
     """Make a released part editable again. A reason is required."""
     pn = _as_pn(pn)
+    _refuse_if_workflow(repo, "reopen")
     _edit_record(
         repo, pn, "reopen",
         lambda record, user: registry.mark_reopened(record, user, reason),
@@ -933,6 +940,7 @@ def reopen(repo, pn, reason):
 def void(repo, pn, reason):
     """Abandon a part. Its number is never reused. A reason is required."""
     pn = _as_pn(pn)
+    _refuse_if_workflow(repo, "void")
     _edit_record(
         repo, pn, "void",
         lambda record, user: registry.mark_void(record, user, reason),

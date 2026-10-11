@@ -456,8 +456,11 @@ class TestStatusChanges(RegistryTestCase):
 
 
 class TestPendingRequests(RegistryTestCase):
-    PENDING = {"action": "release", "revision": "A", "requested_by": "Alex", "requested_at": "2026-10-11T00:00:00Z",
-               "template": {"allow_self_signoff": True, "signoffs": [{"role": "Quality", "count": 1}]},
+    PENDING = {"id": "ab12cd34", "action": "release", "revision": "A", "requested_by": "Alex",
+               "requested_at": "2026-10-11T00:00:00Z", "template_name": "T1",
+               "template": {"allow_same_person": False, "requester_may_sign": True,
+                            "signoffs": [{"roles": ["Quality"]}]},
+               "slots": [{"roles": ["Quality"], "id": "bea", "name": "Bea"}],
                "files": {"cad/x.SLDPRT": "abc"}, "signoffs": []}
 
     def pending(self, base=7):
@@ -479,6 +482,7 @@ class TestPendingRequests(RegistryTestCase):
         record = self.pending()
         for action in (lambda: registry.record_checkout(record, "Jo", []), lambda: registry.mark_void(record, "Jo", "x"),
                        lambda: registry.mark_cots(record, "Jo", []),
+                       lambda: registry.mark_reopened(record, "Jo", "x"),
                        lambda: registry.mark_revision_cancelled(record, "Jo", "x", [])):
             with self.assertRaises(RegistryError) as ctx:
                 action()
@@ -487,7 +491,8 @@ class TestPendingRequests(RegistryTestCase):
     def test_a_malformed_request_is_refused(self):
         record = self.make(9)
         for bad in ("text", {"action": "release"}, {**self.PENDING, "signoffs": "none"},
-                    {**self.PENDING, "template": []}):
+                    {**self.PENDING, "template": []},
+                    {**self.PENDING, "slots": "none"}, {k: v for k, v in self.PENDING.items() if k != "slots"}):
             data = record.to_dict()
             data["pending"] = bad
             with self.assertRaises(RegistryError):
@@ -497,10 +502,15 @@ class TestPendingRequests(RegistryTestCase):
         import datetime
         data = self.make(10).to_dict()
         data["pending"] = {**self.PENDING, "requested_at": datetime.datetime(2026, 10, 11, 0, 0, 0),
-                           "signoffs": [{"by": "Bea", "at": datetime.datetime(2026, 10, 11, 1, 0, 0)}]}
+                           "signoffs": [{"by": "Bea", "slot": 0, "at": datetime.datetime(2026, 10, 11, 1, 0, 0)}]}
         loaded = registry.Record.from_dict(data)
         self.assertEqual(loaded.pending["requested_at"], "2026-10-11T00:00:00Z")
         self.assertEqual(loaded.pending["signoffs"][0]["at"], "2026-10-11T01:00:00Z")
+
+    def test_a_pending_part_cannot_be_revised(self):
+        record = self.pending()
+        record.status = registry.STATUS_RELEASED
+        self.assertIn("waiting for sign-offs", registry.can_revise(record))
 
     def test_release_details_go_on_the_event(self):
         record = self.make(11)

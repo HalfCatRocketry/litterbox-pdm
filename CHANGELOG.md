@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0
+
+- Workflows are rebuilt. Pressing Release (or Reopen, Void, Make COTS) in a vault that has workflows for that action opens a Workflow window: pick a template (T1, T2... or your own), choose a person for each sign-off, add optional extra sign-offs, and submit. Several parts can go through one workflow together; the people sign once for the whole batch.
+- Team > Workflows has a tab for each action. A template is a list of sign-offs; list a role twice for two sign-offs, and use "+ or" to let someone with any of several roles fill a sign-off (for example Manager or Chief). Each template says whether one person may fill more than one sign-off and whether the person who asks may sign. "Add standard workflows" adds Release T1, T2 and T3 and one workflow for each other action.
+- The people who sign are named when the workflow starts; My Tasks shows each person what is waiting on them. The person who asked (or an Admin) can change who signs, withdraw the request, or finish it; an Admin can still override with a recorded reason.
+- Release, Reopen and Void happen as soon as the last person signs. Make COTS waits for the button to be pressed again. Revise and Cancel Revision don't have workflows yet.
+- Delete .litterbox/workflows.yaml before updating a vault that used 0.2.0 workflows, and set them up again in Team > Workflows. A vault with workflows asks everyone to update to 0.3.0.
+- Check Out, Check In, Save Progress, Undo Checkout, Release, Reopen, Void and Make COTS act on the parts whose boxes are selected. Clicking a row highlights it in blue, which Open, Open Drawing, References and History use.
+- Parts-list tick boxes now read "selected" throughout the program.
+
 ## 0.2.0
 
 - **Release workflow.** An Admin can require sign-offs before a part is released (Team... > Workflows...). Pressing

@@ -381,7 +381,7 @@ class CreateVaultWiring(unittest.TestCase):
 
 
 class WorkflowWiring(unittest.TestCase):
-    """The window side of release sign-offs: the Release button, My Tasks and the Workflows dialog."""
+    """The window side of workflows: starting one, My Tasks, and the Workflows window."""
 
     def setUp(self):
         from types import SimpleNamespace
@@ -396,143 +396,214 @@ class WorkflowWiring(unittest.TestCase):
         app._say = lambda text, tone="normal": self.said.append(text)
         app.repo = lambda: "C:/vault"
         app.rows, app.rows_by_pn = [], {}
-        app.identity = SimpleNamespace(state="legacy", directory=None, person=None)
+        directory = self.gui.people.Directory(
+            [self.gui.people.Person("alex", "Alex", "", ["Alex"], "owner", ["Responsible Engineer"]),
+             self.gui.people.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"])],
+            ["Responsible Engineer", "Quality"])
+        self.directory = directory
+        app.identity = SimpleNamespace(state="ok", directory=directory, person=directory.get("alex"))
         app.note = ""
         self.asked = []
         app._ask = lambda text, title: self.asked.append((text, title)) or self.answer
         self.answer = ""
         self.app = app
-        self.template = self.wf.Template("release", [self.wf.Step("Quality", 1)])
-        replace(self, self.wf, "template_for", lambda repo, action: self.template)
+        self.templates = {"T1": self.wf.Template("release", "T1", [self.wf.Row(["Quality"])])}
+        replace(self, self.wf, "templates_for", lambda repo, action: self.templates)
 
-    def plan(self, ok=True):
-        return self.SimpleNamespace(pn="HCR-00001-001", name="Upright", files=["cad/a.SLDPRT"], warnings=[],
-                                    problems=[] if ok else ["It is checked out by Bea."], ok=ok)
+    def row(self, kind, pending=None, pn="HCR-00001-001"):
+        return self.SimpleNamespace(pn=pn, name="Upright", kind=kind, state=kind, pending=pending or {})
 
-    def row(self, kind, pending=None):
-        return self.SimpleNamespace(pn="HCR-00001-001", name="Upright", kind=kind, state=kind, pending=pending or {})
+    def pending(self, signed=False, action="release", batch="b1"):
+        return {"id": batch, "action": action, "revision": "A", "requested_by": "Alex", "requested_by_id": "alex",
+                "requested_at": "2026-10-11T00:00:00Z", "template_name": "T1", "template": {}, "files": {},
+                "parts": ["HCR-00001-001"], "slots": [{"roles": ["Quality"], "id": "bea", "name": "Bea"}],
+                "signoffs": [{"slot": 0, "by": "Bea", "id": "bea"}] if signed else []}
 
-    def pending(self, signed=False):
-        return {"action": "release", "revision": "A", "requested_by": "Alex", "requested_by_id": "alex",
-                "requested_at": "2026-10-11T00:00:00Z",
-                "template": {"allow_self_signoff": True, "signoffs": [{"role": "Quality", "count": 1}]},
-                "files": {}, "signoffs": [{"by": "Bea", "id": "bea", "roles": ["Quality"]}] if signed else []}
+    def task(self, **changes):
+        base = dict(id="b1", label="HCR-00001-001", action="release", pns=["HCR-00001-001"],
+                    slots=[{"text": "Quality", "name": "Bea", "done": False, "roles": ["Quality"]}])
+        base.update(changes)
+        return self.SimpleNamespace(**base)
 
     def shown(self, name):
         return [call for call in self.box.calls if call[0] == name]
 
-    def test_release_in_a_vault_with_a_workflow_asks_for_sign_offs(self):
+    def targets(self, *pns):
+        self.app._plan = lambda action: self.SimpleNamespace(targets=list(pns))
+
+    def test_release_in_a_vault_with_a_workflow_opens_the_workflow_window(self):
+        self.targets("HCR-00001-001", "HCR-00002-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001")}
+        seen = []
+
+        class Dialog:
+            def __init__(inner, parent, action, parts, templates, directory, my_id):
+                seen.append((action, parts, list(templates), my_id))
+
+            def show(inner):
+                return {"template": "T1", "assignments": ["bea"], "extras": [("Quality", "bea")], "reason": ""}
+
+        self.gui.WorkflowRequestDialog = Dialog
         calls = []
-        replace(self, self.wf, "request_release", lambda repo, pn: calls.append((repo, pn)) or "pending")
-        self.app._plan = lambda action: self.SimpleNamespace(targets=["HCR-00001-001"])
+        replace(self, self.wf, "request", lambda *a: calls.append(a) or "id")
         self.app.release()
-        work, done, on_success = self.tasks.pop()
-        on_success(self.plan())                                   # the plan came back fine: the question is asked
-        self.assertIn("Ask for sign-offs", self.shown("askokcancel")[0][1][0])
-        work, done, on_success = self.tasks.pop()
+        self.assertEqual(seen, [("release", [("HCR-00001-001", "Upright"), ("HCR-00002-001", "Upright")], ["T1"],
+                                 "alex")])
+        work, done, _ = self.tasks.pop()
         work()
-        self.assertEqual(calls, [("C:/vault", "HCR-00001-001")])
-        self.assertIn("Asked for sign-offs", done)
+        self.assertEqual(calls, [("C:/vault", ["HCR-00001-001", "HCR-00002-001"], "release", "T1", ["bea"],
+                                  [("Quality", "bea")], "")])
+        self.assertIn("2 parts", done)
 
-    def test_declining_the_question_does_nothing(self):
-        self.box.answer = False
-        self.app._confirm_release("C:/vault", self.plan(), self.template)
+    def test_cancelling_the_workflow_window_does_nothing(self):
+        self.targets("HCR-00001-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("ok")}
+        self.gui.WorkflowRequestDialog = lambda *a: self.SimpleNamespace(show=lambda: None)
+        self.app.release()
         self.assertEqual(self.tasks, [])
 
-    def test_blockers_are_shown_instead_of_asking(self):
-        self.app._confirm_release("C:/vault", self.plan(ok=False), self.template)
-        self.assertEqual(self.tasks, [])
-        self.assertIn("checked out by Bea", self.shown("showwarning")[0][1][1])
+    def test_reopen_void_and_make_cots_use_the_window_too(self):
+        for action, method in (("reopen", "reopen"), ("void", "void"), ("make_cots", "make_cots")):
+            with self.subTest(action=action):
+                self.targets("HCR-00001-001")
+                self.app.rows_by_pn = {"HCR-00001-001": self.row("ok")}
+                opened = []
+                self.gui.WorkflowRequestDialog = lambda parent, act, *a: opened.append(act) or self.SimpleNamespace(
+                    show=lambda: None)
+                getattr(self.app, method)()
+                self.assertEqual(opened, [action])
 
     def test_without_a_workflow_release_works_as_before(self):
-        self.template = None
+        self.templates = {}
         released = []
         replace(self, self.gui.engine, "release", lambda repo, pn: released.append(pn))
-        self.app._confirm_release("C:/vault", self.plan(), None)
+        self.app._confirm_release("C:/vault", self.SimpleNamespace(pn="HCR-00001-001", name="Upright",
+                                                                   files=["cad/a.SLDPRT"], warnings=[], problems=[],
+                                                                   ok=True))
         self.tasks.pop()[0]()
         self.assertEqual(released, ["HCR-00001-001"])
 
-    def test_release_on_a_waiting_part_says_what_is_missing(self):
-        row = self.row("pending", self.pending())
-        self.app._plan = lambda action: self.SimpleNamespace(targets=["HCR-00001-001"])
-        self.app.rows_by_pn = {"HCR-00001-001": row}
+    def test_without_a_workflow_several_parts_are_refused(self):
+        self.templates = {}
+        self.targets("HCR-00001-001", "HCR-00002-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001")}
         self.app.release()
         self.assertEqual(self.tasks, [])
-        self.assertIn("Quality (0 of 1)", self.shown("showinfo")[0][1][1])
+        self.assertIn("Select just one part", self.said[-1])
 
-    def test_release_on_an_approved_part_completes_it(self):
-        row = self.row("pending", self.pending(signed=True))
-        self.app._plan = lambda action: self.SimpleNamespace(targets=["HCR-00001-001"])
-        self.app.rows_by_pn = {"HCR-00001-001": row}
+    def test_blockers_are_shown_instead_of_asking(self):
+        self.app._confirm_release("C:/vault", self.SimpleNamespace(
+            pn="HCR-00001-001", problems=["It is checked out by Bea."], ok=False))
+        self.assertEqual(self.tasks, [])
+        self.assertIn("checked out by Bea", self.shown("showwarning")[0][1][1])
+
+    def test_the_button_on_a_waiting_part_says_what_is_missing(self):
+        self.targets("HCR-00001-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("pending", self.pending())}
+        self.app.release()
+        self.assertEqual(self.tasks, [])
+        self.assertIn("Quality (Bea)", self.shown("showinfo")[0][1][1])
+
+    def test_the_button_on_a_part_with_a_different_request_says_so(self):
+        self.targets("HCR-00001-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("pending", self.pending(action="void"))}
+        self.app.release()
+        self.assertEqual(self.tasks, [])
+        self.assertIn("Void request waiting", self.shown("showinfo")[0][1][1])
+
+    def test_the_button_on_an_approved_part_completes_it(self):
+        self.targets("HCR-00001-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("pending", self.pending(signed=True))}
         done = []
-        replace(self, self.wf, "complete_release", lambda repo, pn: done.append(pn))
+        replace(self, self.wf, "complete_many", lambda repo, pns: done.append(pns))
         self.app.release()
         self.tasks.pop()[0]()
-        self.assertEqual(done, ["HCR-00001-001"])
+        self.assertEqual(done, [["HCR-00001-001"]])
 
-    def test_approving_passes_the_comment_and_reports_a_failed_completion(self):
+    def test_approving_passes_the_comment_and_reports_a_failure(self):
         self.answer = "Looks right"
         seen = []
-        replace(self, self.wf, "sign_off", lambda repo, pn, comment: seen.append(comment) or "result")
-        self.app.task_sign("HCR-00001-001")
+        replace(self, self.wf, "sign_off", lambda repo, pns, comment: seen.append((pns, comment)) or "result")
+        self.app.task_sign(self.task())
         work, done, on_success = self.tasks.pop()
         self.assertEqual(work(), "result")
-        self.assertEqual(seen, ["Looks right"])
-        on_success(self.SimpleNamespace(completed=False, error="offline", summary=""))
+        self.assertEqual(seen, [(["HCR-00001-001"], "Looks right")])
+        on_success(self.SimpleNamespace(completed=[], errors={"HCR-00001-001": "offline"}))
         self.assertIn("offline", self.shown("showwarning")[0][1][1])
-        on_success(self.SimpleNamespace(completed=True, error="", summary=""))
-        self.assertIn("released", self.app.note)
+        on_success(self.SimpleNamespace(completed=["HCR-00001-001"], errors={}))
+        self.assertIn("Release done on 1 part", self.app.note)
 
     def test_cancelling_the_comment_box_cancels_the_approval(self):
         self.answer = None
-        self.app.task_sign("HCR-00001-001")
+        self.app.task_sign(self.task())
         self.assertEqual(self.tasks, [])
 
     def test_rejecting_needs_a_reason(self):
         self.answer = "   "
-        self.app.task_reject("HCR-00001-001")
+        self.app.task_reject(self.task())
         self.assertEqual(self.tasks, [])
         self.assertIn("A reason is required", self.shown("showwarning")[0][1][1])
         self.answer = "Missing tolerance"
         seen = []
-        replace(self, self.wf, "reject", lambda repo, pn, reason: seen.append(reason))
-        self.app.task_reject("HCR-00001-001")
+        replace(self, self.wf, "reject", lambda repo, pns, reason: seen.append((pns, reason)))
+        self.app.task_reject(self.task())
         self.tasks.pop()[0]()
-        self.assertEqual(seen, ["Missing tolerance"])
+        self.assertEqual(seen, [(["HCR-00001-001"], "Missing tolerance")])
 
     def test_withdrawing_asks_first(self):
         self.box.answer = False
-        self.app.task_withdraw("HCR-00001-001")
+        self.app.task_withdraw(self.task())
         self.assertEqual(self.tasks, [])
         self.box.answer = True
         gone = []
-        replace(self, self.wf, "withdraw", lambda repo, pn: gone.append(pn))
-        self.app.task_withdraw("HCR-00001-001")
+        replace(self, self.wf, "withdraw", lambda repo, pns: gone.append(pns))
+        self.app.task_withdraw(self.task())
         self.tasks.pop()[0]()
-        self.assertEqual(gone, ["HCR-00001-001"])
+        self.assertEqual(gone, [["HCR-00001-001"]])
+
+    def test_completing_asks_first(self):
+        self.box.answer = False
+        self.app.task_complete(self.task())
+        self.assertEqual(self.tasks, [])
+        self.box.answer = True
+        done = []
+        replace(self, self.wf, "complete_many", lambda repo, pns: done.append(pns))
+        self.app.task_complete(self.task())
+        self.tasks.pop()[0]()
+        self.assertEqual(done, [["HCR-00001-001"]])
 
     def test_an_override_needs_a_reason_and_a_confirmation(self):
         self.answer = ""
-        self.app.task_override("HCR-00001-001")
+        self.app.task_override(self.task())
         self.assertEqual(self.tasks, [])
         self.answer = "Quality is away"
         self.box.answer = False
-        self.app.task_override("HCR-00001-001")
+        self.app.task_override(self.task())
         self.assertEqual(self.tasks, [])
         self.box.answer = True
         seen = []
-        replace(self, self.wf, "override_release", lambda repo, pn, reason: seen.append(reason))
-        self.app.task_override("HCR-00001-001")
+        replace(self, self.wf, "override", lambda repo, pns, reason, action=None: seen.append((pns, reason, action)))
+        self.app.task_override(self.task())
         self.tasks.pop()[0]()
-        self.assertEqual(seen, ["Quality is away"])
+        self.assertEqual(seen, [(["HCR-00001-001"], "Quality is away", "release")])
+
+    def test_changing_a_signer(self):
+        self.gui.ReassignDialog = lambda parent, task, directory: self.SimpleNamespace(show=lambda: (0, "alex"))
+        seen = []
+        replace(self, self.wf, "reassign", lambda repo, pns, slot, person: seen.append((pns, slot, person)))
+        self.app.task_reassign(self.task())
+        self.tasks.pop()[0]()
+        self.assertEqual(seen, [(["HCR-00001-001"], 0, "alex")])
+        self.gui.ReassignDialog = lambda *a: self.SimpleNamespace(show=lambda: None)
+        self.app.task_reassign(self.task())
+        self.assertEqual(self.tasks, [])
 
     def test_the_button_shows_how_many_things_need_you(self):
         shown = []
         self.app.tasks_button = self.SimpleNamespace(configure=lambda **k: shown.append(k["text"]))
         self.app._task_windows = lambda: []
-        self.app.identity = self.SimpleNamespace(
-            state="ok", directory=None,
-            person=self.gui.people.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"]))
+        self.app.identity = self.SimpleNamespace(state="ok", directory=self.directory,
+                                                 person=self.directory.get("bea"))
         self.app.rows = [self.row("pending", self.pending())]
         self.app._refresh_tasks()
         self.assertEqual(shown[-1], "My Tasks (1)")
@@ -552,33 +623,43 @@ class WorkflowWiring(unittest.TestCase):
     def _dialog_result(self, result):
         """Make the fake WorkflowDialog hand `result` to the apply callback; returns what apply answered."""
         out = []
-        self.gui.WorkflowDialog = lambda parent, roles, current, apply=None: self.SimpleNamespace(
-            show=lambda: out.append(apply(result)))
+
+        def dialog(parent, roles, templates, apply=None):
+            editor = self.gui.logic.WorkflowEditor(templates)
+            for op in result:
+                if op["op"] == "set":
+                    editor.items.setdefault(op["action"], []).append(
+                        {"origin": op["old"], "name": op["name"], "rows": op["rows"], "same": op["same"],
+                         "requester": op["requester"]})
+            return self.SimpleNamespace(show=lambda: out.append(apply(result, editor)))
+
+        self.gui.WorkflowsDialog = dialog
         return out
 
-    def test_the_workflow_dialog_result_is_staged_not_saved(self):
+    def test_the_workflows_window_result_is_staged_not_saved(self):
         window, draft, reloaded = self._draft_window(["Quality", "Manager"])
-        out = self._dialog_result((True, [("Quality", 2)], False))
+        out = self._dialog_result([{"op": "set", "action": "release", "name": "T1", "rows": [["Quality"]],
+                                    "same": False, "requester": True, "old": None}])
         self.app.edit_workflow(window)
         self.assertEqual(out, [""])
         self.assertEqual(self.tasks, [])
-        self.assertEqual([(s.role, s.count) for s in draft.templates["release"].steps], [("Quality", 2)])
-        self.assertEqual(draft.labels, ["Release workflow"])
+        self.assertEqual([r.roles for r in draft.templates["release"]["T1"].rows], [["Quality"]])
+        self.assertEqual(draft.labels, ["Workflows: Release"])
         self.assertEqual(reloaded, [1])
 
-    def test_turning_the_workflow_off_is_staged(self):
-        tpl = self.wf.Template("release", [self.wf.Step("Quality", 1)])
-        window, draft, _ = self._draft_window(["Quality"], {"release": tpl})
-        self._dialog_result((False, [], True))
+    def test_removing_a_workflow_is_staged(self):
+        tpl = {"release": {"T1": self.wf.Template("release", "T1", [self.wf.Row(["Quality"])])}}
+        window, draft, _ = self._draft_window(["Quality"], tpl)
+        self._dialog_result([{"op": "remove", "action": "release", "name": "T1"}])
         self.app.edit_workflow(window)
         self.assertEqual(draft.templates, {})
-        self.assertEqual(self.tasks, [])
         self.assertTrue(draft.dirty)
 
-    def test_roles_nobody_holds_ask_for_a_second_thought(self):
+    def test_a_row_nobody_can_fill_asks_for_a_second_thought(self):
         window, draft, _ = self._draft_window(["Quality", "Empty"])
         draft.directory.people[0].roles = ["Quality"]
-        out = self._dialog_result((True, [("Empty", 1)], True))
+        out = self._dialog_result([{"op": "set", "action": "release", "name": "T1", "rows": [["Empty"]],
+                                    "same": False, "requester": True, "old": None}])
         self.gui.messagebox.askyesno = lambda *a, **k: False
         self.app.edit_workflow(window)
         self.assertTrue(out[0])

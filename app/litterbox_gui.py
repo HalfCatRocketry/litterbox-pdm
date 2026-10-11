@@ -2293,72 +2293,61 @@ class RolesDialog(ctk.CTkToplevel):
         return self.result
 
 
-class WorkflowDialog(ctk.CTkToplevel):
-    """The release workflow: does a release need sign-offs, from which roles, and may people sign their own.
+class WorkflowsDialog(ctk.CTkToplevel):
+    """Team > Workflows: the sign-off templates for each action, one tab per action.
 
-        result = WorkflowDialog(parent, roles, template).show()      # template: workflow.Template or None
-        # None if cancelled, else (needs_signoffs, [(role, count), ...], allow_self_signoff)
+        WorkflowsDialog(parent, roles, templates, apply=callback).show()
+        # callback(ops, editor) -> problem text, or "" when the change was taken (see logic.WorkflowEditor)
+
+    A template is a list of sign-offs. A role listed twice is two sign-offs; "+ or" lets a sign-off be filled by
+    someone with any of several roles. Nothing is saved here: OK keeps the change in the Team window's draft.
     """
 
-    def __init__(self, parent, roles, template, apply=None):
+    def __init__(self, parent, roles, templates, apply=None):
         super().__init__(parent)
         set_window_icon(self)
         self.result = None
-        self.apply = apply          # apply(result) -> problem text, or "" when the change was taken
+        self.apply = apply
         self.roles = list(roles)
-        width, height = 520, 520
+        self.editor = logic.WorkflowEditor(templates)
+        self.selected = {action: 0 for action in workflow.ACTIONS}
+        self.name_vars = {}
+        width, height = 820, 640
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
-        self.title("Release workflow")
+        self.title("Workflows")
         self.geometry(f"{width}x{height}+{x}+{y}")
-        self.minsize(480, 420)
+        self.minsize(720, 520)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)
-        ctk.CTkLabel(self, text="Release workflow", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
-            row=0, column=0, sticky="ew", padx=20, pady=(18, 6))
-        self.enabled_var = tk.BooleanVar(value=template is not None)
-        ctk.CTkCheckBox(self, text="A release needs sign-offs", variable=self.enabled_var,
-                        command=self._redraw).grid(row=1, column=0, sticky="w", padx=20, pady=(0, 8))
-        ctk.CTkLabel(self, text="It is released once every sign-off below is in, in any order. Each sign-off is a "
-                                "role and how many different people with that role must sign.",
-                     text_color=MUTED, anchor="w", justify="left", wraplength=470).grid(
-            row=2, column=0, sticky="ew", padx=20, pady=(0, 6))
-        self.steps_frame = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=10)
-        self.steps_frame.grid(row=3, column=0, sticky="nsew", padx=20)
-        self.rows = [[tk.StringVar(value=role), tk.StringVar(value=str(count))]
-                     for role, count in logic.workflow_rows(template)]
-        if template is None and self.roles:
-            self.rows.append([tk.StringVar(value=self.roles[0]), tk.StringVar(value="1")])
-        self.add_button = ReleaseButton(self, text="Add a sign-off", height=30, fg_color=GRAY, hover_color=GRAY_HOVER,
-                                        command=self._add)
-        self.add_button.grid(row=4, column=0, sticky="w", padx=20, pady=(8, 0))
-        self.self_var = tk.BooleanVar(value=template.allow_self_signoff if template else True)
-        self.self_box = ctk.CTkCheckBox(self, text="People may sign off their own requests", variable=self.self_var)
-        self.self_box.grid(row=5, column=0, sticky="w", padx=20, pady=(10, 0))
-        self.problem = ctk.CTkLabel(self, text="", text_color=ERROR, anchor="w", justify="left", wraplength=470)
-        self.problem.grid(row=6, column=0, sticky="ew", padx=20, pady=(4, 0))
+        self.rowconfigure(1, weight=1)
+        ctk.CTkLabel(self, text="Workflows: who has to sign off before something happens. An action with no "
+                                "workflow just happens.", text_color=MUTED, anchor="w", justify="left",
+                     wraplength=width - 40).grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 6))
+        self.panes = {}
+        for action in workflow.ACTIONS:
+            tab = self.tabs.add(workflow.label_of(action))
+            tab.columnconfigure(0, weight=1)
+            tab.rowconfigure(2, weight=1)
+            self.panes[action] = tab
+            self._redraw(action)
+        self.problem = ctk.CTkLabel(self, text="", text_color=ERROR, anchor="w", justify="left",
+                                    wraplength=width - 40)
+        self.problem.grid(row=2, column=0, sticky="ew", padx=20)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=7, column=0, sticky="ew", padx=20, pady=(6, 18))
-        buttons.columnconfigure((0, 1), weight=1, uniform="c")
-        ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
-                      command=self._cancel).grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        ReleaseButton(buttons, text="OK", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
-                      command=self._save).grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        self._redraw()
-        self.initial = self._snapshot()
+        buttons.grid(row=3, column=0, sticky="ew", padx=20, pady=(6, 16))
+        buttons.columnconfigure(0, weight=1)
+        ReleaseButton(buttons, text="Add standard workflows", width=190, height=38, fg_color=PURPLE,
+                      hover_color=PURPLE_HOVER, command=self._standard).grid(row=0, column=0, sticky="w")
+        ReleaseButton(buttons, text="Cancel", width=110, height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self._cancel).grid(row=0, column=1, padx=(6, 6))
+        ReleaseButton(buttons, text="OK", width=110, height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._save).grid(row=0, column=2)
         self.protocol("WM_DELETE_WINDOW", self._cancel)
         self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)
-
-    def _snapshot(self):
-        return (bool(self.enabled_var.get()), tuple((role.get(), count.get()) for role, count in self.rows),
-                bool(self.self_var.get()))
-
-    def _cancel(self):
-        if self._snapshot() != self.initial and not ask_discard(self, "your changes to the workflow"):
-            return
-        self.destroy()
 
     def _grab(self):
         try:
@@ -2367,68 +2356,402 @@ class WorkflowDialog(ctk.CTkToplevel):
         except tk.TclError:
             pass
 
-    def _redraw(self):
-        for child in self.steps_frame.winfo_children():
-            child.destroy()
-        on = bool(self.enabled_var.get())
-        state = "normal" if on else "disabled"
-        for index, (role_var, count_var) in enumerate(self.rows):
-            ctk.CTkOptionMenu(self.steps_frame, variable=role_var, values=self.roles or [role_var.get()], width=220,
-                              height=32, fg_color=GRAY, button_color=GRAY_HOVER, button_hover_color=ACCENT,
-                              state=state).grid(row=index, column=0, padx=(10, 6), pady=(10 if index == 0 else 4, 0))
-            ctk.CTkLabel(self.steps_frame, text="people:", text_color=MUTED).grid(row=index, column=1, padx=(6, 4),
-                                                                                  pady=(10 if index == 0 else 4, 0))
-            ctk.CTkEntry(self.steps_frame, textvariable=count_var, width=50, height=32, state=state).grid(
-                row=index, column=2, padx=(0, 6), pady=(10 if index == 0 else 4, 0))
-            ReleaseButton(self.steps_frame, text="Remove", width=80, height=32, fg_color=GRAY, hover_color=GRAY_HOVER,
-                          command=lambda i=index: self._remove(i)).grid(row=index, column=3, padx=(0, 10),
-                                                                        pady=(10 if index == 0 else 4, 0))
-        self.add_button.configure(state=state)
-        self.self_box.configure(state=state)
+    def _cancel(self):
+        if self.editor.dirty and not ask_discard(self, "your changes to the workflows"):
+            return
+        self.destroy()
 
-    def _add(self):
+    # -- drawing -----------------------------------------------------------
+    def _redraw(self, action):
+        pane = self.panes[action]
+        for child in pane.winfo_children():
+            child.destroy()
+        names = self.editor.names(action)
+        index = min(self.selected[action], max(len(names) - 1, 0))
+        self.selected[action] = index
+        top = ctk.CTkFrame(pane, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew")
+        label = workflow.label_of(action)
+        if not names:
+            ctk.CTkLabel(top, text=f"No {label} workflow, so {label.lower()} just happens.", text_color=MUTED,
+                         anchor="w").grid(row=0, column=0, padx=(0, 10), pady=4)
+        else:
+            self.selected_var = tk.StringVar(value=names[index])
+            ctk.CTkOptionMenu(top, variable=self.selected_var, values=names, width=200, height=32, fg_color=GRAY,
+                              button_color=GRAY_HOVER, button_hover_color=ACCENT,
+                              command=lambda value, a=action: self._select(a, value)).grid(row=0, column=0,
+                                                                                         padx=(0, 6), pady=4)
+        ReleaseButton(top, text="New workflow", width=120, height=32, fg_color=ACCENT, hover_color="#18527f",
+                      command=lambda: self._new(action)).grid(row=0, column=1, padx=(0, 6))
+        if names:
+            ReleaseButton(top, text="Delete", width=80, height=32, fg_color=RED, hover_color=RED_HOVER,
+                          command=lambda: self._delete(action)).grid(row=0, column=2)
+            name_row = ctk.CTkFrame(pane, fg_color="transparent")
+            name_row.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+            ctk.CTkLabel(name_row, text="Name:", text_color=MUTED).grid(row=0, column=0, padx=(0, 6))
+            var = tk.StringVar(value=names[index])
+            self.name_vars[action] = var
+            var.trace_add("write", lambda *_: self._rename(action, var.get()))
+            ctk.CTkEntry(name_row, textvariable=var, width=220, height=30).grid(row=0, column=1)
+            holder = ctk.CTkScrollableFrame(pane, fg_color=BG_PANEL, corner_radius=10)
+            holder.grid(row=2, column=0, sticky="nsew", pady=(8, 0))
+            item = self.editor.items[action][index]
+            for number, roles in enumerate(item["rows"]):
+                self._draw_row(holder, action, index, number, roles)
+            foot = ctk.CTkFrame(pane, fg_color="transparent")
+            foot.grid(row=3, column=0, sticky="ew", pady=(8, 0))
+            ReleaseButton(foot, text="Add a sign-off", width=130, height=30, fg_color=GRAY, hover_color=GRAY_HOVER,
+                          command=lambda: self._add_row(action, index)).grid(row=0, column=0, sticky="w")
+            same = tk.BooleanVar(value=item["same"])
+            req = tk.BooleanVar(value=item["requester"])
+            ctk.CTkCheckBox(foot, text="One person may fill more than one sign-off", variable=same,
+                            command=lambda: item.update(same=bool(same.get()))).grid(row=1, column=0, sticky="w",
+                                                                                     pady=(8, 0))
+            ctk.CTkCheckBox(foot, text="The person who asks may be a signer", variable=req,
+                            command=lambda: item.update(requester=bool(req.get()))).grid(row=2, column=0,
+                                                                                         sticky="w", pady=(6, 0))
+
+    def _draw_row(self, holder, action, index, number, roles):
+        line = ctk.CTkFrame(holder, fg_color="transparent")
+        line.grid(row=number, column=0, sticky="w", pady=(6 if number == 0 else 3, 0), padx=6)
+        ctk.CTkLabel(line, text=f"Sign-off {number + 1}", width=80, anchor="w", text_color=MUTED).grid(
+            row=0, column=0, padx=(0, 6))
+        column = 1
+        for position, role in enumerate(roles):
+            if position:
+                ctk.CTkLabel(line, text="or", text_color=MUTED).grid(row=0, column=column, padx=4)
+                column += 1
+            var = tk.StringVar(value=role)
+            ctk.CTkOptionMenu(line, variable=var, values=self.roles or [role], width=170, height=30, fg_color=GRAY,
+                              button_color=GRAY_HOVER, button_hover_color=ACCENT,
+                              command=lambda value, a=action, i=index, n=number, p=position:
+                              self.editor.set_role(a, i, n, p, value)).grid(row=0, column=column)
+            column += 1
+            if len(roles) > 1:
+                ReleaseButton(line, text="x", width=26, height=26, fg_color=GRAY, hover_color=GRAY_HOVER,
+                              command=lambda a=action, i=index, n=number, p=position: self._remove_or(a, i, n, p)
+                              ).grid(row=0, column=column, padx=(2, 0))
+                column += 1
+        ReleaseButton(line, text="+ or", width=50, height=30, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=lambda: self._add_or(action, index, number)).grid(row=0, column=column, padx=(8, 4))
+        ReleaseButton(line, text="Remove", width=76, height=30, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=lambda: self._remove_row(action, index, number)).grid(row=0, column=column + 1)
+
+    # -- changes -----------------------------------------------------------
+    def _select(self, action, name):
+        self.selected[action] = self.editor.names(action).index(name)
+        self._redraw(action)
+
+    def _new(self, action):
         if not self.roles:
             self.problem.configure(text="This org has no roles yet. Add some in Team... > Roles first.")
             return
-        used = {var.get().lower() for var, _count in self.rows}
-        role = next((r for r in self.roles if r.lower() not in used), self.roles[0])
-        self.rows.append([tk.StringVar(value=role), tk.StringVar(value="1")])
-        self._redraw()
+        self.selected[action] = self.editor.add(action, self.roles)
+        self._redraw(action)
 
-    def _remove(self, index):
-        del self.rows[index]
-        self._redraw()
+    def _delete(self, action):
+        names = self.editor.names(action)
+        index = self.selected[action]
+        if names and messagebox.askyesno("Delete workflow", f"Delete the {workflow.label_of(action)} workflow "
+                                         f"'{names[index]}'? Requests already waiting keep their sign-offs.",
+                                         parent=self):
+            self.editor.delete(action, index)
+            self._redraw(action)
+
+    def _rename(self, action, text):
+        index = self.selected[action]
+        if index < len(self.editor.items[action]):
+            self.editor.items[action][index]["name"] = text
+
+    def _add_row(self, action, index):
+        self.editor.add_row(action, index, self.roles)
+        self._redraw(action)
+
+    def _remove_row(self, action, index, number):
+        self.editor.remove_row(action, index, number)
+        self._redraw(action)
+
+    def _add_or(self, action, index, number):
+        if self.editor.add_or(action, index, number, self.roles) is None:
+            self.problem.configure(text="Every role is already listed on that sign-off.")
+            return
+        self._redraw(action)
+
+    def _remove_or(self, action, index, number, position):
+        self.editor.remove_or(action, index, number, position)
+        self._redraw(action)
+
+    def _standard(self):
+        added, skipped = self.editor.add_standard(self.roles)
+        for action in workflow.ACTIONS:
+            self._redraw(action)
+        lines = []
+        if added:
+            lines.append("Added: " + ", ".join(added) + ".")
+        if skipped:
+            lines.append("Not added because the org lacks these roles (add them in Team... > Roles first): "
+                         + "; ".join(f"{name} needs {', '.join(missing)}" for name, missing in skipped) + ".")
+        if not lines:
+            lines.append("The standard workflows are all there already.")
+        messagebox.showinfo("Standard workflows", "\n\n".join(lines), parent=self)
 
     def _save(self):
-        if self._snapshot() == self.initial:             # nothing changed: nothing to keep
+        if not self.editor.dirty:
             self.destroy()
             return
-        if not self.enabled_var.get():
-            self._finish((False, [], True))
+        problem = self.editor.problem()
+        if problem:
+            self.problem.configure(text=problem)
             return
-        steps, seen = [], set()
-        for role_var, count_var in self.rows:
-            role, count = role_var.get(), logic.parse_signoff_count(count_var.get())
-            if count is None:
-                self.problem.configure(text=f"How many people must sign as {role}? A whole number from 1 to 20.")
-                return
-            if role.lower() in seen:
-                self.problem.configure(text=f"{role} is listed twice. Use one line with a higher number of people.")
-                return
-            seen.add(role.lower())
-            steps.append((role, count))
-        if not steps:
-            self.problem.configure(text="Add at least one sign-off, or untick the box if releases need none.")
-            return
-        self._finish((True, steps, bool(self.self_var.get())))
-
-    def _finish(self, result):
+        ops = self.editor.ops()
         if self.apply is not None:
-            problem = self.apply(result)
+            problem = self.apply(ops, self.editor)
             self.problem.configure(text=problem)
             if problem:
                 return
-        self.result = result
+        self.result = ops
+        self.destroy()
+
+    def show(self):
+        self.wait_window(self)
+        return self.result
+
+
+class WorkflowRequestDialog(ctk.CTkToplevel):
+    """Start a workflow on some parts: pick a template, name a person for each sign-off, add optional extras.
+
+        result = WorkflowRequestDialog(parent, action, parts, templates, directory, my_id).show()
+        # None if cancelled, else {'template': name, 'assignments': [person ids], 'extras': [(role, id)],
+        #                          'reason': text}
+    Submit asks for a last confirmation before it returns.
+    """
+
+    CHOOSE = "Choose a person..."
+
+    def __init__(self, parent, action, parts, templates, directory, my_id):
+        super().__init__(parent)
+        set_window_icon(self)
+        self.result = None
+        self.action, self.parts, self.templates = action, parts, templates
+        self.directory, self.my_id = directory, my_id
+        self.row_vars, self.row_ids, self.extras = [], [], []
+        label = workflow.label_of(action)
+        width, height = 680, 700
+        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
+        self.title(f"{label} workflow")
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.minsize(600, 520)
+        self.transient(parent)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(5, weight=1)
+        ctk.CTkLabel(self, text=f"{label}: start a workflow", font=ctk.CTkFont(size=16, weight="bold"),
+                     anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 4))
+        box = ctk.CTkTextbox(self, height=min(30 + 20 * len(parts), 120), fg_color=BG_PANEL)
+        box.grid(row=1, column=0, sticky="ew", padx=20)
+        box.insert("1.0", "\n".join(f"{pn}   {name}".rstrip() for pn, name in parts))
+        box.configure(state="disabled")
+        top = ctk.CTkFrame(self, fg_color="transparent")
+        top.grid(row=2, column=0, sticky="ew", padx=20, pady=(10, 0))
+        ctk.CTkLabel(top, text="Workflow:").grid(row=0, column=0, padx=(0, 8))
+        names = list(templates)
+        self.template_var = tk.StringVar(value=names[0])
+        ctk.CTkOptionMenu(top, variable=self.template_var, values=names, width=220, height=32, fg_color=GRAY,
+                          button_color=GRAY_HOVER, button_hover_color=ACCENT,
+                          command=lambda value: self._rebuild()).grid(row=0, column=1)
+        self.reason_var = tk.StringVar()
+        if action in workflow.NEEDS_REASON:
+            reason = ctk.CTkFrame(self, fg_color="transparent")
+            reason.grid(row=3, column=0, sticky="ew", padx=20, pady=(8, 0))
+            reason.columnconfigure(1, weight=1)
+            ctk.CTkLabel(reason, text="Reason:").grid(row=0, column=0, padx=(0, 8))
+            ctk.CTkEntry(reason, textvariable=self.reason_var, height=32,
+                         placeholder_text=f"Why is this being {label.lower()}ed? (a few words)").grid(
+                row=0, column=1, sticky="ew")
+        self.note = ctk.CTkLabel(self, text="", text_color=MUTED, anchor="w", justify="left", wraplength=width - 40)
+        self.note.grid(row=4, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.holder = ctk.CTkScrollableFrame(self, fg_color=BG_PANEL, corner_radius=10)
+        self.holder.grid(row=5, column=0, sticky="nsew", padx=20, pady=(8, 0))
+        self.holder.columnconfigure(1, weight=1)
+        ReleaseButton(self, text="Add an optional sign-off", width=190, height=30, fg_color=GRAY,
+                      hover_color=GRAY_HOVER, command=self._add_extra).grid(row=6, column=0, sticky="w", padx=20,
+                                                                             pady=(8, 0))
+        self.problem = ctk.CTkLabel(self, text="", text_color=ERROR, anchor="w", justify="left",
+                                    wraplength=width - 40)
+        self.problem.grid(row=7, column=0, sticky="ew", padx=20, pady=(4, 0))
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=8, column=0, sticky="ew", padx=20, pady=(6, 18))
+        buttons.columnconfigure((0, 1), weight=1, uniform="c")
+        ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="Submit workflow", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._submit).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self._rebuild()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.bind("<Escape>", lambda event: self.destroy())
+        self.after(150, self._grab)
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
+    @property
+    def template(self):
+        return self.templates[self.template_var.get()]
+
+    def _menu(self, parent, choices, var):
+        values = [self.CHOOSE] + [label for label, _id in choices]
+        return ctk.CTkOptionMenu(parent, variable=var, values=values, width=260, height=30, fg_color=GRAY,
+                                 button_color=GRAY_HOVER, button_hover_color=ACCENT)
+
+    def _rebuild(self):
+        """Redraw the sign-off rows for the chosen template (extras are kept)."""
+        for child in self.holder.winfo_children():
+            child.destroy()
+        template = self.template
+        self.row_vars, self.row_ids = [], []
+        for number, row in enumerate(template.rows):
+            choices = logic.row_choices(self.directory, row.roles, self.my_id, template.requester_may_sign)
+            var = tk.StringVar(value=choices[0][0] if len(choices) == 1 else self.CHOOSE)
+            ctk.CTkLabel(self.holder, text=row.text(), anchor="w", width=190).grid(
+                row=number, column=0, sticky="w", padx=(8, 8), pady=(8 if number == 0 else 3, 0))
+            self._menu(self.holder, choices, var).grid(row=number, column=1, sticky="w",
+                                                       pady=(8 if number == 0 else 3, 0))
+            self.row_vars.append(var)
+            self.row_ids.append({label: pid for label, pid in choices})
+        self._redraw_extras()
+        notes = []
+        if not template.allow_same_person:
+            notes.append("One person can't fill more than one sign-off.")
+        if not template.requester_may_sign:
+            notes.append("You can't sign your own request.")
+        notes += workflow.role_warnings(template, self.directory)
+        self.note.configure(text=" ".join(notes))
+
+    def _redraw_extras(self):
+        for child in list(getattr(self, "extra_frames", [])):
+            child.destroy()
+        self.extra_frames = []
+        start = len(self.row_vars)
+        for number, extra in enumerate(self.extras):
+            frame = ctk.CTkFrame(self.holder, fg_color="transparent")
+            frame.grid(row=start + number, column=0, columnspan=2, sticky="w", padx=8, pady=(3, 0))
+            self.extra_frames.append(frame)
+            ctk.CTkOptionMenu(frame, variable=extra["role"], values=self.directory.roles or [extra["role"].get()],
+                              width=180, height=30, fg_color=GRAY, button_color=GRAY_HOVER,
+                              button_hover_color=ACCENT,
+                              command=lambda value, e=extra: self._extra_role(e)).grid(row=0, column=0, padx=(0, 8))
+            choices = logic.row_choices(self.directory, [extra["role"].get()])
+            extra["ids"] = {label: pid for label, pid in choices}
+            self._menu(frame, choices, extra["person"]).grid(row=0, column=1)
+            ReleaseButton(frame, text="Remove", width=76, height=30, fg_color=GRAY, hover_color=GRAY_HOVER,
+                          command=lambda e=extra: self._remove_extra(e)).grid(row=0, column=2, padx=(8, 0))
+
+    def _add_extra(self):
+        if not self.directory.roles:
+            return
+        self.extras.append({"role": tk.StringVar(value=self.directory.roles[0]), "person": tk.StringVar(
+            value=self.CHOOSE), "ids": {}})
+        self._redraw_extras()
+
+    def _extra_role(self, extra):
+        extra["person"].set(self.CHOOSE)
+        self._redraw_extras()
+
+    def _remove_extra(self, extra):
+        self.extras.remove(extra)
+        self._redraw_extras()
+
+    def _submit(self):
+        assignments = [ids.get(var.get(), "") for var, ids in zip(self.row_vars, self.row_ids)]
+        extras = [(e["role"].get(), e["ids"].get(e["person"].get(), "")) for e in self.extras]
+        reason = " ".join(self.reason_var.get().split())
+        try:
+            slots = workflow.build_slots(self.template, self.directory, self.my_id, assignments, extras)
+        except workflow.WorkflowError as e:
+            self.problem.configure(text=logic.shorten(str(e)))
+            return
+        if self.action in workflow.NEEDS_REASON and not reason:
+            self.problem.configure(text="A reason is required.")
+            return
+        self.problem.configure(text="")
+        text = logic.request_confirm_text(self.action, self.parts, self.template, slots, reason,
+                                          workflow.role_warnings(self.template, self.directory))
+        if not messagebox.askokcancel("Start the workflow?", text, parent=self):
+            return
+        self.result = {"template": self.template.name, "assignments": assignments, "extras": extras,
+                       "reason": reason}
+        self.destroy()
+
+    def show(self):
+        self.wait_window(self)
+        return self.result
+
+
+class ReassignDialog(ctk.CTkToplevel):
+    """Change who signs a sign-off that hasn't been given. show() gives (slot index, person id) or None."""
+
+    def __init__(self, parent, task, directory, requester_may_sign=True):
+        super().__init__(parent)
+        set_window_icon(self)
+        self.result, self.task, self.directory = None, task, directory
+        self.open = [(i, s) for i, s in enumerate(task.slots) if not s["done"]]
+        width, height = 520, 260
+        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
+        self.title("Change who signs")
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.columnconfigure(0, weight=1)
+        ctk.CTkLabel(self, text="Change who signs", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
+        self.slot_labels = {f"{s['text']}  (now {s['name']})": i for i, s in self.open}
+        self.slot_var = tk.StringVar(value=next(iter(self.slot_labels)))
+        ctk.CTkOptionMenu(self, variable=self.slot_var, values=list(self.slot_labels), width=470, fg_color=GRAY,
+                          button_color=GRAY_HOVER, button_hover_color=ACCENT,
+                          command=lambda value: self._people()).grid(row=1, column=0, padx=20, sticky="w")
+        self.person_var = tk.StringVar()
+        self.person_menu = ctk.CTkOptionMenu(self, variable=self.person_var, values=[""], width=470, fg_color=GRAY,
+                                             button_color=GRAY_HOVER, button_hover_color=ACCENT)
+        self.person_menu.grid(row=2, column=0, padx=20, pady=(8, 0), sticky="w")
+        self.problem = ctk.CTkLabel(self, text="", text_color=ERROR, anchor="w")
+        self.problem.grid(row=3, column=0, sticky="ew", padx=20, pady=(6, 0))
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=4, column=0, sticky="ew", padx=20, pady=(8, 16))
+        buttons.columnconfigure((0, 1), weight=1, uniform="c")
+        ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="OK", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._ok).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self.ids = {}
+        self._people()
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.after(150, self._grab)
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
+    def _people(self):
+        index = self.slot_labels[self.slot_var.get()]
+        choices = logic.row_choices(self.directory, self.task.slots[index]["roles"])
+        self.ids = {label: pid for label, pid in choices}
+        self.person_menu.configure(values=[label for label, _ in choices] or ["(nobody holds the role)"])
+        self.person_var.set(choices[0][0] if choices else "(nobody holds the role)")
+
+    def _ok(self):
+        pid = self.ids.get(self.person_var.get())
+        if not pid:
+            self.problem.configure(text="Choose a person.")
+            return
+        self.result = (self.slot_labels[self.slot_var.get()], pid)
         self.destroy()
 
     def show(self):
@@ -2437,7 +2760,7 @@ class WorkflowDialog(ctk.CTkToplevel):
 
 
 class TasksWindow(ctk.CTkToplevel):
-    """My Tasks: release requests waiting for sign-off, and what you can do about each."""
+    """My Tasks: workflow requests waiting for sign-off, and what you can do about each."""
 
     def __init__(self, app):
         super().__init__(app)
@@ -2470,15 +2793,18 @@ class TasksWindow(ctk.CTkToplevel):
         self.action_buttons = {}
         for column, (key, text, color, hover, width) in enumerate((
                 ("sign", "Approve", GREEN, GREEN_HOVER, 110), ("reject", "Reject...", RED, RED_HOVER, 110),
-                ("complete", "Complete release", PURPLE, PURPLE_HOVER, 150), ("withdraw", "Withdraw", GRAY,
-                                                                              GRAY_HOVER, 110),
-                ("override", "Admin override...", GRAY, GRAY_HOVER, 150), ("close", "Close", GRAY, GRAY_HOVER, 90))):
+                ("complete", "Complete", PURPLE, PURPLE_HOVER, 110), ("reassign", "Change signer...", GRAY,
+                                                                      GRAY_HOVER, 140),
+                ("withdraw", "Withdraw", GRAY, GRAY_HOVER, 100),
+                ("override", "Admin override...", GRAY, GRAY_HOVER, 150), ("close", "Close", GRAY, GRAY_HOVER, 80))):
             command = self.destroy if key == "close" else (lambda k=key: self._act(k))
             button = ReleaseButton(row, text=text, width=width, fg_color=color, hover_color=hover, command=command)
             button.grid(row=0, column=column, padx=(0, 6))
             self.action_buttons[key] = button
+        self.detail = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=1000)
+        self.detail.grid(row=3, column=0, sticky="ew", padx=20, pady=(8, 0))
         self.why = ctk.CTkLabel(self, text="", text_color=MUTED, anchor="w", justify="left", wraplength=1000)
-        self.why.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 12))
+        self.why.grid(row=4, column=0, sticky="ew", padx=20, pady=(0, 12))
         self.reload()
         self.after(100, self.lift)
 
@@ -2486,7 +2812,7 @@ class TasksWindow(ctk.CTkToplevel):
         """Redraw from the part list the main window last loaded."""
         keep = self.tree.selection()
         tasks = workflow.tasks_from_rows(self.app.rows, self.app.identity)
-        self.tasks = {str(t.pn): t for t in tasks}
+        self.tasks = {t.id: t for t in tasks}
         self.tree.delete(*self.tree.get_children())
         for iid, values in logic.tasks_table(tasks):
             self.tree.insert("", "end", iid=iid, values=values)
@@ -2495,7 +2821,7 @@ class TasksWindow(ctk.CTkToplevel):
             self.summary.configure(text="Nothing is waiting for sign-off. Press Get Latest in the main window to "
                                         "check for new requests.")
         else:
-            self.summary.configure(text=f"{len(tasks)} release request{'s' if len(tasks) != 1 else ''} waiting; "
+            self.summary.configure(text=f"{len(tasks)} request{'s' if len(tasks) != 1 else ''} waiting; "
                                         f"{mine} need{'s' if mine == 1 else ''} you. Press Get Latest in the main "
                                         "window to see new ones.")
         for iid in keep:
@@ -2511,9 +2837,10 @@ class TasksWindow(ctk.CTkToplevel):
         task = self._task()
         flags = {"sign": task and task.can_sign, "reject": task and task.can_reject,
                  "complete": task and task.can_complete, "withdraw": task and task.can_withdraw,
-                 "override": task and task.can_override}
+                 "override": task and task.can_override, "reassign": task and task.can_reassign}
         for key, value in flags.items():
             self.action_buttons[key].configure(state="normal" if value else "disabled")
+        self.detail.configure(text=logic.task_detail(task) if task else "")
         self.why.configure(text=(task.why_not_sign if task and not task.can_sign and not task.ready else ""))
 
     def _act(self, key):
@@ -2521,7 +2848,8 @@ class TasksWindow(ctk.CTkToplevel):
         if task is None:
             return
         {"sign": self.app.task_sign, "reject": self.app.task_reject, "complete": self.app.task_complete,
-         "withdraw": self.app.task_withdraw, "override": self.app.task_override}[key](task.pn)
+         "withdraw": self.app.task_withdraw, "override": self.app.task_override,
+         "reassign": self.app.task_reassign}[key](task)
 
 
 class TeamWindow(ctk.CTkToplevel):
@@ -3052,7 +3380,8 @@ class App(ctk.CTk):
             top = focused.winfo_toplevel() if focused is not None else self
         except Exception:
             return self
-        return top if isinstance(top, (TeamWindow, TasksWindow, WorkflowDialog, RolesDialog, PersonDialog)) else self
+        return top if isinstance(top, (TeamWindow, TasksWindow, WorkflowsDialog, WorkflowRequestDialog, ReassignDialog, RolesDialog,
+                            PersonDialog)) else self
 
     def _team_windows(self):
         return [w for w in self.winfo_children() if isinstance(w, TeamWindow) and w.winfo_exists()]
@@ -3394,48 +3723,125 @@ class App(ctk.CTk):
             return
         TasksWindow(self)
 
-    def task_sign(self, pn):
-        comment = self._ask("Comment (optional):", f"Approve the release of {pn}")
+    def task_sign(self, task):
+        comment = self._ask("Comment (optional):", f"Approve: {task.label}")
         if comment is None:
             return
-        repo = self.repo()
-        self.run_task(lambda: workflow.sign_off(repo, pn, comment), f"Signed off {pn}",
-                      on_success=lambda result: self._signed(pn, result))
+        repo, pns = self.repo(), task.pns
+        self.run_task(lambda: workflow.sign_off(repo, pns, comment), f"Signed off {task.label}",
+                      on_success=lambda result: self._signed(task, result))
 
-    def _signed(self, pn, result):
-        if result.completed:
-            self.note = f"Signed off and released {pn}"
-        elif result.error:
-            messagebox.showwarning("Sign-off saved", logic.signoff_failure_text(pn, result.error))
+    def _signed(self, task, result):
+        text, _warn = logic.signoff_result_text(result)
+        if text:
+            messagebox.showwarning("Sign-off saved", text)
+        elif result.completed:
+            self.note = f"Signed off; {workflow.label_of(task.action)} done on {len(result.completed)} part" \
+                        f"{'s' if len(result.completed) != 1 else ''}"
 
-    def task_reject(self, pn):
+    def task_reject(self, task):
         reason = self._ask_reason("Why are you rejecting it? The person who asked will see this.",
-                                  f"Reject the release of {pn}")
+                                  f"Reject: {task.label}")
         if reason is None:
             return
-        repo = self.repo()
-        self.run_task(lambda: workflow.reject(repo, pn, reason), f"Rejected the release of {pn}")
+        repo, pns = self.repo(), task.pns
+        self.run_task(lambda: workflow.reject(repo, pns, reason), f"Rejected {task.label}")
 
-    def task_complete(self, pn):
-        repo = self.repo()
-        if messagebox.askokcancel(f"Release {pn}", f"Everyone needed has signed off {pn}. Release it now?"):
-            self.run_task(lambda: workflow.complete_release(repo, pn), f"Released {pn}")
+    def task_complete(self, task):
+        repo, pns = self.repo(), task.pns
+        label = workflow.label_of(task.action)
+        if messagebox.askokcancel(f"{label} {task.label}", f"Everyone needed has signed. {label} now?"):
+            self.run_task(lambda: workflow.complete_many(repo, pns), f"{label} done: {task.label}")
 
-    def task_withdraw(self, pn):
-        repo = self.repo()
-        if messagebox.askyesno(f"Withdraw {pn}", f"Withdraw the request to release {pn}? The sign-offs so far are "
-                                                 "discarded, and you can ask again later."):
-            self.run_task(lambda: workflow.withdraw(repo, pn), f"Withdrew the release request for {pn}")
+    def task_withdraw(self, task):
+        repo, pns = self.repo(), task.pns
+        if messagebox.askyesno(f"Withdraw {task.label}", "Withdraw this request? The sign-offs so far are "
+                                                         "discarded, and you can ask again later."):
+            self.run_task(lambda: workflow.withdraw(repo, pns), f"Withdrew the request for {task.label}")
 
-    def task_override(self, pn):
-        reason = self._ask_reason("Why release it without the sign-offs? This is recorded permanently.",
-                                  f"Admin override: release {pn}")
+    def task_override(self, task):
+        label = workflow.label_of(task.action)
+        reason = self._ask_reason(f"Why {label.lower()} without the sign-offs? This is recorded permanently.",
+                                  f"Admin override: {label.lower()} {task.label}")
         if reason is None:
             return
+        repo, pns, action = self.repo(), task.pns, task.action
+        if messagebox.askokcancel(f"{label} {task.label}", f"{label} without the required sign-offs?\n\nReason: "
+                                                           f"{reason}\n\nThis is recorded as an Admin override."):
+            self.run_task(lambda: workflow.override(repo, pns, reason, action=action),
+                          f"{label} done: {task.label} (Admin override)")
+
+    def task_reassign(self, task):
+        directory = self.identity.directory
+        if directory is None:
+            return
+        chosen = ReassignDialog(self, task, directory).show()
+        if chosen is None:
+            return
+        slot, person_id = chosen
+        repo, pns = self.repo(), task.pns
+        self.run_task(lambda: workflow.reassign(repo, pns, slot, person_id), f"Changed who signs {task.label}")
+
+    # -- starting a workflow ------------------------------------------------
+    def _one_part_only(self, action, plan):
+        """Without a workflow these actions work on one part at a time. True if that's what was chosen."""
+        if len(plan.targets) == 1:
+            return True
+        self._say(f"Select just one part to {logic.NAME[action]}. (This vault has no workflow for it, so it happens "
+                  "directly, one part at a time.)", "warn")
+        return False
+
+    def _workflow_start(self, action, plan):
+        """If this vault has workflows for the action, deal with it here (open the Workflow window, or finish a
+        request that has all its sign-offs) and return True. Return False when it should just happen."""
         repo = self.repo()
-        if messagebox.askokcancel(f"Release {pn}", f"Release {pn} without the required sign-offs?\n\nReason: "
-                                                   f"{reason}\n\nThis is recorded as an Admin override."):
-            self.run_task(lambda: workflow.override_release(repo, pn, reason), f"Released {pn} (Admin override)")
+        try:
+            templates = workflow.templates_for(repo, action)
+        except engine.LitterboxError as e:
+            messagebox.showerror("Litterbox", logic.shorten(str(e)))
+            return True
+        pending = [pn for pn in plan.targets if self.rows_by_pn[pn].kind == "pending"]
+        if not templates and not pending:
+            return False
+        if pending:
+            if len(pending) != len(plan.targets):
+                self._say("Some of these already have a request waiting. Select them separately.", "warn")
+            else:
+                self._finish_pending(action, pending)
+            return True
+        directory, me = self.identity.directory, self.identity.person
+        if directory is None or me is None:
+            self._say("Set up the team first (Team... > Set Up Team): sign-offs are done by people on it.", "warn")
+            return True
+        parts = [(pn, self.rows_by_pn[pn].name) for pn in plan.targets]
+        chosen = WorkflowRequestDialog(self, action, parts, templates, directory, me.id).show()
+        if not chosen:
+            return True
+        pns, label = list(plan.targets), workflow.label_of(action)
+        self.run_task(lambda: workflow.request(repo, pns, action, chosen["template"], chosen["assignments"],
+                                               chosen["extras"], chosen["reason"]),
+                      f"Started the {label} workflow on {len(pns)} part{'s' if len(pns) != 1 else ''}")
+        return True
+
+    def _finish_pending(self, action, pns):
+        """The action's button on parts that already have a request: finish it if everyone has signed, else say
+        what is missing."""
+        repo, label = self.repo(), workflow.label_of(action)
+        rows = [self.rows_by_pn[pn] for pn in pns]
+        other = next((r for r in rows if r.pending.get("action") != action), None)
+        if other is not None:
+            messagebox.showinfo(label, f"{other.pn} has a {workflow.label_of(other.pending.get('action'))} request "
+                                       "waiting for sign-offs. Open My Tasks to approve, reject or withdraw it.")
+            return
+        waiting = next((r for r in rows if not workflow.is_complete(r.pending)), None)
+        if waiting is not None:
+            messagebox.showinfo(label, f"{waiting.pn} is still waiting for: " + ", ".join(
+                workflow.waiting_on(waiting.pending)) + ".\n\nOpen My Tasks to approve, reject or withdraw the "
+                                                        "request.")
+            return
+        if messagebox.askokcancel(f"{label} {len(pns)} part{'s' if len(pns) != 1 else ''}",
+                                  f"Everyone needed has signed. {label} now?"):
+            self.run_task(lambda: workflow.complete_many(repo, pns), f"{label} done: {', '.join(map(str, pns))}")
 
     def _may(self, action):
         """True if you may do `action`; otherwise says why in the status line."""
@@ -3561,32 +3967,31 @@ class App(ctk.CTk):
             messagebox.showinfo("Workflows", "This org has no roles yet. Add some in Team... > Roles first.",
                                 parent=window)
             return
-        current = draft.templates.get("release")
 
-        def apply(result):
-            enabled, steps, allow_self = result
-            if enabled:
-                notes = workflow.role_warnings(workflow.Template("release", [workflow.Step(r, c) for r, c in steps],
-                                                                 allow_self), draft.directory)
-                if notes and not messagebox.askyesno(
-                        "Workflows", "\n".join(notes) + "\n\nUntil that is fixed a release will wait for an Admin "
-                        "override. Keep this change anyway?", parent=window):
-                    return "Change the roles or numbers, or press Cancel."
+        def apply(ops, editor):
+            wanted = editor.templates()
+            notes = []
+            for op in ops:
+                if op["op"] == "set":
+                    template = wanted[op["action"]][op["name"]]
+                    notes += [f"{workflow.label_of(op['action'])} {op['name']}: {n}"
+                              for n in workflow.role_warnings(template, draft.directory)]
+            if notes and not messagebox.askyesno(
+                    "Workflows", "\n".join(notes) + "\n\nUntil that is fixed a request will wait for an Admin "
+                    "override. Keep this change anyway?", parent=window):
+                return "Change the roles or the workflow, or press Cancel."
 
             def change(templates, _directory):
-                if enabled:
-                    workflow.set_template(templates, "release", steps, allow_self)
-                else:
-                    workflow.remove_template(templates, "release")
+                workflow.apply_ops(templates, ops)
 
             try:
-                draft.stage_workflow("Release workflow" if enabled else "Remove the release workflow", change)
+                draft.stage_workflow(logic.ops_label(ops), change)
             except engine.LitterboxError as e:
                 return logic.shorten(str(e))
             window.reload()
             return ""
 
-        WorkflowDialog(window, draft.directory.roles, current, apply=apply).show()
+        WorkflowsDialog(window, draft.directory.roles, draft.templates, apply=apply).show()
 
     def save_team(self, window):
         """The Team window's Save: upload every staged change in one go."""
@@ -3693,43 +4098,20 @@ class App(ctk.CTk):
         plan = self._plan("release")
         if not plan:
             return
+        if self._workflow_start("release", plan) or not self._one_part_only("release", plan):
+            return
         repo, pn = self.repo(), plan.targets[0]
-        row = self.rows_by_pn.get(pn)
-        if row is not None and row.kind == "pending":
-            self._release_pending(repo, pn, row)
-            return
-        try:
-            template = workflow.template_for(repo, "release")        # None unless the vault needs sign-offs
-        except engine.LitterboxError as e:
-            messagebox.showerror("Litterbox", logic.shorten(str(e)))
-            return
         # Step 1: find out exactly what would be released. Step 2: ask. Step 3: do it.
         self.run_task(lambda: engine.release_plan(repo, pn), "Checked what a release would include",
-                      on_success=lambda release_plan: self._confirm_release(repo, release_plan, template),
+                      on_success=lambda release_plan: self._confirm_release(repo, release_plan),
                       refresh=False)
 
-    def _release_pending(self, repo, pn, row):
-        """Release on a part that already has a request: finish it if everyone has signed, else say what's missing."""
-        if workflow.is_complete(row.pending):
-            self.task_complete(pn)
-            return
-        messagebox.showinfo(f"Release {pn}", "Still waiting for: " + ", ".join(workflow.waiting_on(row.pending))
-                            + ".\n\nOpen My Tasks to approve, reject or withdraw the request.")
-
-    def _confirm_release(self, repo, release_plan, template=None):
+    def _confirm_release(self, repo, release_plan):
         pn = release_plan.pn
         if not release_plan.ok:
             messagebox.showwarning(
                 "Can't release yet",
                 f"{pn} can't be released yet:\n\n" + "\n".join("- " + p for p in release_plan.problems))
-            return
-        if template is not None:                              # this vault asks for sign-offs instead of releasing
-            directory = self.identity.directory
-            notes = workflow.role_warnings(template, directory) if directory is not None else []
-            if not messagebox.askokcancel(f"Ask for sign-offs on {pn}",
-                                          logic.request_release_text(release_plan, template, notes)):
-                return
-            self.run_task(lambda: workflow.request_release(repo, pn), f"Asked for sign-offs to release {pn}")
             return
         if not messagebox.askokcancel(f"Release {pn}", logic.release_confirm_text(release_plan)):
             return
@@ -3926,6 +4308,8 @@ class App(ctk.CTk):
         plan = self._plan("make_cots")
         if not plan:
             return
+        if self._workflow_start("make_cots", plan) or not self._one_part_only("make_cots", plan):
+            return
         repo, pn = self.repo(), plan.targets[0]
         self.run_task(lambda: engine.make_cots_plan(repo, pn), "Checked whether it can be made COTS",
                       on_success=lambda cots_plan: self._confirm_make_cots(repo, cots_plan),
@@ -3955,6 +4339,8 @@ class App(ctk.CTk):
         plan = self._plan("reopen")
         if not plan:
             return
+        if self._workflow_start("reopen", plan) or not self._one_part_only("reopen", plan):
+            return
         repo, pn = self.repo(), plan.targets[0]
         if self.rows_by_pn[pn].kind == "cots" and not messagebox.askyesno(
                 "Reopen COTS part", logic.reopen_cots_warning(pn)):
@@ -3966,6 +4352,8 @@ class App(ctk.CTk):
     def void(self):
         plan = self._plan("void")
         if not plan:
+            return
+        if self._workflow_start("void", plan) or not self._one_part_only("void", plan):
             return
         repo, pn = self.repo(), plan.targets[0]
         problem = logic.void_problem(self.rows_by_pn[pn])

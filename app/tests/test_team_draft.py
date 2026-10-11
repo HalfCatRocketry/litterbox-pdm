@@ -76,17 +76,17 @@ class TestStaging(DraftFixture, unittest.TestCase):
         before = self.commits()
         d.stage_people("Add Bea", lambda dr, who: people.add_person(dr, who, "bea", "Bea Jones", "", ["Bea"],
                                                                     people.MEMBER, [QUALITY]))
-        d.stage_workflow("Release workflow", lambda t, dr: wf.set_template(t, wf.RELEASE, [(QUALITY, 1)], True))
+        d.stage_workflow("Release workflow", lambda t, dr: wf.set_template(t, wf.RELEASE, "T1", [[QUALITY]]))
         with self.user("Alex"):
             d.save(self.a)
         self.assertEqual(self.commits(), before + 2)
         with self.user("Alex"):
-            self.assertIn(wf.RELEASE, wf.load(self.a))
+            self.assertIn("T1", wf.load(self.a)[wf.RELEASE])
 
     def test_a_workflow_cannot_use_a_role_that_is_not_there(self):
         d = self.draft()
         with self.assertRaises(eng.LitterboxError):
-            d.stage_workflow("Bad", lambda t, dr: wf.set_template(t, wf.RELEASE, [("Nobody", 1)], True))
+            d.stage_workflow("Bad", lambda t, dr: wf.set_template(t, wf.RELEASE, "T1", [["Nobody"]]))
         self.assertFalse(d.dirty)
 
     def test_changes_saved_by_others_meanwhile_are_kept(self):

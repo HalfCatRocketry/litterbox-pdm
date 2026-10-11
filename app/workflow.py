@@ -1,45 +1,52 @@
 """
-workflow.py - sign-offs before a part is released.
+workflow.py - sign-offs before a part's status changes.
 
-An Admin can say "a release needs sign-offs". After that, pressing Release no longer releases: it asks.
-People who hold the required roles approve (or reject), and when everyone needed has approved, the part
-is released. Version 1 covers RELEASE only, with every sign-off in parallel (any order).
+An Admin can say "a release (or reopen, void, make COTS) needs sign-offs". After that, pressing the button no
+longer does it: it opens the Workflow window, where you pick a template and a person for each sign-off. The
+people named approve (or reject), and when everyone has signed the action happens.
 
-THE TEMPLATE   .litterbox/workflows.yaml, shared through Git like the team file. Admins edit it.
+THE TEMPLATES   .litterbox/workflows.yaml, shared through Git like the team file. Admins edit it (Team... >
+    Workflows...). Each action can have several named templates (T1, T2... or your own):
 
-    workflows:
-      release:
-        allow_self_signoff: true        the person who asked may also sign (default true)
-        signoffs:
-        - role: Quality                 anyone with this role
-          count: 1                      how many different people must sign (default 1)
-        - role: Responsible Engineer
+        workflows:
+          release:
+            T1:
+              allow_same_person: false      one person may fill more than one row (default false)
+              requester_may_sign: true      the person who asked may be one of the signers (default true)
+              signoffs:
+              - roles: [Responsible Engineer]
+              - roles: [Manager, Chief]     OR: a Manager or a Chief may fill this row
+              - roles: [Responsible Engineer]   a role listed twice is two sign-offs
 
-    No release template = Release works as it always did.
+    An action with no templates works as it always did (it just happens).
 
-THE REQUEST    While a request waits, it lives in the part's record under `pending`:
-    action, revision, requested_by (+ _id, _at), the template AS IT WAS when asked (so editing the template
-    later changes nothing already in flight), the hash of every CAD file, and each sign-off so far.
-    A part with a pending request can't be checked out, so what gets approved is what gets released.
+THE REQUEST   One request can cover several parts (a batch). It is saved in each part's record under `pending`:
+    id (the same for the whole batch), action, revision, requested_by (+ _id, _at), template_name and the
+    template AS IT WAS (editing it later changes nothing in flight), reason (reopen / void), parts, the hash of
+    every CAD file, `slots` (one per sign-off row: the roles allowed, and the person named) and `signoffs` (who
+    signed which slot, and when). A part with a pending request can't be checked out or changed, so what gets
+    approved is what happens.
 
-THE STEPS      request_release -> sign_off (any number of people) -> complete_release
-    The last sign-off completes the release straight away. If that can't happen (offline, behind the
-    vault, something blocks it) the sign-off is still saved and the part shows "approved, ready": the
-    requester, or anyone, presses Release again to finish.
-    reject        a role holder (or Admin) sends it back with a comment. The part is in work again.
-    withdraw      the requester (or Admin) cancels the request.
-    override_release   an Admin releases without the sign-offs. A reason is required and it is recorded
-                  as an override.
+THE STEPS     request -> sign_off (each named person) -> complete
+    The last sign-off completes the action straight away for release, reopen and void. Make COTS waits for
+    someone to press the button again. If completing fails (offline, behind the vault...) the sign-off is still
+    saved and the part shows "approved, ready".
+    reject      a named signer (or Admin) sends the whole batch back with a comment.
+    withdraw    the requester (or Admin) cancels the batch.
+    reassign    the requester (or Admin) swaps the person named for a sign-off that hasn't been given.
+    override    an Admin does the action without the sign-offs. A reason is required and it is recorded.
 
-THE TRAIL      A finished release adds an entry to the record's `approvals` list: who requested, who signed
-    (with roles and times), the template, the file hashes, and any override with its reason. Every step also
-    appears in the part's history.
+THE TRAIL     A finished action adds an entry to the record's `approvals`: who asked, the template, who signed
+    (with roles and times), the file hashes, and any override with its reason. Every step is in the history too.
 
-Everything here that changes a record uses the same lock, pull, change, commit, push, unlock routine as the
-rest of Litterbox (litterbox_engine._edit_record).
+Everything here that changes a record uses the same lock, pull, change, commit, push, unlock routine as the rest
+of Litterbox (litterbox_engine._edit_record). A batch is done one part at a time; if a step fails part-way, the
+parts already done stay done, and the message says which.
 """
 
+import copy
 import hashlib
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,15 +58,31 @@ import people
 import registry
 
 WORKFLOWS_FILE = ".litterbox/workflows.yaml"
-RELEASE = "release"
-ACTIONS = (RELEASE,)                                  # the actions that can have a template (more later)
-ACTION_LABEL = {RELEASE: "Release"}
-MAX_COUNT = 20
-MIN_VERSION = "0.2.0"      # the first Litterbox that understands pending requests; a vault with a workflow requires it
+RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
+ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)          # the actions that can have templates
+ACTION_LABEL = {RELEASE: "Release", REOPEN: "Reopen", VOID: "Void", MAKE_COTS: "Make COTS"}
+AUTO_COMPLETE = {RELEASE, REOPEN, VOID}                # done as soon as the last person signs
+NEEDS_REASON = {REOPEN, VOID}                          # the request carries a reason
+MAX_NAME = 40
+MIN_VERSION = "0.3.0"      # the first Litterbox that understands this format; a vault with a workflow requires it
+
+# Offered by "Add standard workflows" in the Workflows window.
+STANDARD_WORKFLOWS = {
+    RELEASE: [("T1", [["Responsible Engineer"], ["Manufacturing"], ["Analysis"], ["Manager"]]),
+              ("T2", [["Responsible Engineer"], ["Manufacturing"]]),
+              ("T3", [["Responsible Engineer"]])],
+    REOPEN: [("T1", [["Manager", "Chief"]])],
+    VOID: [("T1", [["Manager", "Chief"]])],
+    MAKE_COTS: [("T1", [["Responsible Engineer"]])],
+}
 
 
 class WorkflowError(eng.LitterboxError):
     """A workflow file or step is wrong, or something isn't allowed. The message is safe to show."""
+
+
+def label_of(action):
+    return ACTION_LABEL.get(action, str(action).replace("_", " ").title())
 
 
 # ---------------------------------------------------------------------------
@@ -67,66 +90,86 @@ class WorkflowError(eng.LitterboxError):
 # ---------------------------------------------------------------------------
 
 @dataclass
-class Step:
-    role: str
-    count: int = 1
+class Row:
+    """One sign-off: somebody holding any of these roles (more than one role means OR)."""
+    roles: list
+
+    def text(self):
+        return " or ".join(self.roles)
 
 
 @dataclass
 class Template:
     action: str
-    steps: list = field(default_factory=list)
-    allow_self_signoff: bool = True
+    name: str
+    rows: list = field(default_factory=list)
+    allow_same_person: bool = False
+    requester_may_sign: bool = True
 
     def to_dict(self):
-        return {"allow_self_signoff": self.allow_self_signoff,
-                "signoffs": [{"role": s.role, "count": s.count} for s in self.steps]}
+        return {"allow_same_person": self.allow_same_person, "requester_may_sign": self.requester_may_sign,
+                "signoffs": [{"roles": list(r.roles)} for r in self.rows]}
 
     @classmethod
-    def from_dict(cls, action, data):
+    def from_dict(cls, action, name, data):
+        where = f"The {label_of(action)} workflow '{name}'"
         if not isinstance(data, dict):
-            raise WorkflowError(f"The {action} workflow should list its sign-offs.")
-        allow = data.get("allow_self_signoff", True)
-        if not isinstance(allow, bool):
-            raise WorkflowError(f"allow_self_signoff in the {action} workflow must be true or false.")
-        steps = []
+            raise WorkflowError(f"{where} should list its sign-offs.")
+        flags = {}
+        for key, default in (("allow_same_person", False), ("requester_may_sign", True)):
+            value = data.get(key, default)
+            if not isinstance(value, bool):
+                raise WorkflowError(f"{key} in {where} must be true or false.")
+            flags[key] = value
+        rows = []
         for item in data.get("signoffs") or []:
-            if not isinstance(item, dict) or not str(item.get("role", "")).strip():
-                raise WorkflowError(f"Every sign-off in the {action} workflow needs a role.")
-            count = item.get("count", 1)
-            steps.append(Step(" ".join(str(item["role"]).split()), count))
-        return cls(action, steps, allow)
+            roles = item.get("roles") if isinstance(item, dict) else None
+            if not isinstance(roles, list) or not roles or not all(str(r).strip() for r in roles):
+                raise WorkflowError(f"Every sign-off in {where} needs a list of roles.")
+            rows.append(Row([" ".join(str(r).split()) for r in roles]))
+        return cls(action, str(name), rows, **flags)
+
+
+def tidy_name(name):
+    return " ".join(str(name or "").split())
 
 
 def validate(templates, directory=None):
     """Raise WorkflowError if a template is unusable. With the team directory, roles must be ones the org has
-    (their spelling is tidied to match). `templates` is {action: Template}."""
-    for action, template in templates.items():
+    (their spelling is tidied to match). `templates` is {action: {name: Template}}."""
+    for action, named in templates.items():
         label = ACTION_LABEL.get(action)
         if label is None:
-            raise WorkflowError(f"'{action}' can't have a workflow yet. Only {', '.join(ACTIONS)} can.")
-        if not template.steps:
-            raise WorkflowError(f"The {label} workflow needs at least one sign-off. Remove the workflow instead "
-                                "if releases shouldn't need any.")
+            raise WorkflowError(f"'{action}' can't have a workflow. Only {', '.join(ACTION_LABEL.values())} can.")
         seen = set()
-        for step in template.steps:
-            if isinstance(step.count, bool) or not isinstance(step.count, int) or not (1 <= step.count <= MAX_COUNT):
-                raise WorkflowError(f"How many people must sign as {step.role} must be a whole number from 1 "
-                                    f"to {MAX_COUNT}.")
-            if step.role.lower() in seen:
-                raise WorkflowError(f"{step.role} appears twice in the {label} workflow. Use one sign-off with a "
-                                    "higher number of people instead.")
-            seen.add(step.role.lower())
-            if directory is not None:
-                match = next((r for r in directory.roles if r.lower() == step.role.lower()), None)
-                if match is None:
-                    raise WorkflowError(f"'{step.role}' isn't one of this org's roles. Add it in Team... > Roles "
-                                        "first.")
-                step.role = match
+        for name, template in named.items():
+            where = f"The {label} workflow '{name}'"
+            if not tidy_name(name) or len(name) > MAX_NAME:
+                raise WorkflowError(f"Each {label} workflow needs a name of up to {MAX_NAME} characters.")
+            if name.lower() in seen:
+                raise WorkflowError(f"There are two {label} workflows called '{name}'.")
+            seen.add(name.lower())
+            template.name = name
+            if not template.rows:
+                raise WorkflowError(f"{where} needs at least one sign-off.")
+            for row in template.rows:
+                if not row.roles:
+                    raise WorkflowError(f"Every sign-off in {where} needs at least one role.")
+                if len({r.lower() for r in row.roles}) != len(row.roles):
+                    raise WorkflowError(f"A sign-off in {where} lists the same role twice.")
+                if directory is not None:
+                    fixed = []
+                    for role in row.roles:
+                        match = next((r for r in directory.roles if r.lower() == role.lower()), None)
+                        if match is None:
+                            raise WorkflowError(f"'{role}' isn't one of this org's roles. Add it in Team... > "
+                                                "Roles first.")
+                        fixed.append(match)
+                    row.roles = fixed
 
 
 def load(repo):
-    """The vault's templates as {action: Template}. No file means no workflows."""
+    """The vault's templates as {action: {name: Template}}. No file means no workflows."""
     path = Path(repo) / WORKFLOWS_FILE
     if not path.is_file():
         return {}
@@ -141,7 +184,12 @@ def load(repo):
         return {}
     if not isinstance(flows, dict):
         raise WorkflowError(f"{WORKFLOWS_FILE} should contain 'workflows:' followed by the actions.")
-    templates = {str(action): Template.from_dict(str(action), body) for action, body in flows.items()}
+    templates = {}
+    for action, body in flows.items():
+        if not isinstance(body, dict) or "signoffs" in body:
+            raise WorkflowError(f"{WORKFLOWS_FILE} is in the format of Litterbox 0.2. Delete the file (or the "
+                                f"'{action}' part) and set the workflows up again in Team... > Workflows.")
+        templates[str(action)] = {str(name): Template.from_dict(str(action), name, t) for name, t in body.items()}
     validate(templates)
     return templates
 
@@ -149,33 +197,61 @@ def load(repo):
 def save(repo, templates):
     path = Path(repo) / WORKFLOWS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
-    body = {"workflows": {action: t.to_dict() for action, t in sorted(templates.items())}}
+    body = {"workflows": {action: {name: t.to_dict() for name, t in named.items()}
+                          for action, named in sorted(templates.items()) if named}}
     tmp = path.with_name(".tmp-workflows.yaml")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         yaml.safe_dump(body, f, sort_keys=False, allow_unicode=True)
     tmp.replace(path)
 
 
-def template_for(repo, action):
-    """The template for this action, or None if releases etc. need no sign-offs."""
-    return load(repo).get(action)
+def templates_for(repo, action):
+    """{name: Template} for this action; empty if it needs no sign-offs."""
+    return load(repo).get(action, {})
+
+
+def has_templates(repo, action):
+    return bool(templates_for(repo, action))
+
+
+def person_can_fill(person, roles):
+    held = {r.lower() for r in person.roles}
+    return person.active and any(r.lower() in held for r in roles)
+
+
+def eligible(directory, roles):
+    """The active people who hold any of these roles, in the team list's order."""
+    return [p for p in directory.people if person_can_fill(p, roles)]
+
+
+def _matchable(rows, directory):
+    """True if each row can be given a different person (a tiny bipartite match)."""
+    options = [[p.id for p in eligible(directory, r.roles)] for r in rows]
+    taken = {}
+
+    def place(i, seen):
+        for pid in options[i]:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            if pid not in taken or place(taken[pid], seen):
+                taken[pid] = i
+                return True
+        return False
+
+    return all(place(i, set()) for i in range(len(rows)))
 
 
 def role_warnings(template, directory):
-    """Sentences about roles that nobody active holds enough people for (the part would wait for an override)."""
+    """Sentences about sign-offs nobody could fill (a request would wait for an override)."""
     warnings = []
-    for step in template.steps:
-        holders = _active_holders(directory, step.role)
-        if len(holders) < step.count:
-            who = f"only {len(holders)} active {'person has' if len(holders) == 1 else 'people have'} the role" \
-                if holders else "nobody active has the role"
-            warnings.append(f"{step.role}: {step.count} sign-off{'s' if step.count != 1 else ''} needed but {who}.")
+    for number, row in enumerate(template.rows, 1):
+        if not eligible(directory, row.roles):
+            warnings.append(f"Sign-off {number} ({row.text()}): nobody active has the role.")
+    if not warnings and not template.allow_same_person and not _matchable(template.rows, directory):
+        warnings.append("There aren't enough different people with these roles to fill every sign-off, and one "
+                        "person may not fill more than one.")
     return warnings
-
-
-def _active_holders(directory, role):
-    return [p for p in directory.people if p.active and role.lower() in (r.lower() for r in p.roles)]
-
 
 @eng._converts_errors
 def edit_templates(repo, change, message):
@@ -245,92 +321,121 @@ def edit_templates(repo, change, message):
     return result
 
 
-def set_template(templates, action, steps, allow_self_signoff=True):
-    """Put a template in `templates` (steps are (role, count) pairs). For use inside edit_templates()."""
-    templates[action] = Template(action, [Step(" ".join(str(r).split()), c) for r, c in steps], allow_self_signoff)
+
+def set_template(templates, action, name, rows, allow_same_person=False, requester_may_sign=True, old_name=None):
+    """Put a template in `templates`. `rows` is a list of role lists. With old_name, that template is renamed or
+    replaced in the same place. For use inside edit_templates() or a staged change."""
+    name = tidy_name(name)
+    named = templates.setdefault(action, {})
+    template = Template(action, name, [Row([" ".join(str(r).split()) for r in roles]) for roles in rows],
+                        allow_same_person, requester_may_sign)
+    others = [k for k in named if k != old_name]
+    if any(k.lower() == name.lower() for k in others):
+        raise WorkflowError(f"There is already a {label_of(action)} workflow called '{name}'.")
+    items = [(name, template) if k == old_name else (k, v) for k, v in named.items()]
+    if old_name is None or old_name not in named:
+        items.append((name, template))
+    named.clear()
+    named.update(items)
 
 
-def remove_template(templates, action):
-    templates.pop(action, None)
+def remove_template(templates, action, name):
+    named = templates.get(action, {})
+    named.pop(name, None)
+    if not named:
+        templates.pop(action, None)
+
+
+def apply_ops(templates, ops):
+    """Apply the changes the Workflows window collected (see gui_logic.WorkflowEditor.ops) to `templates`.
+    Each op is {'op': 'remove', 'action', 'name'} or {'op': 'set', 'action', 'name', 'rows', 'same',
+    'requester', 'old'}. Replaying them on newer files keeps what other people changed meanwhile."""
+    for op in ops:
+        if op["op"] == "remove":
+            remove_template(templates, op["action"], op["name"])
+        else:
+            set_template(templates, op["action"], op["name"], op["rows"], op["same"], op["requester"],
+                         old_name=op.get("old"))
+
+
+def add_standard(templates, directory):
+    """Add the standard workflows that aren't there yet (by name). Returns the roles they use that the org
+    doesn't have, which must be added first (see missing_standard_roles)."""
+    for action, items in STANDARD_WORKFLOWS.items():
+        for name, rows in items:
+            if name.lower() not in {k.lower() for k in templates.get(action, {})}:
+                set_template(templates, action, name, rows)
+    return missing_standard_roles(directory)
+
+
+def missing_standard_roles(directory):
+    wanted = []
+    for items in STANDARD_WORKFLOWS.values():
+        for _name, rows in items:
+            for roles in rows:
+                for role in roles:
+                    if role not in wanted:
+                        wanted.append(role)
+    have = {r.lower() for r in directory.roles}
+    return [r for r in wanted if r.lower() not in have]
 
 
 # ---------------------------------------------------------------------------
 # A pending request: how far along is it?
 # ---------------------------------------------------------------------------
 
-@dataclass
-class StepProgress:
-    role: str
-    need: int
-    have: int
-    names: list
-
-    @property
-    def done(self):
-        return self.have >= self.need
+def slot_done(pending, index):
+    return any(e.get("slot") == index for e in pending.get("signoffs", []))
 
 
-def _roles_of(entry):
-    return [str(r).lower() for r in entry.get("roles", [])]
-
-
-def progress(pending):
-    """A StepProgress for each sign-off the request needs."""
-    steps = []
-    for item in pending["template"].get("signoffs", []):
-        role, need = item["role"], int(item.get("count", 1))
-        seen, names = set(), []
-        for entry in pending["signoffs"]:
-            who = entry.get("id") or entry.get("by")
-            if role.lower() in _roles_of(entry) and who not in seen:
-                seen.add(who)
-                names.append(entry.get("by", ""))
-        steps.append(StepProgress(role, need, len(names), names))
-    return steps
+def slot_text(slot):
+    return " or ".join(slot["roles"]) + (" (extra)" if slot.get("extra") else "")
 
 
 def is_complete(pending):
-    return all(step.done for step in progress(pending))
+    return all(slot_done(pending, i) for i in range(len(pending["slots"])))
+
+
+def signed_count(pending):
+    return sum(1 for i in range(len(pending["slots"])) if slot_done(pending, i))
 
 
 def describe_pending(pending):
-    """Short text for the part list: 'Release pending: Quality 0/1, Responsible Engineer 1/1'."""
-    steps = progress(pending)
-    if all(s.done for s in steps):
-        return "Release approved - ready to complete"
-    return "Release pending: " + ", ".join(f"{s.role} {s.have}/{s.need}" for s in steps)
+    """Short text for the part list: 'Release pending 1/3: Bea, Alex'."""
+    label = label_of(pending.get("action"))
+    if is_complete(pending):
+        return f"{label} approved - ready to complete"
+    names = [s["name"] for i, s in enumerate(pending["slots"]) if not slot_done(pending, i)]
+    return f"{label} pending {signed_count(pending)}/{len(pending['slots'])}: waiting on " + ", ".join(names)
 
 
 def waiting_on(pending):
-    """Sentences for what is still missing, e.g. ['Quality (0 of 1)']."""
-    return [f"{s.role} ({s.have} of {s.need})" for s in progress(pending) if not s.done]
+    """['Quality (Bea)', ...] for the sign-offs not given yet."""
+    return [f"{slot_text(s)} ({s['name']})" for i, s in enumerate(pending["slots"]) if not slot_done(pending, i)]
 
 
-def open_roles(pending, person):
-    """The roles this person could still sign for on this request (in the template's spelling)."""
-    held = {r.lower() for r in person.roles}
-    signed = {r for e in pending["signoffs"] if (e.get("id") or e.get("by")) == person.id for r in _roles_of(e)}
-    return [s.role for s in progress(pending) if not s.done and s.role.lower() in held and s.role.lower() not in signed]
-
-
-def may_sign(pending, person):
-    """(True, '') or (False, why not) for this person signing this request."""
-    if pending["template"].get("allow_self_signoff", True) is False and pending.get("requested_by_id") == person.id:
-        return False, "This vault doesn't let you sign off your own request."
-    if not open_roles(pending, person):
-        if is_complete(pending):
-            return False, "Everyone needed has already signed."
-        return False, "You don't hold a role that is still needed, or you have already signed for it."
-    return True, ""
+def open_slots(pending, person_id):
+    """Indices of the sign-offs named for this person that they haven't given."""
+    return [i for i, s in enumerate(pending["slots"]) if s.get("id") == person_id and not slot_done(pending, i)]
 
 
 def _is_admin(person):
     return person.access in (people.OWNER, people.ADMIN)
 
 
-def _holds_a_template_role(pending, person):
-    held = {r.lower() for r in person.roles}
-    return any(item["role"].lower() in held for item in pending["template"].get("signoffs", []))
+def _is_signer(pending, person):
+    return any(s.get("id") == person.id for s in pending["slots"])
+
+
+def may_sign(pending, person):
+    """(True, '') or (False, why not) for this person signing this request."""
+    if open_slots(pending, person.id):
+        return True, ""
+    if is_complete(pending):
+        return False, "Everyone needed has already signed."
+    if _is_signer(pending, person):
+        return False, "You have already signed everything that was asked of you."
+    return False, "You are not one of the people named to sign this."
 
 
 # ---------------------------------------------------------------------------
@@ -356,17 +461,19 @@ def file_hashes(repo, files):
 
 
 def _me(repo, action):
-    """The current user as a team member. Workflows are about roles, so a vault with no team can't use them."""
+    """The current user as a team member. Workflows are about people, so a vault with no team can't use them."""
     identity = people.require(repo, action)
     if identity.state != people.OK or identity.person is None:
-        raise WorkflowError("Set up the team first (Team... > Set Up Team): sign-offs are done by people with roles.")
+        raise WorkflowError("Set up the team first (Team... > Set Up Team): sign-offs are done by people on it.")
     return identity.person
 
 
-def _pending_of(record, action=RELEASE):
-    if not record.pending or record.pending.get("action") != action:
-        raise WorkflowError(f"{record.pn} has no {ACTION_LABEL[action].lower()} request waiting for sign-offs. "
-                            "Run Get Latest in case it was already dealt with.")
+def _pending_of(record, batch_id=None):
+    if not record.pending:
+        raise WorkflowError(f"{record.pn} has no request waiting for sign-offs. Run Get Latest in case it was "
+                            "already dealt with.")
+    if batch_id and record.pending.get("id") != batch_id:
+        raise WorkflowError(f"{record.pn} is now in a different request. Run Get Latest.")
     if record.pending.get("revision") != record.revision:
         raise WorkflowError(f"The request for {record.pn} is for Rev {record.pending.get('revision')}, which is no "
                             "longer the working revision. Withdraw it.")
@@ -374,96 +481,223 @@ def _pending_of(record, action=RELEASE):
 
 
 def _check_files_unchanged(repo, pending):
-    now = file_hashes(repo, list(pending.get("files", {})))
-    for rel, digest in pending.get("files", {}).items():
+    if not pending.get("files"):
+        return
+    now = file_hashes(repo, list(pending["files"]))
+    for rel, digest in pending["files"].items():
         if now.get(rel) != digest:
             raise WorkflowError(f"{rel} is different from the file the sign-offs were asked for. Withdraw the "
                                 "request and ask again. If you think your copy is behind, run Get Latest.")
 
 
+def _as_pns(pns):
+    if not isinstance(pns, (list, tuple, set)):
+        pns = [pns]
+    return [eng._as_pn(p) for p in pns]
+
+
+def _problems(repo, pn, action, reason, fetch):
+    """(problems, files) for starting `action` on this part."""
+    if action == RELEASE:
+        plan = eng.release_plan(repo, pn, fetch=fetch)
+        return list(plan.problems), list(plan.files)
+    if action == MAKE_COTS:
+        plan = eng.make_cots_plan(repo, pn, fetch=fetch)
+        return list(plan.problems), list(plan.files)
+    record = registry.load(repo, pn)
+    if record.pending:
+        return ["It is already waiting for sign-offs."], []
+    trial = copy.deepcopy(record)
+    try:
+        if action == REOPEN:
+            registry.mark_reopened(trial, "check", reason or "check")
+        else:
+            registry.mark_void(trial, "check", reason or "check")
+    except registry.RegistryError as e:
+        return [str(e)], []
+    return [], []
+
+
+def build_slots(template, directory, requester_id, assignments, extras=()):
+    """The `slots` for a request: one per template row (the person named in `assignments`, in order) and one
+    per extra (role, person id). Raises WorkflowError for anything the template doesn't allow."""
+    if len(assignments) != len(template.rows):
+        raise WorkflowError("Choose a person for every sign-off.")
+    slots = []
+    for number, (row, pid) in enumerate(zip(template.rows, assignments), 1):
+        slots.append(_slot(directory, row.roles, pid, f"sign-off {number} ({row.text()})", False))
+    for role, pid in extras:
+        roles = [role] if isinstance(role, str) else list(role)
+        match = [next((r for r in directory.roles if r.lower() == x.lower()), None) for x in roles]
+        if not roles or None in match:
+            raise WorkflowError("An extra sign-off needs one of this org's roles.")
+        slots.append(_slot(directory, match, pid, f"the extra {' or '.join(match)} sign-off", True))
+    ids = [s["id"] for s in slots]
+    if not template.allow_same_person and len(set(ids)) != len(ids):
+        raise WorkflowError(f"The {template.name} workflow doesn't let one person fill more than one sign-off. "
+                            "Choose different people.")
+    if not template.requester_may_sign and requester_id in ids:
+        raise WorkflowError(f"The {template.name} workflow doesn't let you sign your own request. Choose someone "
+                            "else for the sign-off.")
+    return slots
+
+
+def _slot(directory, roles, person_id, where, extra):
+    person = directory.get(person_id) if person_id else None
+    if person is None:
+        raise WorkflowError(f"Choose a person for {where}.")
+    if not person_can_fill(person, roles):
+        raise WorkflowError(f"{person.name} is not active with the role needed for {where}.")
+    return {"roles": list(roles), "id": person.id, "name": person.name, **({"extra": True} if extra else {})}
+
+
 @eng._converts_errors
-def request_release(repo, pn):
-    """Ask for sign-offs to release a part. Checks everything a normal release checks, then records the request.
-    The part can't be checked out until the request ends. Returns the text describing where it stands."""
-    pn = eng._as_pn(pn)
-    me = _me(repo, "release")
-    template = template_for(repo, RELEASE)
+def request(repo, pns, action, template_name, assignments, extras=(), reason=""):
+    """Start a workflow on one or more parts: check every part first (nothing happens if any can't go ahead),
+    then record the request in each. Returns the new request's id."""
+    pns = _as_pns(pns)
+    if action not in ACTIONS:
+        raise WorkflowError(f"'{action}' can't have a workflow.")
+    me = _me(repo, action)
+    template = templates_for(repo, action).get(template_name)
     if template is None:
-        raise WorkflowError("Releases in this vault don't need sign-offs. Use Release normally.")
-    plan = eng.release_plan(repo, pn)
-    if not plan.ok:
-        raise eng.LitterboxError(f"{pn} can't be released yet:\n- " + "\n- ".join(plan.problems))
-    hashes = file_hashes(repo, plan.files)
-    out = []
+        raise WorkflowError(f"There is no {label_of(action)} workflow called '{template_name}'. Run Get Latest.")
+    directory = people.load(repo)
+    slots = build_slots(template, directory, me.id, assignments, extras)
+    reason = " ".join((reason or "").split())
+    if action in NEEDS_REASON and not reason:
+        raise WorkflowError(f"A reason is required to {label_of(action).lower()} a part.")
+    if not pns:
+        raise WorkflowError("Choose at least one part.")
 
-    def edit(record, user):
-        if record.status != registry.STATUS_IN_WORK or record.cots:
-            raise registry.RegistryError(f"Cannot release {record.pn}: its status is '{record.status}'.")
-        if record.pending:
-            raise registry.RegistryError(f"{record.pn} already has a request waiting for sign-offs.")
-        record.pending = {
-            "action": RELEASE, "revision": record.revision, "requested_by": user, "requested_by_id": me.id,
-            "requested_at": registry.now_utc(), "template": template.to_dict(), "files": dict(hashes),
-            "signoffs": [],
-        }
-        registry.add_event(record, registry.EVENT_RELEASE_REQUESTED, user,
-                           waiting_on=waiting_on(record.pending), files=list(plan.files))
-        out.append(describe_pending(record.pending))
+    problems, files = {}, {}
+    for number, pn in enumerate(pns):
+        found, cad = _problems(repo, pn, action, reason, fetch=(number == 0))
+        if found:
+            problems[pn] = found
+        files[pn] = cad
+    if problems:
+        raise WorkflowError("These can't go ahead yet:\n\n" + "\n".join(
+            f"{pn}:\n  - " + "\n  - ".join(found) for pn, found in problems.items()))
+    hashes = {pn: file_hashes(repo, files[pn]) for pn in pns}
 
-    eng._edit_record(repo, pn, "release", edit, f"{pn}: Release requested")
-    return out[0]
+    batch_id = uuid.uuid4().hex[:8]
+    started = []
+    for pn in pns:
+        def edit(record, user, pn=pn):
+            if record.pending:
+                raise registry.RegistryError(f"{record.pn} already has a request waiting for sign-offs.")
+            if action == RELEASE and (record.status != registry.STATUS_IN_WORK or record.cots):
+                raise registry.RegistryError(f"Cannot release {record.pn}: its status is '{record.status}'.")
+            record.pending = {
+                "id": batch_id, "action": action, "revision": record.revision, "requested_by": user,
+                "requested_by_id": me.id, "requested_at": registry.now_utc(), "template_name": template.name,
+                "template": template.to_dict(), "parts": [str(p) for p in pns], "slots": copy.deepcopy(slots),
+                "files": dict(hashes[pn]), "signoffs": [],
+                **({"reason": reason} if reason else {}),
+            }
+            registry.add_event(record, registry.EVENT_RELEASE_REQUESTED, user, action=action,
+                               waiting_on=waiting_on(record.pending), files=list(files[pn]) or None,
+                               reason=reason or None)
+        try:
+            eng._edit_record(repo, pn, action, edit, f"{pn}: {label_of(action)} requested")
+            started.append(pn)
+        except (eng.LitterboxError, registry.RegistryError) as e:
+            undone = _undo_started(repo, started, batch_id)
+            more = f" The request was cancelled on {', '.join(map(str, undone))}." if undone else ""
+            raise WorkflowError(f"Could not start the workflow on {pn}:\n\n{e}{more}")
+    return batch_id
+
+
+def _undo_started(repo, started, batch_id):
+    undone = []
+    for pn in started:
+        def edit(record, user):
+            if record.pending.get("id") == batch_id:
+                registry.add_event(record, registry.EVENT_RELEASE_WITHDRAWN, user,
+                                   action=record.pending.get("action"), reason="the request could not be "
+                                   "started on every part")
+                record.pending = {}
+        try:
+            eng._edit_record(repo, pn, "release", edit, f"{pn}: request cancelled")
+            undone.append(pn)
+        except eng.LitterboxError as e:
+            eng.LOG(f"WARNING: could not cancel the request on {pn}: {e}")
+    return undone
 
 
 @dataclass
 class SignResult:
-    completed: bool = False         # the release went through
-    error: str = ""                 # why it didn't complete although everyone has signed
-    summary: str = ""               # where the request stands
+    signed: list = field(default_factory=list)       # parts you signed on
+    completed: list = field(default_factory=list)    # parts where the action went through
+    errors: dict = field(default_factory=dict)       # {pn: why} for parts where something failed
+    summary: str = ""
 
 
 @eng._converts_errors
-def sign_off(repo, pn, comment=""):
-    """Approve a pending release as the roles you hold that are still needed. If yours is the last sign-off the
-    release is completed straight away; if that fails the sign-off is still saved (see SignResult.error)."""
-    pn = eng._as_pn(pn)
+def sign_off(repo, pns, comment=""):
+    """Approve, as the person named, every sign-off waiting for you on these parts. When a part then has all its
+    sign-offs, release / reopen / void happens straight away; if that fails the sign-off is still saved."""
+    pns = _as_pns(pns)
     me = _me(repo, "signoff")
     comment = " ".join((comment or "").split())
-    out = []
-
-    def edit(record, user):
-        pending = _pending_of(record)
-        ok, why = may_sign(pending, me)
-        if not ok:
-            raise registry.RegistryError(why)
-        _check_files_unchanged(repo, pending)
-        roles = open_roles(pending, me)
-        pending["signoffs"].append({"by": user, "id": me.id, "roles": roles, "at": registry.now_utc(),
-                                    **({"comment": comment} if comment else {})})
-        registry.add_event(record, registry.EVENT_RELEASE_SIGNED, user, roles=roles, comment=comment or None,
-                           waiting_on=waiting_on(pending) or None)
-        out.append(is_complete(pending))
-
-    eng._edit_record(repo, pn, "signoff", edit, f"{pn}: Release signed off")
-    result = SignResult(summary="")
-    if out[0]:
+    result = SignResult()
+    for pn in pns:
         try:
-            complete_release(repo, pn)
-            result.completed = True
+            record = registry.load(repo, pn)
+        except registry.RegistryError as e:
+            result.errors[pn] = str(e)
+            continue
+        if not record.pending or not open_slots(record.pending, me.id):
+            continue                                            # nothing left for you here (or already done)
+        batch_id = record.pending.get("id")
+
+        def edit(record, user):
+            pending = _pending_of(record, batch_id)
+            mine = open_slots(pending, me.id)
+            if not mine:
+                raise registry.RegistryError(f"You have nothing left to sign on {record.pn}.")
+            _check_files_unchanged(repo, pending)
+            for index in mine:
+                pending["signoffs"].append({"slot": index, "by": user, "id": me.id, "roles": pending["slots"][index]
+                                            ["roles"], "at": registry.now_utc(),
+                                            **({"comment": comment} if comment else {})})
+            registry.add_event(record, registry.EVENT_RELEASE_SIGNED, user, action=pending["action"],
+                               roles=[" or ".join(pending["slots"][i]["roles"]) for i in mine],
+                               comment=comment or None, waiting_on=waiting_on(pending) or None)
+
+        try:
+            eng._edit_record(repo, pn, "signoff", edit, f"{pn}: signed off")
+            result.signed.append(pn)
+        except (eng.LitterboxError, registry.RegistryError) as e:
+            result.errors[pn] = str(e)
+    for pn in result.signed:
+        try:
+            record = registry.load(repo, pn)
+            if record.pending and is_complete(record.pending) and record.pending["action"] in AUTO_COMPLETE:
+                complete(repo, pn)
+                result.completed.append(pn)
         except eng.LitterboxError as e:
-            result.error = str(e)
-    record = registry.load(repo, pn)
-    result.summary = describe_pending(record.pending) if record.pending else f"Released Rev {record.released_revision}"
+            result.errors[pn] = str(e)
+    if not result.signed and not result.errors:
+        raise WorkflowError("There was nothing for you to sign on these parts. Run Get Latest.")
+    if not result.signed and result.errors:
+        raise WorkflowError("\n".join(f"{pn}: {why}" for pn, why in result.errors.items()))
+    result.summary = f"Signed off {len(result.signed)} part{'s' if len(result.signed) != 1 else ''}"
     return result
 
 
-def _approval_entry(pending, completed_by, override=None, files=None):
-    entry = {"action": RELEASE, "revision": pending.get("revision") if pending else None}
+def _approval_entry(pending, completed_by, override=None, files=None, action=None, reason=None):
+    entry = {"action": action, "revision": pending.get("revision") if pending else None}
     if pending:
         entry.update({"requested_by": pending.get("requested_by"), "requested_at": pending.get("requested_at"),
-                      "template": pending.get("template"), "signoffs": list(pending.get("signoffs", [])),
-                      "files": dict(pending.get("files", {}))})
+                      "template_name": pending.get("template_name"), "template": pending.get("template"),
+                      "slots": pending.get("slots"), "signoffs": list(pending.get("signoffs", [])),
+                      "files": dict(pending.get("files", {})), "parts": pending.get("parts")})
     else:
         entry.update({"signoffs": [], "files": dict(files or {})})
+    if reason:
+        entry["reason"] = reason
     entry["completed_by"] = completed_by
     entry["completed_at"] = registry.now_utc()
     if override:
@@ -471,12 +705,21 @@ def _approval_entry(pending, completed_by, override=None, files=None):
     return {k: v for k, v in entry.items() if v is not None}
 
 
-def _finish(repo, pn, action, override_reason=None):
-    """Release the part now. Shared by complete_release and override_release."""
+def _finish(repo, pn, override_reason=None, override_action=None):
+    """Do the action now. Shared by complete() and override()."""
     pn = eng._as_pn(pn)
-    plan = eng.release_plan(repo, pn, allow_pending=True)
-    if not plan.ok:
-        raise eng.LitterboxError(f"{pn} can't be released yet:\n- " + "\n- ".join(plan.problems))
+    record0 = registry.load(repo, pn)
+    action = record0.pending.get("action") if record0.pending else override_action
+    if action not in ACTIONS:
+        raise WorkflowError(f"{pn} has no request to complete.")
+    plan = None
+    if action == RELEASE:
+        plan = eng.release_plan(repo, pn, allow_pending=True)
+    elif action == MAKE_COTS:
+        plan = eng.make_cots_plan(repo, pn, allow_pending=True)
+    if plan is not None and not plan.ok:
+        what = "released" if action == RELEASE else "made COTS"
+        raise eng.LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
 
     def edit(record, user):
         pending = record.pending or None
@@ -485,81 +728,170 @@ def _finish(repo, pn, action, override_reason=None):
             if not is_complete(pending):
                 raise registry.RegistryError("Still waiting for: " + ", ".join(waiting_on(pending)) + ".")
             _check_files_unchanged(repo, pending)
+        act = pending["action"] if pending else action
+        reason = (pending or {}).get("reason") or override_reason
         signed = [e.get("by") for e in (pending or {}).get("signoffs", [])]
-        details = {"signoffs": signed or None}
-        override = None
+        details, override = {"signoffs": signed or None}, None
         if override_reason is not None:
-            missing = waiting_on(pending) if pending else [s.role for s in template_for(repo, RELEASE).steps]
+            missing = waiting_on(pending) if pending else ["every sign-off"]
             override = {"by": user, "reason": override_reason, "missing": missing}
             details.update(override=True, reason=override_reason)
-        files = file_hashes(repo, plan.files) if not pending else None
-        registry.mark_released(record, user, plan.files, **details)
-        record.approvals.append(_approval_entry(pending, user, override, files))
-        record.pending = {}
+        files = file_hashes(repo, plan.files) if (plan is not None and not pending) else None
+        approval = _approval_entry(pending, user, override, files, act, reason)
+        record.pending = {}                                    # the checks in mark_* refuse a pending part
+        if act == RELEASE:
+            registry.mark_released(record, user, plan.files, **details)
+        elif act == MAKE_COTS:
+            registry.mark_cots(record, user, plan.files)
+        elif act == REOPEN:
+            registry.mark_reopened(record, user, reason)
+        else:
+            registry.mark_void(record, user, reason)
+        record.approvals.append(approval)
 
-    message = f"{pn}: Released" + (" (Admin override)" if override_reason is not None else " after sign-offs")
+    message = f"{pn}: {label_of(action)} done" + (" (Admin override)" if override_reason is not None else
+                                                  " after sign-offs")
     eng._edit_record(repo, pn, action, edit, message)
-    return plan.files
+    return plan.files if plan is not None else []
 
 
 @eng._converts_errors
-def complete_release(repo, pn):
-    """Release a part whose request has every sign-off. Returns the files that were frozen."""
-    _me(repo, "release")
-    return _finish(repo, pn, "release")
+def complete(repo, pn):
+    """Do the action for a part whose request has every sign-off."""
+    _me(repo, "signoff")
+    return _finish(repo, pn)
 
 
 @eng._converts_errors
-def override_release(repo, pn, reason):
-    """Admins only: release without the sign-offs. A reason is required and is recorded as an override."""
+def complete_many(repo, pns):
+    """complete() for each part; carries on past a failure and reports every one at the end."""
+    done, failed = [], {}
+    for pn in _as_pns(pns):
+        try:
+            complete(repo, pn)
+            done.append(pn)
+        except eng.LitterboxError as e:
+            failed[pn] = str(e)
+    if failed:
+        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
+                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
+    return done
+
+
+@eng._converts_errors
+def override(repo, pns, reason, action=None):
+    """Admins only: do the action without the sign-offs. A reason is required and is recorded as an override.
+    `action` is needed only for a part that has no request."""
+    pns = _as_pns(pns)
     _me(repo, "override_release")
     reason = " ".join((reason or "").split())
     if not reason:
-        raise WorkflowError("A reason is required to release without sign-offs.")
-    if template_for(repo, RELEASE) is None:
-        raise WorkflowError("Releases in this vault don't need sign-offs. Use Release normally.")
-    return _finish(repo, pn, "override_release", override_reason=reason)
+        raise WorkflowError("A reason is required to go ahead without sign-offs.")
+    done, failed = [], {}
+    for pn in pns:
+        try:
+            _finish(repo, pn, override_reason=reason, override_action=action)
+            done.append(pn)
+        except eng.LitterboxError as e:
+            failed[pn] = str(e)
+    if failed:
+        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
+                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
+    return done
+
+
+def _each(repo, pns, edit_for, action_name, message):
+    """Apply a change to every part of a batch that still has a request; parts already dealt with are skipped."""
+    done, failed = [], {}
+    for pn in _as_pns(pns):
+        try:
+            record = registry.load(repo, pn)
+            if not record.pending:
+                continue
+            eng._edit_record(repo, pn, action_name, edit_for(record.pending.get("id")), message.format(pn=pn))
+            done.append(pn)
+        except eng.LitterboxError as e:
+            failed[pn] = str(e)
+        except registry.RegistryError as e:
+            failed[pn] = str(e)
+    if failed:
+        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
+                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
+    return done
 
 
 @eng._converts_errors
-def reject(repo, pn, comment):
-    """Send a pending release back. Anyone holding a role the workflow names (or an Admin) may; a comment is
-    required. The part is in work again and can be checked out."""
-    pn = eng._as_pn(pn)
+def reject(repo, pns, comment):
+    """Send a pending batch back. A person named to sign (or an Admin) may; a comment is required. The parts are
+    free to check out again."""
     me = _me(repo, "signoff")
     comment = " ".join((comment or "").split())
     if not comment:
         raise WorkflowError("Say why you are rejecting it, so the person who asked knows what to fix.")
 
-    def edit(record, user):
-        pending = _pending_of(record)
-        if not (_holds_a_template_role(pending, me) or _is_admin(me)):
-            raise registry.RegistryError("Only people holding a role this workflow needs (or an Admin) can reject it.")
-        registry.add_event(record, registry.EVENT_RELEASE_REJECTED, user, reason=comment,
-                           requested_by=pending.get("requested_by"),
-                           signed=[e.get("by") for e in pending["signoffs"]] or None)
-        record.pending = {}
+    def edit_for(batch_id):
+        def edit(record, user):
+            pending = _pending_of(record, batch_id)
+            if not (_is_signer(pending, me) or _is_admin(me)):
+                raise registry.RegistryError("Only a person named to sign this (or an Admin) can reject it.")
+            registry.add_event(record, registry.EVENT_RELEASE_REJECTED, user, action=pending["action"],
+                               reason=comment, requested_by=pending.get("requested_by"),
+                               signed=[e.get("by") for e in pending["signoffs"]] or None)
+            record.pending = {}
+        return edit
 
-    eng._edit_record(repo, pn, "signoff", edit, f"{pn}: Release rejected - {comment}")
+    return _each(repo, pns, edit_for, "signoff", "{pn}: request rejected - " + comment)
 
 
 @eng._converts_errors
-def withdraw(repo, pn, reason=""):
-    """Cancel a pending release. The person who asked, or an Admin, may."""
-    pn = eng._as_pn(pn)
-    me = _me(repo, "release")
+def withdraw(repo, pns, reason=""):
+    """Cancel a pending batch. The person who asked, or an Admin, may."""
+    me = _me(repo, "signoff")
     reason = " ".join((reason or "").split())
 
-    def edit(record, user):
-        pending = _pending_of(record)
-        mine = pending.get("requested_by_id") == me.id
-        if not (mine or _is_admin(me)):
-            raise registry.RegistryError("Only the person who asked, or an Admin, can withdraw the request.")
-        registry.add_event(record, registry.EVENT_RELEASE_WITHDRAWN, user, reason=reason or None,
-                           requested_by=pending.get("requested_by"))
-        record.pending = {}
+    def edit_for(batch_id):
+        def edit(record, user):
+            pending = _pending_of(record, batch_id)
+            if not (pending.get("requested_by_id") == me.id or _is_admin(me)):
+                raise registry.RegistryError("Only the person who asked, or an Admin, can withdraw the request.")
+            registry.add_event(record, registry.EVENT_RELEASE_WITHDRAWN, user, action=pending["action"],
+                               reason=reason or None, requested_by=pending.get("requested_by"))
+            record.pending = {}
+        return edit
 
-    eng._edit_record(repo, pn, "release", edit, f"{pn}: Release request withdrawn")
+    return _each(repo, pns, edit_for, "signoff", "{pn}: request withdrawn")
+
+
+@eng._converts_errors
+def reassign(repo, pns, slot, person_id):
+    """Name a different person for a sign-off that hasn't been given. The person who asked, or an Admin, may."""
+    me = _me(repo, "signoff")
+    directory = people.load(repo)
+
+    def edit_for(batch_id):
+        def edit(record, user):
+            pending = _pending_of(record, batch_id)
+            if not (pending.get("requested_by_id") == me.id or _is_admin(me)):
+                raise registry.RegistryError("Only the person who asked, or an Admin, can change who signs.")
+            if not 0 <= slot < len(pending["slots"]):
+                raise registry.RegistryError("That sign-off isn't in the request. Run Get Latest.")
+            if slot_done(pending, slot):
+                raise registry.RegistryError("That sign-off has already been given.")
+            old = pending["slots"][slot]
+            new = _slot(directory, old["roles"], person_id, f"the {' or '.join(old['roles'])} sign-off",
+                        bool(old.get("extra")))
+            template = pending["template"]
+            ids = [s["id"] for i, s in enumerate(pending["slots"]) if i != slot] + [new["id"]]
+            if not template.get("allow_same_person", False) and len(set(ids)) != len(ids):
+                raise registry.RegistryError(f"This workflow doesn't let one person fill more than one sign-off.")
+            if not template.get("requester_may_sign", True) and new["id"] == pending.get("requested_by_id"):
+                raise registry.RegistryError("This workflow doesn't let the person who asked sign.")
+            pending["slots"][slot] = new
+            registry.add_event(record, registry.EVENT_REASSIGNED, user, action=pending["action"],
+                               roles=[" or ".join(new["roles"])], reason=f"{old['name']} replaced by {new['name']}")
+        return edit
+
+    return _each(repo, pns, edit_for, "signoff", "{pn}: signer changed")
 
 
 # ---------------------------------------------------------------------------
@@ -568,41 +900,71 @@ def withdraw(repo, pn, reason=""):
 
 @dataclass
 class Task:
-    pn: object
-    name: str
-    revision: str
+    """One request (a batch of parts) as My Tasks shows it."""
+    id: str
+    action: str
+    parts: list                     # [(PN, name, revision)]
     requested_by: str
     requested_at: str
     summary: str
-    ready: bool                     # every sign-off is in; waiting to be completed
+    slots: list                     # [{'text', 'name', 'id', 'done'}]
+    ready: bool                     # every sign-off is in on every part; waiting to be completed
     mine: bool                      # you asked for it
+    reason: str = ""
+    template_name: str = ""
     can_sign: bool = False
     can_reject: bool = False
     can_complete: bool = False
     can_withdraw: bool = False
     can_override: bool = False
+    can_reassign: bool = False
     why_not_sign: str = ""
+
+    @property
+    def pns(self):
+        return [p[0] for p in self.parts]
+
+    @property
+    def label(self):
+        first = str(self.parts[0][0])
+        return first if len(self.parts) == 1 else f"{first} +{len(self.parts) - 1} more"
 
 
 def tasks_from_rows(rows, identity):
-    """Everything waiting on a sign-off, from the part list's rows (PartStatus). With no team member identity
-    the tasks are listed, but nothing can be done to them."""
+    """Everything waiting on a sign-off, from the part list's rows (PartStatus), one task per request. With no
+    team member identity the tasks are listed, but nothing can be done to them."""
     me = identity.person if identity.state == people.OK else None
-    tasks = []
+    groups = {}
     for row in rows:
         pending = getattr(row, "pending", None)
-        if not pending or pending.get("action") != RELEASE:
+        if not pending or "slots" not in pending:
             continue
-        ready = is_complete(pending)
-        task = Task(row.pn, row.name, pending.get("revision", ""), pending.get("requested_by", ""),
-                    pending.get("requested_at", ""), describe_pending(pending), ready,
-                    me is not None and pending.get("requested_by_id") == me.id)
+        groups.setdefault(pending.get("id") or str(row.pn), []).append(row)
+    tasks = []
+    for batch_id, members in groups.items():
+        first = members[0].pending
+        pendings = [m.pending for m in members]
+        done = [all(slot_done(p, i) for p in pendings) for i in range(len(first["slots"]))]
+        slots = [{"text": slot_text(s), "name": s["name"], "id": s.get("id"), "done": done[i], "roles": list(s["roles"])}
+                 for i, s in enumerate(first["slots"])]
+        ready = all(done)
+        names = [s["name"] for s, d in zip(first["slots"], done) if not d]
+        label = label_of(first.get("action"))
+        summary = (f"{label} approved - ready to complete" if ready else
+                   f"{label} pending {sum(done)}/{len(done)}: waiting on " + ", ".join(names))
+        task = Task(batch_id, first.get("action", RELEASE), [(m.pn, m.name, first.get("revision", "")) for m in members],
+                    first.get("requested_by", ""), first.get("requested_at", ""), summary, slots, ready,
+                    me is not None and first.get("requested_by_id") == me.id, first.get("reason", ""),
+                    first.get("template_name", ""))
         if me is not None:
-            task.can_sign, task.why_not_sign = may_sign(pending, me)
-            task.can_reject = _holds_a_template_role(pending, me) or _is_admin(me)
+            task.can_sign = any(open_slots(p, me.id) for p in pendings)
+            if not task.can_sign:
+                task.why_not_sign = may_sign(first, me)[1]
+            task.can_reject = any(_is_signer(p, me) for p in pendings) or _is_admin(me)
             task.can_complete = ready
             task.can_withdraw = task.mine or _is_admin(me)
             task.can_override = _is_admin(me)
+            task.can_reassign = (task.mine or _is_admin(me)) and not ready
         tasks.append(task)
     tasks.sort(key=lambda t: (not (t.can_sign or (t.ready and t.mine)), t.requested_at))
     return tasks

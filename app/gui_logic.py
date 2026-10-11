@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from litterbox_engine import LitterboxError
 import pn as pn_module
 import registry
+import workflow
 
 # ---------------------------------------------------------------------------
 # The list: filtering
@@ -88,16 +89,16 @@ ALLOWED_KINDS = {
     "open": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},    # anything downloaded
     "open_drawing": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
     "release": {"ok", "pending"},            # on a pending part it completes an approved request (see the window)
-    "make_cots": {"ok"},
+    "make_cots": {"ok", "pending"},         # on a pending part it completes an approved request
     "revise": {"released"},
     "cancel_revision": {"ok", "mine"},
-    "reopen": {"released", "cots"},
-    "void": {"ok", "cots"},
+    "reopen": {"released", "cots", "pending"},
+    "void": {"ok", "cots", "pending"},
     "references": {"ok", "mine", "theirs", "unclaimed", "stray", "released", "cots", "void", "missing", "pending"},
 }
 
 # These can be done to several parts at once; the rest need exactly one part selected.
-MULTI = {"checkout", "checkin", "save", "undo"}
+MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots"}
 
 NAME = {            # "...cannot <name> ..."
     "checkout": "check out", "checkin": "check in", "save": "save progress on",
@@ -305,9 +306,10 @@ EVENT_LABELS = {
     "released": "Released", "reopened": "Reopened", "voided": "Voided", "made_cots": "Made COTS",
     "edited": "Edited details", "revised": "Revised", "revision_cancelled": "Revision cancelled",
     "references_updated": "Parts used updated",
-    "release_requested": "Release requested", "release_signed": "Signed off", "release_rejected": "Release rejected",
-    "release_withdrawn": "Request withdrawn",
+    "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
+    "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",
 }
+REQUEST_EVENTS = {"release_requested", "release_rejected"}          # shown as "<Action> requested" / "rejected"
 
 
 def to_display_time(text, local=True):
@@ -356,6 +358,9 @@ def format_history(record, local=True):
             parts.append(", ".join(PurePosixPath(f).name for f in files))
         name = event.get("event", "")
         label = EVENT_LABELS.get(name, str(name))
+        if name in REQUEST_EVENTS:
+            label = workflow.label_of(event.get("action") or "release") + (" requested" if name == "release_requested"
+                                                                         else " rejected")
         if name == "released" and event.get("override"):
             label = "Released (Admin override)"
         rows.append((
@@ -925,53 +930,212 @@ def release_confirm_text(plan):
     return text
 
 
-def request_release_text(plan, template, warnings=()):
-    """The question asked before a release request is made (a vault with a release workflow)."""
-    listing = "\n".join("  " + f for f in plan.files)
-    needs = "\n".join(f"  {step.role}" + (f" ({step.count} people)" if step.count != 1 else "") for step in template.steps)
-    text = (f"Ask for sign-offs to release {plan.pn} ({plan.name})?\n\nIt will be released when these have signed:\n"
-            f"{needs}\n\nThey are shown these files:\n{listing}\n\nWhile it waits, nobody can check the part out. "
-            "You can withdraw the request until it is released.")
-    if not template.allow_self_signoff:
-        text += "\n\nYou can't sign off your own request."
-    if plan.warnings:
-        text += ("\n\nWARNING - the parts it uses are not all final:\n" + "\n".join("- " + w for w in plan.warnings))
+def request_confirm_text(action, parts, template, slots, reason="", warnings=()):
+    """The question asked at the end of the Workflow window, before the request is made."""
+    label = workflow.label_of(action)
+    listing = "\n".join(f"  {pn}  {name}".rstrip() for pn, name in parts)
+    signers = "\n".join(f"  {workflow.slot_text(s)}: {s['name']}" for s in slots)
+    text = (f"Start the {label} workflow ({template.name}) on:\n\n{listing}\n\nThese people will be asked to "
+            f"sign off:\n{signers}\n\n")
+    if reason:
+        text += f"Reason: {reason}\n\n"
+    text += ("While it waits, nobody can check these parts out. You can withdraw the request until it is done."
+             + (" It happens as soon as the last person signs." if action in workflow.AUTO_COMPLETE else
+                " When everyone has signed, press the button again to finish it."))
     if warnings:
         text += "\n\nNOTE:\n" + "\n".join("- " + w for w in warnings)
     return text
 
 
-TASK_COLUMNS = (("part", "Part", 130), ("name", "Name", 220), ("rev", "Rev", 40), ("by", "Asked by", 130),
+TASK_COLUMNS = (("part", "Parts", 150), ("name", "Name", 200), ("action", "Action", 90), ("by", "Asked by", 120),
                 ("when", "Asked", 120), ("status", "Status", 330))
 
 
 def tasks_table(tasks, local=True):
-    """Rows of (iid, values) for the My Tasks window."""
-    return [(str(t.pn), (str(t.pn), t.name, t.revision, t.requested_by, to_display_time(t.requested_at, local),
-                         t.summary)) for t in tasks]
+    """Rows of (iid, values) for the My Tasks window (one row per request)."""
+    rows = []
+    for t in tasks:
+        name = t.parts[0][1] if len(t.parts) == 1 else f"{len(t.parts)} parts"
+        rows.append((t.id, (t.label, name, workflow.label_of(t.action), t.requested_by,
+                            to_display_time(t.requested_at, local), t.summary)))
+    return rows
+
+
+def task_detail(task):
+    """Lines under the My Tasks table: who has signed and who is still to."""
+    lines = [f"{'✓' if s['done'] else '…'} {s['text']}: {s['name']}" + ("" if s["done"] else " (waiting)")
+             for s in task.slots]
+    head = ", ".join(str(p[0]) for p in task.parts)
+    text = f"{head}\n" + "   ".join(lines)
+    if task.reason:
+        text += f"\nReason: {task.reason}"
+    return text
 
 
 def tasks_button_text(count):
     return f"My Tasks ({count})" if count else "My Tasks"
 
 
-def signoff_failure_text(pn, error):
-    return (f"Your sign-off on {pn} is saved, and everyone needed has now signed, but the release itself did not "
-            f"go through:\n\n{error}\n\nWhoever asked for the release (or anyone) can finish it from My Tasks "
-            "or with the Release button.")
+def signoff_result_text(result, label="request"):
+    """(text, warn) shown after signing: '' when it all went to plan."""
+    if not result.errors:
+        return "", False
+    lines = "\n".join(f"{pn}: {why}" for pn, why in result.errors.items())
+    return (f"Your sign-off is saved where it could be, but not everything went through:\n\n{lines}\n\n"
+            "Whoever asked (or anyone) can finish it from My Tasks or with the action's button.", True)
 
 
-def workflow_rows(template):
-    """[(role, count)] for the Workflows dialog from a workflow.Template (or None)."""
-    return [(s.role, s.count) for s in template.steps] if template else []
+def person_labels(people_list):
+    """[(label, id)] for a drop-down of people; adds the id when two people share a name."""
+    names = [p.name for p in people_list]
+    return [(p.name if names.count(p.name) == 1 else f"{p.name} ({p.id})", p.id) for p in people_list]
 
 
-def parse_signoff_count(text):
-    """Whole number 1 to 20 from the box, or None."""
-    text = str(text).strip()
-    if text.isdigit() and 1 <= int(text) <= 20:
-        return int(text)
-    return None
+def row_choices(directory, roles, requester_id=None, requester_may_sign=True):
+    """[(label, id)] of the people who can fill a sign-off with any of these roles."""
+    found = workflow.eligible(directory, roles)
+    if not requester_may_sign:
+        found = [p for p in found if p.id != requester_id]
+    return person_labels(found)
+
+
+class WorkflowEditor:
+    """What the Workflows window edits: a working copy of every template, with the changes it makes.
+
+        editor = WorkflowEditor(draft.templates)
+        editor.add(action) ... editor.add_role(action, index, row) ...
+        editor.ops()      # the changes to stage (see workflow.apply_ops); [] if nothing changed
+    """
+
+    def __init__(self, templates):
+        self.items = {a: [] for a in workflow.ACTIONS}
+        for action, named in templates.items():
+            for name, t in named.items():
+                self.items.setdefault(action, []).append(
+                    {"origin": name, "name": name, "rows": [list(r.roles) for r in t.rows],
+                     "same": t.allow_same_person, "requester": t.requester_may_sign})
+        self.initial = self._snapshot()
+
+    def _snapshot(self):
+        return {a: [(i["origin"], i["name"], [list(r) for r in i["rows"]], i["same"], i["requester"])
+                    for i in items] for a, items in self.items.items()}
+
+    @property
+    def dirty(self):
+        return self._snapshot() != self.initial
+
+    def names(self, action):
+        return [i["name"] for i in self.items[action]]
+
+    def add(self, action, roles):
+        """A new template named T<n> (first free) with one sign-off. Returns its index."""
+        taken = {n.lower() for n in self.names(action)}
+        number = 1
+        while f"T{number}".lower() in taken:
+            number += 1
+        self.items[action].append({"origin": None, "name": f"T{number}", "rows": [[roles[0]] if roles else []],
+                                   "same": False, "requester": True})
+        return len(self.items[action]) - 1
+
+    def delete(self, action, index):
+        del self.items[action][index]
+
+    def add_row(self, action, index, roles):
+        self.items[action][index]["rows"].append([roles[0]] if roles else [])
+
+    def remove_row(self, action, index, row):
+        del self.items[action][index]["rows"][row]
+
+    def add_or(self, action, index, row, roles):
+        """Another role the sign-off may be filled from (the first one not used already, or None)."""
+        used = self.items[action][index]["rows"][row]
+        spare = next((r for r in roles if r.lower() not in {u.lower() for u in used}), None)
+        if spare is not None:
+            used.append(spare)
+        return spare
+
+    def remove_or(self, action, index, row, position):
+        roles = self.items[action][index]["rows"][row]
+        if len(roles) > 1:
+            del roles[position]
+
+    def set_role(self, action, index, row, position, role):
+        self.items[action][index]["rows"][row][position] = role
+
+    def problem(self):
+        """'' or the first thing wrong, in words for the window."""
+        for action, items in self.items.items():
+            seen = set()
+            for item in items:
+                where = f"{workflow.label_of(action)} workflow '{item['name']}'"
+                if not workflow.tidy_name(item["name"]):
+                    return f"Every {workflow.label_of(action)} workflow needs a name."
+                if len(item["name"]) > workflow.MAX_NAME:
+                    return f"The name of {where} is too long."
+                if item["name"].strip().lower() in seen:
+                    return f"There are two {workflow.label_of(action)} workflows called '{item['name']}'."
+                seen.add(item["name"].strip().lower())
+                if not item["rows"]:
+                    return f"{where} needs at least one sign-off."
+                for number, roles in enumerate(item["rows"], 1):
+                    if not roles:
+                        return f"Sign-off {number} of {where} needs a role."
+                    if len({r.lower() for r in roles}) != len(roles):
+                        return f"Sign-off {number} of {where} lists the same role twice."
+        return ""
+
+    def templates(self):
+        """The working copy as {action: {name: Template}} (for warnings)."""
+        result = {}
+        for action, items in self.items.items():
+            for i in items:
+                result.setdefault(action, {})[i["name"].strip()] = workflow.Template(
+                    action, i["name"].strip(), [workflow.Row(list(r)) for r in i["rows"]], i["same"], i["requester"])
+        return result
+
+    def ops(self):
+        """The changes made, in an order that works when replayed: removals, then sets in list order."""
+        removals, sets = [], []
+        for action, items in self.items.items():
+            kept = {i["origin"] for i in items if i["origin"] is not None}
+            initial = {o for o, *_rest in self.initial[action] if o is not None}
+            removals += [{"op": "remove", "action": action, "name": origin} for origin in sorted(initial - kept)]
+            before = {o: (n, r, sm, rq) for o, n, r, sm, rq in self.initial[action]}
+            for i in items:
+                now = (i["name"].strip(), [list(r) for r in i["rows"]], i["same"], i["requester"])
+                if i["origin"] is None or before.get(i["origin"]) != now:
+                    sets.append({"op": "set", "action": action, "name": i["name"].strip(), "rows": now[1],
+                                 "same": i["same"], "requester": i["requester"], "old": i["origin"]})
+        return removals + sets
+
+    def add_standard(self, roles):
+        """Add the standard workflows whose roles all exist; returns (added names, [(name, missing roles)])."""
+        have = {r.lower() for r in roles}
+        added, skipped = [], []
+        for action, items in workflow.STANDARD_WORKFLOWS.items():
+            for name, rows in items:
+                if name.lower() in {n.lower() for n in self.names(action)}:
+                    continue
+                missing = [r for row in rows for r in row if r.lower() not in have]
+                if missing:
+                    skipped.append((f"{workflow.label_of(action)} {name}", sorted(set(missing))))
+                    continue
+                self.items[action].append({"origin": None, "name": name, "rows": [list(r) for r in rows],
+                                           "same": False, "requester": True})
+                added.append(f"{workflow.label_of(action)} {name}")
+        return added, skipped
+
+
+def ops_label(ops):
+    """The Team window's name for a staged Workflows change."""
+    if not ops:
+        return "Workflows"
+    actions = []
+    for op in ops:
+        label = workflow.label_of(op["action"])
+        if label not in actions:
+            actions.append(label)
+    return "Workflows: " + ", ".join(actions)
 
 
 def stale_open_text(pn, uses_list):

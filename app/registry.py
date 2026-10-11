@@ -61,6 +61,7 @@ EVENT_RELEASE_REQUESTED = "release_requested"
 EVENT_RELEASE_SIGNED = "release_signed"
 EVENT_RELEASE_REJECTED = "release_rejected"
 EVENT_RELEASE_WITHDRAWN = "release_withdrawn"
+EVENT_REASSIGNED = "workflow_reassigned"
 
 
 class RegistryError(Exception):
@@ -214,10 +215,11 @@ class Record:
         if not isinstance(pending, dict):
             raise RegistryError(f"{pn}: 'pending' must be a request with its sign-offs.")
         if pending:
-            for key in ("action", "revision", "requested_by", "template", "signoffs"):
+            for key in ("id", "action", "revision", "requested_by", "template", "signoffs", "slots"):
                 if key not in pending:
                     raise RegistryError(f"{pn}: the pending request has no '{key}'.")
-            if not isinstance(pending["signoffs"], list) or not isinstance(pending["template"], dict):
+            if (not isinstance(pending["signoffs"], list) or not isinstance(pending["template"], dict)
+                    or not isinstance(pending["slots"], list)):
                 raise RegistryError(f"{pn}: the pending request is malformed.")
             pending = {k: (_as_text(v) if k in ("requested_at",) else v) for k, v in pending.items()}
             pending["signoffs"] = [dict(e, at=_as_text(e.get("at"))) if isinstance(e, dict) else e
@@ -515,7 +517,7 @@ def _require_reason(reason, action):
 
 def _require_not_pending(record, action):
     if record.pending:
-        raise RegistryError(f"Cannot {action} {record.pn}: it is waiting for sign-offs on a release request. "
+        raise RegistryError(f"Cannot {action} {record.pn}: it is waiting for sign-offs. "
                             "Withdraw the request first.")
 
 
@@ -623,6 +625,8 @@ def next_free_revision(record):
 
 def can_revise(record):
     """'' if the part can be revised, else the reason it can't."""
+    if record.pending:
+        return "It is waiting for sign-offs."
     if record.cots:
         return "It is a COTS (purchased) part, which is never revised."
     if record.status != STATUS_RELEASED:
@@ -683,6 +687,7 @@ def _earlier_released_revision(record):
 
 def mark_reopened(record, by, reason):
     """released -> in_work, or COTS -> a normal in-work part. A reason is required."""
+    _require_not_pending(record, "reopen")
     was_cots = record.status == STATUS_IN_WORK and record.cots
     if not was_cots:
         _require_status(record, STATUS_RELEASED, "reopen")
