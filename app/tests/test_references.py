@@ -293,7 +293,9 @@ class TestReplace(RefsFixture, unittest.TestCase):
     def test_replace_refuses_a_part_whose_new_file_is_not_downloaded(self):
         self.release_part_rev_b()
         items = [refs.Replacement(ASM, PART, "A")]
-        (self.a / PRT_B).write_text("version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n")
+        pointer = self.a / PRT_B
+        pointer.chmod(0o644)                                  # a part that isn't checked out is read-only on disk
+        pointer.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n")
         (result,) = refs.replace_references(self.a, items, backend=self.fake, log=self.log.append)
         self.assertEqual(result.status, "failed")
 
