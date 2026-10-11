@@ -26,6 +26,7 @@ hiddenimports = [
 a = Analysis(
     [str(APP / "litterbox_gui.py")],
     pathex=[str(APP)],
+    hookspath=[str(ROOT / "packaging" / "hooks")],      # see hooks/hook-workflow.py
     datas=datas,
     hiddenimports=hiddenimports,
     excludes=["pytest"],
