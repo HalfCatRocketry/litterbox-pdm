@@ -10,6 +10,7 @@ stay on the thread that made them.
     session.start(on_done, on_progress, folders=[...])        scan the folders, then prepare
     session.start(on_done, on_progress, manifest_path="...")  or prepare an existing manifest
     session.include(item_id, True, on_done)    tick / untick a row
+    session.set_family(base, on_done)          import all as variants of one base number (None: undo)
     session.refresh(on_done)                   check the numbers against the newest records
     session.finish(on_done, on_progress)       Finish & Import
     session.cancel()                           stop whatever is running; nothing is left behind
@@ -145,6 +146,14 @@ class ImportSession:
     def include(self, item_id, include, on_done):
         def work():
             importer.set_included(self.repo, self.prepared, item_id, include)
+            return self.prepared.proposal
+        self._submit(work, on_done)
+
+    def set_family(self, base, on_done):
+        """Give every automatic row a variant of one base number (or None: separate numbers again).
+        on_done(proposal, error); an ImportFailed error means the base can't take that many parts."""
+        def work():
+            importer.set_family(self.repo, self.prepared.proposal, base)
             return self.prepared.proposal
         self._submit(work, on_done)
 

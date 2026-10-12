@@ -377,7 +377,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             record = registry.load(self.b, PART)
             self.assertEqual(record.status, "in_work")
             self.assertEqual(record.history[-1]["reason"], "Bore diameter wrong")
-            self.assertIn("HCR-00001-001: Reopened - Bore diameter wrong", self.remote_log())
+            self.assertIn("HCR-00001-001: Unreleased - Bore diameter wrong", self.remote_log())
             eng.checkout(self.b, PART)                       # editable again
 
     def test_release_is_blocked_while_checked_out_or_changed(self):
@@ -461,7 +461,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             eng.reopen(self.b, PART, "Not a purchased part")
             self.assertFalse(registry.load(self.b, PART).cots)
             self.assertEqual(self.status_of(self.b).kind, "ok")
-            self.assertIn("HCR-00001-001: Reopened - Not a purchased part", self.remote_log())
+            self.assertIn("HCR-00001-001: Unreleased - Not a purchased part", self.remote_log())
             eng.checkout(self.b, PART)
 
     def put_revisions(self, base, working, released, revisions=("A", "B")):

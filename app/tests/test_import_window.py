@@ -731,6 +731,70 @@ class TickAndSaveWiring(unittest.TestCase):
         self._click("HCR-00003-001", shift=True)        # and the range to the last
         self.assertEqual(self.app.ticked, set())
 
+    def _buttons(self):
+        from types import SimpleNamespace
+        from litterbox_engine import PartStatus
+        app = self.app
+        app.busy = False
+        app.rows_by_pn = {self.PN.parse if False else None: None}
+        pns = {n: self.PN("HCR", n, 1) for n in (1, 2, 3)}
+        kinds = {1: "ok", 2: "mine", 3: "released"}
+        app.rows_by_pn = {pns[n]: PartStatus(pns[n], "x", "in_work", "s", kinds[n]) for n in pns}
+        app.action_buttons = {text: SimpleNamespace(state=None, configure=lambda state, b=None: None)
+                              for text in self.gui.logic.BUTTON_ACTIONS}
+        log = {}
+        for text in app.action_buttons:
+            app.action_buttons[text].configure = lambda state, text=text: log.__setitem__(text, state)
+        app.deselect_button = SimpleNamespace(configure=lambda state: log.__setitem__("Deselect All", state))
+        return log
+
+    def test_buttons_follow_the_selection(self):
+        log = self._buttons()
+        self.app._set_ticks(["HCR-00001-001"], True)
+        self.assertEqual(log["Check Out"], "normal")
+        self.assertEqual(log["Check In"], "disabled")
+        self.assertEqual(log["Deselect All"], "normal")
+        self.app._set_ticks(["HCR-00002-001"], True)
+        self.assertEqual(log["Check Out"], "disabled")            # one of the two is already checked out
+        self.app._set_ticks(["HCR-00001-001", "HCR-00002-001"], False)
+        self.assertEqual(log["Check Out"], "disabled")
+        self.assertEqual(log["Deselect All"], "disabled")
+
+    def test_everything_is_grey_while_busy(self):
+        log = self._buttons()
+        self.app._set_ticks(["HCR-00001-001"], True)
+        self.app.busy = True
+        self.app._update_buttons()
+        self.assertEqual(set(log[t] for t in self.gui.logic.BUTTON_ACTIONS), {"disabled"})
+
+    def test_deselect_all_clears_every_box_and_the_highlight(self):
+        self._buttons()
+        self.app._set_ticks(["HCR-00001-001", "HCR-00002-001"], True)
+        self.app.tree.selection_set("HCR-00003-001")
+        self.app._deselect_all()
+        self.assertEqual(self.app.ticked, set())
+        self.assertEqual(tuple(self.app.tree.selection()), ())
+        self.assertEqual(self.app.tree.rows["HCR-00001-001"]["values"][0], "\u2610")
+
+    def test_shift_click_in_the_references_window(self):
+        from types import SimpleNamespace
+        window = self.gui.ReferencesWindow.__new__(self.gui.ReferencesWindow)
+        window.busy, window.last_click = False, {}
+        tree = SortableFakeTree(["tick", "pn"])
+        for n, mark in enumerate(("\u2610", "\u2610", "", "\u2610"), 1):         # row 3 can't be changed
+            tree.insert("", "end", iid=str(n), values=[mark, str(n)])
+        tree.identify_region = lambda x, y: "cell"
+        tree.identify_column = lambda x: "#1"
+        def click(iid, shift=False):
+            tree.identify_row = lambda y: iid
+            window._click(tree, SimpleNamespace(x=1, y=1, state=1 if shift else 0))
+        click("1")
+        click("4", shift=True)
+        self.assertEqual([tree.set(i, "tick") for i in "1234"], ["\u2611", "\u2611", "", "\u2611"])
+        click("4")
+        click("1", shift=True)
+        self.assertEqual([tree.set(i, "tick") for i in "1234"], ["\u2610", "\u2610", "", "\u2610"])
+
     def test_tick_all_then_none(self):
         self.app._toggle_all_ticks()
         self.assertEqual(len(self.app.ticked), 3)
@@ -1159,6 +1223,80 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
         self.assertEqual(self.window.tree.rows[iid]["values"][0], "☐")
         self.assertEqual(self.window.tree.rows[iid]["tags"], ("off",))
         self.assertIn("3 of 4", self.window.summary.options["text"])
+
+    def click(self, iid, shift=False):
+        tree = self.window.tree
+        tree.identify_region = lambda x, y: "cell"
+        tree.identify_column = lambda x: "#1"
+        tree.identify_row = lambda y: iid
+        with self.user("Alex"):
+            self.window._on_click(types.SimpleNamespace(x=5, y=5, state=1 if shift else 0))
+            self.pump_until_idle()
+
+    def marks(self):
+        return [r["values"][0] for r in self.rows()]
+
+    def test_shift_click_selects_or_deselects_everything_between(self):
+        self.scan()
+        ids = list(self.window.tree.rows)
+        self.click(ids[0])                                    # deselect the first
+        self.click(ids[2], shift=True)                        # and everything down to the third
+        self.assertEqual(self.marks(), ["☐", "☐", "☐", "☑"])
+        self.click(ids[3])                                    # deselect the last
+        self.click(ids[0])                                    # select the first again
+        self.click(ids[2], shift=True)                        # and everything down to the third
+        self.assertEqual(self.marks(), ["☑", "☑", "☑", "☐"])
+
+    def test_select_all_and_deselect_all_buttons(self):
+        self.scan()
+        with self.user("Alex"):
+            self.window._tick_all(False)
+            self.pump_until_idle()
+            self.assertEqual(self.marks(), ["☐"] * 4)
+            self.window._tick_all(True)
+            self.pump_until_idle()
+        self.assertEqual(self.marks(), ["☑"] * 4)
+
+    def use_family(self, text):
+        self.window.family_entry = types.SimpleNamespace(get=lambda: text, configure=lambda **k: None)
+        self.window.family_var.set(True)
+        with self.user("Alex"):
+            self.window._family_toggled()
+            self.pump_until_idle()
+
+    def test_same_base_number_box_gives_every_row_a_variant_of_it(self):
+        self.scan()
+        self.use_family("500")
+        self.assertEqual([r["values"][1] for r in self.rows()],
+                         [f"HCR-00500-00{n}" for n in (1, 2, 3, 4)])
+        self.assertEqual(self.window.family_applied, "500")
+
+    def test_leaving_the_box_empty_uses_the_suggested_number(self):
+        self.scan()
+        self.window.family_placeholder = "00777"
+        self.use_family("")
+        self.assertTrue(self.rows()[0]["values"][1].startswith("HCR-00777-"))
+
+    def test_a_base_with_too_few_variants_is_refused_with_a_warning(self):
+        self.scan()
+        before = [r["values"][1] for r in self.rows()]
+        with mock.patch.object(importer.pn_module, "MAX_VARIANT", 3), \
+                mock.patch.object(importer.create, "sync_latest", lambda repo: None):      # a sync resets the digit limits
+            self.use_family("500")
+        self.assertEqual([r["values"][1] for r in self.rows()], before)
+        self.assertFalse(self.window.family_var.get())
+        self.assertTrue(any(c[0] == "showwarning" and "unused variant" in c[1][1] for c in self.box.calls))
+
+    def test_unticking_the_box_goes_back_to_separate_numbers(self):
+        self.scan()
+        self.use_family("500")
+        self.window.family_var.set(False)
+        with self.user("Alex"):
+            self.window._family_toggled()
+            self.pump_until_idle()
+        bases = {r["values"][1].split("-")[1] for r in self.rows()}
+        self.assertEqual(len(bases), 4)
+        self.assertIsNone(self.window.family_applied)
 
     def test_editing_a_cell(self):
         self.scan()

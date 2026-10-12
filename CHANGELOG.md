@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+- Reopen is now called Unrelease everywhere it is shown (the button, pop-ups, Team > Workflows and a part's history). Records and settings keep their old internal name, so nothing in an existing vault changes.
+- Buttons grey out when they can't be used on what is selected: a button lights up only if every selected part suits it (for example Check Out is grey if any selected part is already checked out).
+- Parts list: new Deselect All button.
+- Import: "Import all as the same base number" box. Leave the number empty for the next free one, or type your own; if it is already in use the new variants start at the lowest free number. Litterbox refuses, and says so, if the parts won't fit in the variant numbers that are left.
+- Import review: Select All and Deselect All buttons.
+- Shift-click selects everything between the last click and this one in every list with boxes (Import, References).
+
 ## 0.3.0
 
 - Workflows are rebuilt. Pressing Release (or Reopen, Void, Make COTS) in a vault that has workflows for that action opens a Workflow window: pick a template (T1, T2... or your own), choose a person for each sign-off, add optional extra sign-offs, and submit. Several parts can go through one workflow together; the people sign once for the whole batch.

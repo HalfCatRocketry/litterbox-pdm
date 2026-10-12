@@ -12,6 +12,7 @@ import os
 import sys
 import tempfile
 import unittest
+import shutil
 from pathlib import Path
 from unittest import mock
 
@@ -703,6 +704,58 @@ class ClosingSolidWorks(unittest.TestCase):
             self.assertEqual(calls, [])
         finally:
             importer.wait_for_exit = original
+
+
+class CopyingWhenSolidWorksRefuses(unittest.TestCase):
+    """SolidWorks sometimes refuses CopyDocument (it returned 2 for a McMaster washer). A lone part is copied as
+    an ordinary file; anything else is reported."""
+
+    def setUp(self):
+        import sys
+        import tempfile
+        import types
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        fake_pythoncom = types.ModuleType("pythoncom")
+        fake_pythoncom.VT_ARRAY, fake_pythoncom.VT_BSTR = 0x2000, 8
+        client = types.ModuleType("win32com.client")
+        client.VARIANT = lambda kind, value: value
+        win32com = types.ModuleType("win32com")
+        win32com.client = client
+        for name, module in (("pythoncom", fake_pythoncom), ("win32com", win32com), ("win32com.client", client)):
+            old = sys.modules.get(name)
+            sys.modules[name] = module
+            self.addCleanup(lambda n=name, o=old: sys.modules.pop(n, None) if o is None else sys.modules.update({n: o}))
+
+    def backend(self, deps):
+        class App:
+            def CopyDocument(inner, *args):
+                return 2                                    # refused, and nothing was written
+
+        backend = importer.SolidWorksBackend()
+        backend._sw = App()
+        backend._dependencies = lambda path, search: deps
+        return backend
+
+    def test_a_lone_part_is_copied_as_a_file(self):
+        src = self.dir / "washer.SLDPRT"
+        src.write_bytes(b"washer")
+        dst = self.dir / "vault" / "cad" / "HCR-00002-001_A.SLDPRT"
+        self.backend([]).copy(str(src), str(dst))
+        self.assertEqual(dst.read_bytes(), b"washer")
+
+    def test_a_file_with_references_is_reported_not_copied_blindly(self):
+        src = self.dir / "bracket.SLDASM"
+        src.write_bytes(b"asm")
+        dst = self.dir / "out" / "x.SLDASM"
+        with self.assertRaises(importer.ImportFailed) as ctx:
+            self.backend([]).copy(str(src), str(dst))
+        self.assertIn("it returned 2", str(ctx.exception))
+        self.assertFalse(dst.exists())
+        part = self.dir / "uses.SLDPRT"
+        part.write_bytes(b"p")
+        with self.assertRaises(importer.ImportFailed):
+            self.backend(["C:/other.SLDPRT"]).copy(str(part), str(self.dir / "out" / "y.SLDPRT"))
 
 
 class FindingTheProcess(unittest.TestCase):

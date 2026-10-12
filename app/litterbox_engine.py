@@ -932,7 +932,7 @@ def reopen(repo, pn, reason):
     _edit_record(
         repo, pn, "reopen",
         lambda record, user: registry.mark_reopened(record, user, reason),
-        f"{pn}: Reopened - {_one_line(reason)}",
+        f"{pn}: Unreleased - {_one_line(reason)}",
     )
 
 

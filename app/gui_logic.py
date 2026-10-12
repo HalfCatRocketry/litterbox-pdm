@@ -102,11 +102,11 @@ MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "ma
 
 NAME = {            # "...cannot <name> ..."
     "checkout": "check out", "checkin": "check in", "save": "save progress on",
-    "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "reopen", "void": "void", "references": "show the references of",
+    "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
 }
 PAST = {            # "<past> 2 parts"
     "checkout": "Checked out", "checkin": "Checked in", "save": "Saved progress on",
-    "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Reopened", "void": "Voided", "references": "Showed the references of",
+    "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
 }
 
 
@@ -161,6 +161,60 @@ def choose_targets(action, ticked, highlighted):
             return list(highlighted)
         return list(ticked) if len(ticked) == 1 else []
     return list(ticked)
+
+
+# The main window's buttons that depend on the selection. Button text -> action key.
+BUTTON_ACTIONS = {
+    "Check Out": "checkout", "Check In": "checkin", "Save Progress": "save", "Undo Checkout": "undo",
+    "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
+    "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
+    "Unrelease": "reopen", "Void": "void", "History": "history",
+}
+
+
+def action_available(action, ticked, highlighted, rows_by_pn):
+    """True if every part the action would act on is one it can be used on (so its button may light up)."""
+    targets = choose_targets("open" if action == "history" else action, ticked, highlighted)
+    if not targets:
+        return False
+    if action == "history":
+        return len(targets) == 1
+    if action not in MULTI and len(targets) > 1:
+        return False
+    allowed = ALLOWED_KINDS[action]
+    for pn in targets:
+        row = rows_by_pn.get(pn)
+        if row is None or row.kind not in allowed:
+            return False
+    return True
+
+
+def button_states(ticked, highlighted, rows_by_pn):
+    """{button text: True if it should be usable} for the main window's selection-dependent buttons."""
+    return {text: action_available(action, ticked, highlighted, rows_by_pn) for text, action in BUTTON_ACTIONS.items()}
+
+
+def import_base_placeholder(repo, org):
+    """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
+    import config
+    try:
+        return pn_module.format_base(registry.next_free_base(repo, org, config.get_start_number(repo)))
+    except Exception:
+        return ""
+
+
+def range_between(shown, anchor, iid):
+    """Shift-click in a list with tick boxes: the rows from the last one clicked (`anchor`) to this one, in the
+    order shown. Without a usable anchor it is just the clicked row."""
+    if anchor in shown and iid in shown:
+        a, b = sorted((shown.index(anchor), shown.index(iid)))
+        return list(shown[a:b + 1])
+    return [iid]
+
+
+def shift_held(event):
+    """True if the Shift key was down for a Tk mouse event."""
+    return bool(getattr(event, "state", 0) & 0x1)
 
 
 def tick_text(count):
@@ -303,7 +357,7 @@ def shorten(text, limit=1200):
 
 EVENT_LABELS = {
     "created": "Created", "checked_out": "Checked out", "checked_in": "Checked in",
-    "released": "Released", "reopened": "Reopened", "voided": "Voided", "made_cots": "Made COTS",
+    "released": "Released", "reopened": "Unreleased", "voided": "Voided", "made_cots": "Made COTS",
     "edited": "Edited details", "revised": "Revised", "revision_cancelled": "Revision cancelled",
     "references_updated": "Parts used updated",
     "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
@@ -746,7 +800,7 @@ def make_cots_confirm_text(pn, name, files):
 
 
 def reopen_cots_warning(pn):
-    return (f"{pn} is a COTS part.\n\nReopening it makes it a normal part again: it can be checked out and "
+    return (f"{pn} is a COTS part.\n\nUnreleasing it makes it a normal part again: it can be checked out and "
             "changed until it is released or made COTS again.\n\nContinue?")
 
 
@@ -922,7 +976,7 @@ def toggled(mark):
 def release_confirm_text(plan):
     listing = "\n".join("  " + f for f in plan.files)
     text = (f"Release {plan.pn} ({plan.name})?\n\nThese files will be frozen:\n{listing}\n\n"
-            "Nobody will be able to check it out unless it is reopened.")
+            "Nobody will be able to check it out unless it is unreleased.")
     if plan.warnings:
         text += ("\n\nWARNING - the parts it uses are not all final:\n"
                  + "\n".join("- " + w for w in plan.warnings)

@@ -657,7 +657,7 @@ def can_cancel_revision(record):
     if not record.released_revision:
         return f"Rev {record.revision} was never released, so there is no earlier revision to go back to. Use Void."
     if revision_number(record.released_revision) >= revision_number(record.revision):
-        return "The working revision is the released one. Use Reopen instead."
+        return "The working revision is the released one. Use Unrelease instead."
     return ""
 
 

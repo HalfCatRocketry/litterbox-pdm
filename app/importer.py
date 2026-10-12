@@ -44,6 +44,7 @@ import argparse
 import json
 import os
 import random
+import shutil
 import sys
 import uuid
 from dataclasses import dataclass, field
@@ -66,6 +67,10 @@ DRAWING_EXTENSION = ".slddrw"
 
 class ImportFailed(eng.LitterboxError):
     """The import could not be done. The message is safe to show to a user. Nothing was left behind."""
+
+
+class FamilyFull(ImportFailed):
+    """More parts are being imported to one base number than it has unused variant numbers."""
 
 
 class ExternalReferences(ImportFailed):
@@ -343,8 +348,21 @@ class SolidWorksBackend:
         os.makedirs(os.path.dirname(dst), exist_ok=True)         # CopyDocument will not create the folder
         empty = lambda: VARIANT(pythoncom.VT_ARRAY | pythoncom.VT_BSTR, [])
         result = self._app().CopyDocument(src, dst, empty(), empty(), 0)
-        if not os.path.exists(dst):
-            raise ImportFailed(f"SolidWorks could not copy {src} (it returned {result!r}).")
+        if os.path.exists(dst):
+            return
+        # SolidWorks refused. A single part that uses no other files (a purchased washer, say) has nothing for
+        # SolidWorks to update inside the copy, so an ordinary file copy gives exactly the same result.
+        if src.lower().endswith(".sldprt"):
+            try:
+                alone = not self._dependencies(src, False)
+            except Exception:
+                alone = False
+            if alone:
+                shutil.copyfile(src, dst)
+                return
+        raise ImportFailed(f"SolidWorks could not copy {src} (it returned {result!r}).\n\nIf the file is open in "
+                           "SolidWorks, close it and try again. Check that you can open it, and that it is not "
+                           "in a folder SolidWorks can't read.")
 
     def repoint(self, file, old, new):
         return bool(self._app().ReplaceReferencedDocument(file, old, new))
@@ -661,6 +679,7 @@ class Proposal:
     entries: list
     org: str = ""
     note: str = ""                  # where the proposed numbers start and why, for the window's status line
+    family: object = None           # a base number: every automatic row is a variant of it (None: separate numbers)
 
     def set_pn(self, index, text):
         """The user typed a part number into row `index`. Raises ImportFailed if it isn't a valid one."""
@@ -703,6 +722,60 @@ def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=Non
     return [PN(org, b, 1) for b in free]
 
 
+def _family_free_variants(repo, proposal, skip=()):
+    """The variant numbers of the family base that nothing is using: not in the vault, and not typed into a row."""
+    base, org = proposal.family, proposal.org
+    used = {pn.variant for pn in registry.list_pns(repo, org) if pn.base == base}
+    used |= {e.pn.variant for i, e in enumerate(proposal.entries)
+             if e.manual and e.pn.base == base and i not in skip}
+    return [v for v in range(pn_module.MIN_VARIANT, pn_module.MAX_VARIANT + 1) if v not in used]
+
+
+def _family_shortage(base, wanted, free):
+    return (f"Part number {pn_module.format_base(base)} only has {free} unused variant number(s) "
+            f"(the most a part number can have is {pn_module.MAX_VARIANT}), but {wanted} part(s) are being imported "
+            f"to it. Choose another number, or import fewer parts at a time.")
+
+
+def set_family(repo, proposal, base, sync=True):
+    """Import every automatic row as a variant of one base number (`base`), or back to separate numbers (None).
+
+    If the base is already in use the new variants start from the lowest unused ones. Raises ImportFailed, leaving
+    the table as it was, if the base is not valid or does not have enough unused variants for the rows."""
+    if base is None:
+        count = sum(1 for e in proposal.entries if not e.manual)
+        if proposal.family is None:
+            return
+        if sync:
+            try:
+                create.sync_latest(repo)
+            except create.CreateError as e:
+                raise ImportFailed(str(e)) from None
+        proposal.family = None
+        if count:
+            for entry, pn in zip((e for e in proposal.entries if not e.manual), pick_block(repo, count, proposal.org)):
+                entry.pn = pn
+        return
+    try:
+        base = pn_module.check_new_base(base)
+    except pn_module.PNError as e:
+        raise ImportFailed(str(e)) from None
+    if sync:
+        try:
+            create.sync_latest(repo)
+        except create.CreateError as e:
+            raise ImportFailed(str(e)) from None
+    previous = proposal.family
+    proposal.family = base
+    automatic = [e for e in proposal.entries if not e.manual]
+    free = _family_free_variants(repo, proposal)
+    if len(free) < len(automatic):
+        proposal.family = previous
+        raise FamilyFull(_family_shortage(base, len(automatic), len(free)))
+    for entry, variant in zip(automatic, free):
+        entry.pn = PN(proposal.org, base, variant)
+
+
 def check_proposal(repo, proposal):
     """Conflicts in the table right now (reads the local copy; call sync first for the latest)."""
     org = proposal.org
@@ -731,6 +804,8 @@ def check_proposal(repo, proposal):
 
 def _renumber_automatic(repo, proposal, conflicts):
     """Give every automatic row that conflicts a new, free number near the rest of the proposed block. Returns the changes."""
+    if proposal.family is not None:
+        return _renumber_family(repo, proposal, conflicts)
     taken, bases = _used_numbers(repo, proposal.org)
     in_use = {e.pn.base for i, e in enumerate(proposal.entries) if i not in {c.index for c in conflicts if not c.manual}}
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
@@ -749,6 +824,23 @@ def _renumber_automatic(repo, proposal, conflicts):
         changes.append((conflict.index, entry.pn, PN(proposal.org, candidate, 1)))
         entry.pn = PN(proposal.org, candidate, 1)
         in_use.add(candidate)
+    return changes
+
+
+def _renumber_family(repo, proposal, conflicts):
+    """Family mode: an automatic row whose variant was taken gets the next unused variant of the base."""
+    bad = {c.index for c in conflicts if not c.manual}
+    keep = {e.pn.variant for i, e in enumerate(proposal.entries)
+            if i not in bad and e.pn.base == proposal.family}
+    free = [v for v in _family_free_variants(repo, proposal, skip=bad) if v not in keep]
+    if len(free) < len(bad):
+        raise FamilyFull(_family_shortage(proposal.family, len(proposal.entries), len(free) + len(keep)))
+    changes = []
+    for index, variant in zip(sorted(bad), free):
+        entry = proposal.entries[index]
+        new = PN(proposal.org, proposal.family, variant)
+        changes.append((index, entry.pn, new))
+        entry.pn = new
     return changes
 
 
@@ -803,6 +895,12 @@ class Prepared:
 
 def _free_pn(repo, proposal):
     """An unused part number for a row added to the table: just after the automatic ones already there."""
+    if proposal.family is not None:
+        used = {e.pn.variant for e in proposal.entries if e.pn.base == proposal.family}
+        free = [v for v in _family_free_variants(repo, proposal) if v not in used]
+        if not free:
+            raise FamilyFull(_family_shortage(proposal.family, len(proposal.entries) + 1, len(proposal.entries)))
+        return PN(proposal.org, proposal.family, free[0])
     _taken, bases = _used_numbers(repo, proposal.org)
     here = {e.pn.base for e in proposal.entries}
     automatic = [e.pn.base for e in proposal.entries if not e.manual]

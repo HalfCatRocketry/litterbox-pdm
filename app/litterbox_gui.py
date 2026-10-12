@@ -1137,6 +1137,9 @@ class ImportWindow(ctk.CTkToplevel):
             pass
         self.repo, self.org, self.on_imported = repo, org, on_imported
         self.cots = cots                            # Import COTS: everything is recorded as a purchased part
+        self.last_click = None                      # (row id, ticked afterwards) for shift-click
+        self.family_applied = None                  # the base number the rows were last given, if any
+        self.family_placeholder = ""
         self.duplicates = {}                        # table row -> warnings about parts the vault already has
         self._cots_confirmed = False
         self.heading = "Import COTS" if cots else "Import CAD"
@@ -1237,11 +1240,25 @@ class ImportWindow(ctk.CTkToplevel):
         bar.columnconfigure(0, weight=1)
         self.summary = ctk.CTkLabel(bar, text="", anchor="w")
         self.summary.grid(row=0, column=0, sticky="w")
-        for column, (text, command) in enumerate((("Select all", lambda: self._tick_all(True)),
-                                                  ("Select none", lambda: self._tick_all(False)),
+        for column, (text, command) in enumerate((("Select All", lambda: self._tick_all(True)),
+                                                  ("Deselect All", lambda: self._tick_all(False)),
                                                   ("Refresh numbers", self._refresh_numbers))):
             ReleaseButton(bar, text=text, command=command, width=110, height=30, fg_color=GRAY,
                           hover_color=GRAY_HOVER).grid(row=0, column=1 + column, padx=(6, 0))
+
+        family = ctk.CTkFrame(bar, fg_color="transparent")
+        family.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        self.family_var = tk.BooleanVar(value=False)
+        self.family_box = ctk.CTkCheckBox(family, text="Import all as the same base number:", width=0,
+                                          variable=self.family_var, command=self._family_toggled)
+        self.family_box.grid(row=0, column=0)
+        # No textvariable here: CustomTkinter only shows placeholder text without one (see NewPartDialog).
+        self.family_entry = ctk.CTkEntry(family, width=130, height=30, placeholder_text="")
+        self.family_entry.grid(row=0, column=1, padx=(8, 0))
+        self.family_entry.bind("<Return>", self._family_typed)
+        self.family_entry.bind("<FocusOut>", self._family_typed)
+        ctk.CTkLabel(family, text="(leave empty for the next free number; if it is in use, new variants start at "
+                                  "the lowest free one)", text_color=MUTED).grid(row=0, column=2, padx=(10, 0))
 
         frame = ctk.CTkFrame(page, fg_color=BG_PANEL, corner_radius=10)
         frame.grid(row=1, column=0, sticky="nsew", padx=24)
@@ -1266,7 +1283,7 @@ class ImportWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(page, text="\u2611 = will be imported.   \u2610 = left out: no part number, nothing copied, and "
                                 "it stays in the saved scan so you can import it later.   Click the first column to "
-                                "select or deselect.\nDouble-click a part number, name or description to edit it "
+                                "select or deselect (Shift-click selects everything in between).\nDouble-click a part number, name or description to edit it "
                                 "(clear a part number to let Litterbox choose one).",
                      text_color=MUTED, anchor="w", justify="left", wraplength=1050).grid(
             row=2, column=0, sticky="ew", padx=26, pady=(6, 0))
@@ -1414,6 +1431,10 @@ class ImportWindow(ctk.CTkToplevel):
                 messagebox.showerror("Import CAD", logic.shorten(self._error_text(error)), parent=self)
             return
         self.conflicts, self.renumbered = [], []
+        self.family_applied = None
+        self.family_var.set(False)
+        self.family_placeholder = logic.import_base_placeholder(self.repo, self.session.prepared.proposal.org)
+        self.family_entry.configure(placeholder_text=self.family_placeholder)
         self._show("table")
         self._rebuild()
         self._say(f"Scan saved to {self.session.manifest_path}. Review the table, then press Finish & Import.\n"
@@ -1482,18 +1503,33 @@ class ImportWindow(ctk.CTkToplevel):
         ticked = self._details[iid].ticked
         self._end_edit()
         self.conflicts, self.duplicates = [], {}              # row positions change; the next check finds them again
+        anchor, shown = self.last_click, list(self.tree.get_children())
+        if logic.shift_held(event) and anchor is not None and anchor[0] in shown:
+            # Shift: give every row from the last click to this one the state the last click gave its row
+            between = logic.range_between(shown, anchor[0], iid)
+            self.last_click = (iid, anchor[1])
+            self._include_rows([int(i) for i in between], anchor[1])
+            return "break"
+        self.last_click = (iid, not ticked)
         self._run_quick(lambda done: self.session.include(int(iid), not ticked, done))
         return "break"
 
     def _tick_all(self, state):
         if self._blocked():
             return
-        wanted = [r for r in self._details.values() if r.ticked != state]
+        self._include_rows([r.item_id for r in self._details.values()], state)
+
+    def _include_rows(self, item_ids, state):
+        """Select (or deselect) these rows one after another on the session's thread, then redraw."""
+        wanted = [self._details[str(i)] for i in item_ids if str(i) in self._details
+                  and self._details[str(i)].ticked != state]
         self.conflicts, self.duplicates = [], {}
 
         def next_one(_result=None, error=None):
             if error is not None:
                 self._say(self._error_text(error), "warn")
+                if isinstance(error, importer.FamilyFull):
+                    messagebox.showwarning("Not enough variant numbers", self._error_text(error), parent=self)
             if wanted and error is None:
                 row = wanted.pop(0)
                 self.running = False
@@ -1516,6 +1552,8 @@ class ImportWindow(ctk.CTkToplevel):
                 return
             if error is not None:
                 self._say(self._error_text(error), "warn")
+                if isinstance(error, importer.FamilyFull):
+                    messagebox.showwarning("Not enough variant numbers", self._error_text(error), parent=self)
             if rebuild:
                 self._rebuild()
         self.running = True
@@ -1523,6 +1561,50 @@ class ImportWindow(ctk.CTkToplevel):
             start(done)
         except engine.LitterboxError as e:
             self.running = False
+            self._say(str(e), "warn")
+
+    def _family_toggled(self):
+        """The 'same base number' box was ticked or cleared."""
+        if self.running:
+            self.family_var.set(not self.family_var.get())          # the table is busy: undo the click
+            self._say("Please wait for the current step to finish.", "warn")
+            return
+        self._end_edit()
+        self._apply_family(self.family_entry.get().strip() or self.family_placeholder if self.family_var.get() else None)
+
+    def _family_typed(self, event=None):
+        """A base number was typed (Return, or the box lost focus): use it if the box is ticked."""
+        if not self.family_var.get() or self.running or self.closed:
+            return
+        wanted = self.family_entry.get().strip() or self.family_placeholder
+        if self.family_applied is None or str(self.family_applied).lstrip("0") != wanted.lstrip("0"):
+            self._apply_family(wanted)
+
+    def _apply_family(self, base):
+        """Give the rows variants of `base` (None: separate numbers again). Refuses, and says why, if it won't fit."""
+        def done(proposal, error):
+            self.running = False
+            if self.closing:
+                self._really_close()
+                return
+            if error is not None:
+                self.family_var.set(self.family_applied is not None)       # nothing changed: go back
+                self._say(self._error_text(error), "warn")
+                messagebox.showwarning("Part number", self._error_text(error), parent=self)
+                return
+            self.family_applied = base
+            self.conflicts, self.duplicates = [], {}
+            self._rebuild()
+            if base is None:
+                self._say("The rows have separate part numbers again.")
+            else:
+                self._say(f"All the rows are variants of {base}: any rows you typed numbers into were left alone.")
+        self.running = True
+        try:
+            self.session.set_family(base, done)
+        except engine.LitterboxError as e:
+            self.running = False
+            self.family_var.set(self.family_applied is not None)
             self._say(str(e), "warn")
 
     def _on_double_click(self, event):
@@ -1933,7 +2015,15 @@ class ReferencesWindow(ctk.CTkToplevel):
             return
         iid = tree.identify_row(event.y)
         if iid:
-            self._set_mark(tree, iid, logic.toggled(tree.set(iid, "tick")))
+            anchor = self.last_click.get(str(tree))
+            if logic.shift_held(event) and anchor is not None and tree.exists(anchor) and tree.set(anchor, "tick"):
+                mark = tree.set(anchor, "tick")             # Shift: everything from the last click to here
+                for between in logic.range_between(list(tree.get_children()), anchor, iid):
+                    if tree.set(between, "tick"):
+                        self._set_mark(tree, between, mark)
+            else:
+                self._set_mark(tree, iid, logic.toggled(tree.set(iid, "tick")))
+            self.last_click[str(tree)] = iid
 
     @staticmethod
     def _set_mark(tree, iid, mark):
@@ -3012,6 +3102,7 @@ class App(ctk.CTk):
         self.identity = people.Identity(people.LEGACY)      # who you are on this vault's team (see people.py)
         self.rows_by_pn = {}
         self.buttons = []               # disabled while something is running
+        self.action_buttons = {}        # button text -> button, for the ones that follow the selection
         self.pending_select = None      # a part to select once the list reloads (the one just created)
         self.note = ""                  # what just happened, kept in the status line after a refresh
 
@@ -3115,6 +3206,8 @@ class App(ctk.CTk):
     def _button(self, parent, text, command, **options):
         button = ReleaseButton(parent, text=text, command=command, **options)
         self.buttons.append(button)
+        if text in logic.BUTTON_ACTIONS:
+            self.action_buttons[text] = button
         return button
 
     def _build_ui(self):
@@ -3169,10 +3262,13 @@ class App(ctk.CTk):
         self.view.grid(row=0, column=1, padx=(0, 8))
         self.void_box = ctk.CTkCheckBox(toolbar, text="Show void", command=self._render, width=90)
         self.void_box.grid(row=0, column=2, padx=(0, 8))
+        self.deselect_button = ctk.CTkButton(toolbar, text="Deselect All", width=96, height=34, fg_color=GRAY,
+                                             hover_color=GRAY_HOVER, command=self._deselect_all)
+        self.deselect_button.grid(row=0, column=3, padx=(0, 8))
         self._button(toolbar, "Refresh", self.refresh, width=84, height=34,
-                     fg_color=GRAY, hover_color=GRAY_HOVER).grid(row=0, column=3, padx=(0, 8))
+                     fg_color=GRAY, hover_color=GRAY_HOVER).grid(row=0, column=4, padx=(0, 8))
         self._button(toolbar, "Get Latest", self.get_latest, width=100, height=34,
-                     fg_color=GRAY, hover_color=GRAY_HOVER).grid(row=0, column=4)
+                     fg_color=GRAY, hover_color=GRAY_HOVER).grid(row=0, column=5)
 
         # The list of parts
         frame = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=10)
@@ -3199,6 +3295,7 @@ class App(ctk.CTk):
         self.tree.heading("tick", text=logic.TICK_OFF, anchor="center", command=self._toggle_all_ticks)
         self.tree.bind("<Button-1>", self._on_tree_click, add="+")
         self.tree.bind("<space>", self._tick_highlighted)
+        self.tree.bind("<<TreeviewSelect>>", lambda event: self._update_buttons(), add="+")
         for kind, color in ROW_COLORS.items():
             self.tree.tag_configure(kind, foreground=color)
         self.tree.tag_configure("ticked", background=TICK_BG)       # last, so it wins for the background only
@@ -3249,7 +3346,7 @@ class App(ctk.CTk):
             ("Revise", self.revise, PURPLE, PURPLE_HOVER),
             ("Cancel Revision", self.cancel_revision, GRAY, GRAY_HOVER),
             ("Make COTS", self.make_cots, TEAL, TEAL_HOVER),
-            ("Reopen", self.reopen, GRAY, GRAY_HOVER),
+            ("Unrelease", self.reopen, GRAY, GRAY_HOVER),
             ("Void", self.void, GRAY, GRAY_HOVER),
             ("History", self.show_history, GRAY, GRAY_HOVER),
         )):
@@ -3404,13 +3501,35 @@ class App(ctk.CTk):
         click_log(f"busy={busy}")
         self.busy = busy
         for button in self.buttons:
-            button.configure(state="disabled" if busy else "normal")
+            if button not in self.action_buttons.values():
+                button.configure(state="disabled" if busy else "normal")
+        self._update_buttons()
         for window in self._team_windows():
             window.set_busy(busy)
 
     def _ask(self, text, title):
         """Ask for one line of text. Returns None if the user cancels."""
         return InputDialog(text=text, title=title).get_input()
+
+    def _update_buttons(self):
+        """Grey out the buttons that can't be used on the current selection: a button is lit only if every part it
+        would act on is one it can be used on. Everything is greyed while a task is running."""
+        if not getattr(self, "action_buttons", None):
+            return
+        tree = self.tree
+        highlighted = [parse_pn(iid) for iid in tree.selection()]
+        states = logic.button_states(self._ticked_pns(), highlighted, self.rows_by_pn)
+        for text, button in self.action_buttons.items():
+            button.configure(state="normal" if states.get(text) and not self.busy else "disabled")
+        deselect = getattr(self, "deselect_button", None)
+        if deselect is not None:
+            deselect.configure(state="normal" if self.ticked or highlighted else "disabled")
+
+    def _deselect_all(self):
+        """Clear every box (and the highlight)."""
+        self._set_ticks(list(self.tree.get_children()) + list(self.ticked), False)
+        self.tree.selection_set(*[])
+        self._update_buttons()
 
     def _ticked_pns(self):
         """The ticked parts that are shown in the list right now (a tick on a filtered-out part is ignored)."""
@@ -3432,9 +3551,8 @@ class App(ctk.CTk):
         if iid:
             shown = list(self.tree.get_children())
             anchor = getattr(self, "last_tick", None)
-            if event.state & 0x1 and anchor in shown:        # Shift: tick everything from the last click to here
-                a, b = sorted((shown.index(anchor), shown.index(iid)))
-                self._set_ticks(shown[a:b + 1], anchor in self.ticked)
+            if logic.shift_held(event) and anchor in shown:   # Shift: tick everything from the last click to here
+                self._set_ticks(logic.range_between(shown, anchor, iid), anchor in self.ticked)
             else:
                 self._set_ticks([iid], iid not in self.ticked)
             self.last_tick = iid
@@ -3453,12 +3571,15 @@ class App(ctk.CTk):
     def _set_ticks(self, iids, on):
         for iid in iids:
             (self.ticked.add if on else self.ticked.discard)(iid)
+            if not self.tree.exists(iid):
+                continue
             self.tree.set(iid, "tick", logic.TICK_ON if on else logic.TICK_OFF)
             kinds = [t for t in self.tree.item(iid, "tags") if t != "ticked"]
             self.tree.item(iid, tags=logic.row_tags(kinds[0], on) if kinds else ())
         shown = self.tree.get_children()
         self.tree.heading("tick", text=logic.TICK_ON if shown and all(i in self.ticked for i in shown) else logic.TICK_OFF)
         self._say(logic.tick_text(len(self._ticked_pns())))
+        self._update_buttons()
 
     def _plan(self, action):
         """Work out what the selected parts allow. Shows the reason and returns None if nothing can be done."""
@@ -3615,6 +3736,7 @@ class App(ctk.CTk):
         if keep:
             self.tree.selection_set(*keep)
         self.sorter.apply()
+        self._update_buttons()
         return len(rows)
 
     # ------------------------------------------------------------------
@@ -4343,11 +4465,11 @@ class App(ctk.CTk):
             return
         repo, pn = self.repo(), plan.targets[0]
         if self.rows_by_pn[pn].kind == "cots" and not messagebox.askyesno(
-                "Reopen COTS part", logic.reopen_cots_warning(pn)):
+                "Unrelease COTS part", logic.reopen_cots_warning(pn)):
             return
-        reason = self._ask_reason(f"Why is {pn} being reopened?", "Reopen")
+        reason = self._ask_reason(f"Why is {pn} being unreleased?", "Unrelease")
         if reason:
-            self.run_task(lambda: engine.reopen(repo, pn, reason), f"Reopened {pn}")
+            self.run_task(lambda: engine.reopen(repo, pn, reason), f"Unreleased {pn}")
 
     def void(self):
         plan = self._plan("void")

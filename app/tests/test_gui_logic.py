@@ -104,7 +104,7 @@ class TestPlanAction(unittest.TestCase):
         self.assertIn("Can't release", self.plan("release", 4).message)      # already released
         self.assertIn("Can't release", self.plan("release", 2).message)      # checked out
         self.assertEqual([p.base for p in self.plan("reopen", 4).targets], [4])
-        self.assertIn("Can't reopen", self.plan("reopen", 1).message)
+        self.assertIn("Can't unrelease", self.plan("reopen", 1).message)
         self.assertEqual([p.base for p in self.plan("void", 1).targets], [1])
         self.assertIn("Can't void", self.plan("void", 4).message)
 
@@ -353,8 +353,8 @@ class TestHistory(unittest.TestCase):
             registry.mark_released(record, "Jo", files)
             registry.mark_reopened(record, "Jo", "Bore wrong")
         rows = logic.format_history(record, local=False)
-        self.assertEqual([r[2] for r in rows], ["Reopened", "Released", "Checked in", "Checked out", "Created"])
-        self.assertEqual(rows[0][1:], ("Jo", "Reopened", "Bore wrong"))
+        self.assertEqual([r[2] for r in rows], ["Unreleased", "Released", "Checked in", "Checked out", "Created"])
+        self.assertEqual(rows[0][1:], ("Jo", "Unreleased", "Bore wrong"))
         self.assertEqual(rows[2][3], "Added fillet  -  HCR-00001-001_A.SLDPRT")
         self.assertEqual(rows[3][3], "HCR-00001-001_A.SLDPRT, HCR-00001-001_A.SLDDRW")
         self.assertEqual(rows[4][3], "")
@@ -748,13 +748,13 @@ class TestWorkflowText(unittest.TestCase):
         task = SimpleNamespace(id="ab12", label="HCR-00001-001 +1 more", action="reopen",
                                parts=[("HCR-00001-001", "Upright", "A"), ("HCR-00002-001", "Arm", "A")],
                                requested_by="Alex Smith", requested_at="2026-10-11T00:00:00Z",
-                               summary="Reopen pending 0/1: waiting on Cy", reason="Drawing error",
+                               summary="Unrelease pending 0/1: waiting on Cy", reason="Drawing error",
                                slots=[{"text": "Manager", "name": "Cy", "done": False},
                                       {"text": "Quality", "name": "Bea", "done": True}])
         (iid, values), = logic.tasks_table([task], local=False)
         self.assertEqual(iid, "ab12")
-        self.assertEqual(values, ("HCR-00001-001 +1 more", "2 parts", "Reopen", "Alex Smith", "2026-10-11 00:00",
-                                  "Reopen pending 0/1: waiting on Cy"))
+        self.assertEqual(values, ("HCR-00001-001 +1 more", "2 parts", "Unrelease", "Alex Smith", "2026-10-11 00:00",
+                                  "Unrelease pending 0/1: waiting on Cy"))
         detail = logic.task_detail(task)
         self.assertIn("HCR-00001-001, HCR-00002-001", detail)
         self.assertIn("… Manager: Cy (waiting)", detail)
@@ -854,7 +854,7 @@ class TestWorkflowEditor(unittest.TestCase):
     def test_standard_workflows_skip_what_lacks_roles(self):
         editor = logic.WorkflowEditor({})
         added, skipped = editor.add_standard(["Responsible Engineer", "Manager", "Chief"])
-        self.assertEqual(added, ["Release T3", "Reopen T1", "Void T1", "Make COTS T1"])
+        self.assertEqual(added, ["Release T3", "Unrelease T1", "Void T1", "Make COTS T1"])
         self.assertEqual([n for n, _ in skipped], ["Release T1", "Release T2"])
         self.assertEqual(editor.add_standard(["Responsible Engineer", "Manager", "Chief"])[0], [])
 
@@ -934,6 +934,76 @@ class TestTicks(unittest.TestCase):
         self.assertTrue(logic.person_unchanged(who, same))
         self.assertFalse(logic.person_unchanged(who, dict(same, roles=[])))
         self.assertFalse(logic.person_unchanged(who, dict(same, name="Bea J")))
+
+
+class TestButtonStates(unittest.TestCase):
+    P = {r.pn.base: r.pn for r in ROWS}                 # base number -> PN (1 ok, 2 mine, 3 theirs, 4 released, 5 void, 6 stray)
+
+    def states(self, ticked=(), highlighted=()):
+        return logic.button_states([self.P[b] for b in ticked], [self.P[b] for b in highlighted], BY_PN)
+
+    def test_nothing_selected_greys_everything(self):
+        self.assertFalse(any(self.states().values()))
+
+    def test_one_available_part(self):
+        s = self.states(ticked=[1])
+        self.assertTrue(s["Check Out"])
+        self.assertTrue(s["Release"] and s["Void"] and s["Make COTS"])
+        self.assertFalse(s["Check In"] or s["Undo Checkout"] or s["Save Progress"] or s["Edit Details"])
+        self.assertFalse(s["Revise"] or s["Unrelease"])
+
+    def test_one_checked_out_part_in_the_selection_greys_check_out(self):
+        self.assertFalse(self.states(ticked=[1, 2])["Check Out"])
+        self.assertTrue(self.states(ticked=[1, 3])["Check Out"] is False)
+
+    def test_check_in_needs_every_part_to_be_yours(self):
+        self.assertTrue(self.states(ticked=[2])["Check In"])
+        self.assertFalse(self.states(ticked=[2, 1])["Check In"])
+
+    def test_revise_and_unrelease_need_released_parts(self):
+        s = self.states(ticked=[4])
+        self.assertTrue(s["Revise"] and s["Unrelease"])
+        self.assertFalse(s["Check Out"] or s["Release"])
+        self.assertFalse(self.states(ticked=[1])["Revise"])
+
+    def test_single_part_buttons_grey_with_two_parts(self):
+        self.assertTrue(self.states(ticked=[2])["Edit Details"])
+        both = logic.button_states([self.P[4], self.P[1]], [], BY_PN)
+        self.assertFalse(both["Revise"] or both["Edit Details"])
+
+    def test_looking_buttons_follow_the_highlight(self):
+        s = self.states(ticked=[1, 2], highlighted=[3])
+        self.assertTrue(s["Open"] and s["Open Drawing"] and s["References..."] and s["History"])
+        self.assertFalse(s["Check In"])                          # the changing buttons ignore the highlight
+        self.assertFalse(self.states(ticked=[1, 2])["Open"])      # two ticks, nothing highlighted
+        self.assertTrue(self.states(ticked=[1])["History"])       # one tick stands in for a highlight
+
+    def test_void_parts_can_be_looked_at_but_not_changed(self):
+        s = self.states(ticked=[5])
+        self.assertTrue(s["Open"])
+        self.assertFalse(s["Check Out"] or s["Release"] or s["Void"])
+
+    def test_the_unrelease_button_uses_the_reopen_action(self):
+        self.assertEqual(logic.BUTTON_ACTIONS["Unrelease"], "reopen")
+        self.assertEqual(logic.NAME["reopen"], "unrelease")
+        self.assertEqual(logic.PAST["reopen"], "Unreleased")
+
+
+class TestShiftRange(unittest.TestCase):
+    def test_range_either_direction(self):
+        shown = ["a", "b", "c", "d"]
+        self.assertEqual(logic.range_between(shown, "b", "d"), ["b", "c", "d"])
+        self.assertEqual(logic.range_between(shown, "d", "b"), ["b", "c", "d"])
+
+    def test_no_anchor_is_just_the_row(self):
+        self.assertEqual(logic.range_between(["a", "b"], None, "b"), ["b"])
+        self.assertEqual(logic.range_between(["a", "b"], "gone", "b"), ["b"])
+
+    def test_shift_held(self):
+        from types import SimpleNamespace
+        self.assertTrue(logic.shift_held(SimpleNamespace(state=0x1)))
+        self.assertTrue(logic.shift_held(SimpleNamespace(state=0x9)))
+        self.assertFalse(logic.shift_held(SimpleNamespace(state=0x8)))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """
 workflow.py - sign-offs before a part's status changes.
 
-An Admin can say "a release (or reopen, void, make COTS) needs sign-offs". After that, pressing the button no
+An Admin can say "a release (or unrelease, void, make COTS) needs sign-offs". After that, pressing the button no
 longer does it: it opens the Workflow window, where you pick a template and a person for each sign-off. The
 people named approve (or reject), and when everyone has signed the action happens.
 
@@ -60,7 +60,7 @@ import registry
 WORKFLOWS_FILE = ".litterbox/workflows.yaml"
 RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
 ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)          # the actions that can have templates
-ACTION_LABEL = {RELEASE: "Release", REOPEN: "Reopen", VOID: "Void", MAKE_COTS: "Make COTS"}
+ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS: "Make COTS"}
 AUTO_COMPLETE = {RELEASE, REOPEN, VOID}                # done as soon as the last person signs
 NEEDS_REASON = {REOPEN, VOID}                          # the request carries a reason
 MAX_NAME = 40
