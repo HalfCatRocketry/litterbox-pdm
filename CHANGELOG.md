@@ -2,28 +2,16 @@
 
 ## 0.3.1
 
-- **Actions on many parts are much faster.** Check Out, Check In, Save Progress, Undo Checkout, Release, Unrelease,
-  Void and Make COTS, and every step of a workflow (asking, signing, finishing, withdrawing), now download once and
-  upload once for the whole selection instead of once per part, and take and release locks several at a time. Each
-  part still gets its own history entry. Changes to part records (workflow steps, Release, Unrelease, Void, Make COTS)
-  go in one commit per batch, with a line for each part in its message; Check In and Save Progress still make one
-  commit per part. If one part can't be done (somebody has it checked out, say) it is
-  reported and the rest carry on; if the upload itself fails, nothing is left half done. Updating references on
-  several assemblies, and Update references, work the same way.
+- **Actions on many parts are much faster.** Check Out, Check In, Save Progress, Undo Checkout, Release, Unrelease, Void and Make COTS, and every step of a workflow (asking, signing, finishing, withdrawing), now download once and upload once for the whole selection instead of once per part, and take and release locks several at a time. Each part still gets its own history entry. Changes to part records (workflow steps, Release, Unrelease, Void, Make COTS) go in one commit per batch, with a line for each part in its message; Check In and Save Progress still make one commit per part. If one part can't be done (somebody has it checked out, say) it is reported and the rest carry on; if the upload itself fails, nothing is left half done. Updating references on several assemblies, and Update references, work the same way.
 - Parts you void are unselected automatically (they are hidden by default, so a leftover tick was invisible).
-- Release, Unrelease, Void and Make COTS now work on several selected parts at once even in a vault with no
-  workflow; before, they needed one part at a time.
-- **Reopen is now called Unrelease** everywhere it is shown (the button, pop-ups, Team > Workflows and a part's
-  history). Records and settings keep their old internal name, so nothing in an existing vault changes.
-- **Buttons grey out** when they can't be used on what is selected: a button lights up only if every selected part
-  suits it (for example Check Out is grey if any selected part is already checked out).
+- Release, Unrelease, Void and Make COTS now work on several selected parts at once even in a vault with no workflow; before, they needed one part at a time.
+- **Reopen is now called Unrelease** everywhere it is shown (the button, pop-ups, Team > Workflows and a part's history). Records and settings keep their old internal name, so nothing in an existing vault changes.
+- **Buttons grey out** when they can't be used on what is selected: a button lights up only if every selected part suits it (for example Check Out is grey if any selected part is already checked out).
 - Parts list: new **Deselect All** button.
-- Import: "Import all as the same base number" box. Leave the number empty for the next free one, or type your own;
-  if it is already in use the new variants start at the lowest free number. Litterbox refuses, and says so, if the
-  parts won't fit in the variant numbers that are left.
+- Import: "Import all as the same base number" box. Leave the number empty for the next free one, or type your own; if it is already in use the new variants start at the lowest free number. Litterbox refuses, and says so, if the parts won't fit in the variant numbers that are left.
 - Import review: **Select All** and **Deselect All** buttons.
 - Shift-click selects everything between the last click and this one in every list with boxes (Import, References).
-- New vault setting `commit_style`: Check In and Save Progress on several parts make one commit per part (the default) or, if an Admin chooses it, one commit for the whole batch, which is faster (each commit takes about a second). Admins and the Owner change it in Team > Vault Settings...; it applies to everyone. (`release_rule` and `require_signatures` are still edited by hand in `.litterbox/config.yaml`.)
+- New vault setting commit_style: Check In and Save Progress on several parts make one commit per part (the default) or, if an Admin chooses it, one commit for the whole batch, which is faster (each commit takes about a second). Admins and the Owner change it in Team > Vault Settings...; it applies to everyone. The same dialog also edits release_rule (warn / block / off) and require_signatures, which were hand-edited in .litterbox/config.yaml before (turning signatures on asks first).
 - Debug mode now logs where a batch's time went, e.g. `Timing: check in on 20 part(s) took 31.2s. git commit x20 = 19.8s; git push x1 = 6.1s; ...`.
 - Very large batches (over 100 parts) now still make a single commit when one is asked for.
 

@@ -1373,3 +1373,10 @@ def roles_to_choose(all_roles, chosen):
     """The roles a person doesn't have yet, for the drop-down."""
     have = {r.lower() for r in chosen}
     return [r for r in all_roles if r.lower() not in have]
+
+
+def changed_settings(current, chosen):
+    """The vault settings in `chosen` (from the Vault Settings dialog) that differ from `current`. {} if none."""
+    if not chosen:
+        return {}
+    return {key: value for key, value in chosen.items() if current.get(key) != value}

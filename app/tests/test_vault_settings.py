@@ -34,6 +34,28 @@ class ConfigValues(unittest.TestCase):
         config.set_values(self.repo, commit_style="per_part")
         self.assertEqual(config.get_commit_style(self.repo), "per_part")
 
+    def test_the_release_rule_and_signatures_can_be_set_and_cleared(self):
+        config.set_values(self.repo, release_rule="block", require_signatures=True)
+        self.assertEqual(config.get_release_rule(self.repo), "block")
+        self.assertTrue(config.get_require_signatures(self.repo))
+        config.set_values(self.repo, release_rule="warn", require_signatures=False)
+        self.assertEqual(config.get_release_rule(self.repo), "warn")
+        self.assertFalse(config.get_require_signatures(self.repo))
+        self.assertEqual(config.load(self.repo), {})
+
+    def test_other_lines_in_the_file_survive_a_change(self):
+        config.set_values(self.repo, commit_style="per_batch")
+        text = (self.repo / config.CONFIG_DIR / config.CONFIG_FILE).read_text()
+        (self.repo / config.CONFIG_DIR / config.CONFIG_FILE).write_text(text + "org: HCR\n")
+        config.set_values(self.repo, release_rule="off")
+        self.assertEqual(config.load(self.repo), {"commit_style": "per_batch", "org": "HCR", "release_rule": "off"})
+
+    def test_bad_rule_and_signature_values_are_refused(self):
+        with self.assertRaises(config.ConfigError):
+            config.set_values(self.repo, release_rule="maybe")
+        with self.assertRaises(config.ConfigError):
+            config.set_values(self.repo, require_signatures="yes")
+
     def test_bad_values_are_refused(self):
         with self.assertRaises(config.ConfigError):
             config.set_values(self.repo, commit_style="sometimes")
@@ -78,8 +100,27 @@ class EditingTheSetting(Fixture, unittest.TestCase):
             self.assertEqual(git(self.a, "status", "--porcelain"), "")
             self.assertEqual(self.locks(self.a), {})
 
+    def test_several_settings_go_up_in_one_commit(self):
+        before = int(git(self.a, "rev-list", "--count", "HEAD"))
+        with self.user("Alex"):
+            vault_settings.edit(self.a, commit_style="per_batch", release_rule="block")
+            self.assertEqual(config.get_release_rule(self.a), "block")
+        self.assertEqual(int(git(self.a, "rev-list", "--count", "HEAD")), before + 1)
+        self.get_latest("Bea")
+        self.assertEqual(config.get_release_rule(self.b), "block")
+
     def test_manage_settings_is_an_admin_action(self):
         self.assertIn("manage_settings", people.ADMIN_ACTIONS)
+
+
+class DialogLogic(unittest.TestCase):
+    def test_only_what_changed_is_saved(self):
+        import gui_logic as logic
+        current = {"commit_style": "per_part", "release_rule": "warn", "require_signatures": False}
+        self.assertEqual(logic.changed_settings(current, dict(current)), {})
+        self.assertEqual(logic.changed_settings(current, None), {})
+        self.assertEqual(logic.changed_settings(current, dict(current, release_rule="block", require_signatures=True)),
+                         {"release_rule": "block", "require_signatures": True})
 
 
 class Wiring(unittest.TestCase):
@@ -87,7 +128,9 @@ class Wiring(unittest.TestCase):
         source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
         self.assertIn('"Vault Settings..."', source)
         self.assertIn("def edit_vault_settings", source)
-        self.assertIn("vault_settings.edit(repo, commit_style=style)", source)
+        self.assertIn("vault_settings.edit(repo, **changes)", source)
+        for key in ("commit_style", "release_rule", "require_signatures"):
+            self.assertIn(f'("{key}",', source)
         self.assertEqual(source.count('allows("manage_settings")'), 1)
 
 

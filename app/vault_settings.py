@@ -1,11 +1,16 @@
 """
 vault_settings.py - changing the vault's shared settings (.litterbox/config.yaml) from the program.
 
-Today there is one setting here, `commit_style`: whether Check In / Save Progress on several parts at once make one
-commit per part (the default) or one commit for the whole batch (faster). Only an Admin or the Owner may change it
-(the permission is "manage_settings"); everyone then gets the new value the next time they get the latest.
+The settings here:
+    commit_style        "per_part" (default) or "per_batch": one commit per part or one for the whole batch when
+                        Check In / Save Progress is done on several parts at once
+    release_rule        "warn" (default), "block" or "off": what a release does when the assembly uses parts that
+                        are out of date or not released
+    require_signatures  True or False (default): refuse uploads of commits not signed by a key on the team list
+Only an Admin or the Owner may change them (the permission is "manage_settings"); everyone then gets the new
+values the next time they get the latest.
 
-    vault_settings.edit(repo, commit_style="per_batch")
+    vault_settings.edit(repo, commit_style="per_batch", release_rule="block")
 """
 
 from pathlib import Path

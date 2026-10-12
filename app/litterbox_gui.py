@@ -2851,39 +2851,53 @@ class ReassignDialog(ctk.CTkToplevel):
 
 
 class VaultSettingsDialog(ctk.CTkToplevel):
-    """The vault's shared settings. Today: whether Check In / Save Progress on several parts make one commit per
-    part or one for the whole batch. show() gives the chosen style (see config.COMMIT_STYLES) or None."""
+    """The vault's shared settings, as one dict: commit_style, release_rule, require_signatures (see config.py).
+    show() gives the chosen values (all three) or None."""
 
-    CHOICES = {"One commit per part (default)": "per_part", "One commit for the whole batch (faster)": "per_batch"}
+    COMMITS = {"One commit per part (default)": "per_part", "One commit for the whole batch (faster)": "per_batch"}
+    RULES = {"Warn, and let me go ahead (default)": "warn", "Block the release": "block", "Say nothing": "off"}
+    SIGNATURES = {"Not required (default)": False, "Required: refuse unsigned commits": True}
 
-    def __init__(self, parent, current="per_part"):
+    def __init__(self, parent, current=None):
         super().__init__(parent)
         set_window_icon(self)
+        current = current or {}
         self.result = None
-        width, height = 540, 270
+        width, height = 560, 520
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Vault settings")
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         ctk.CTkLabel(self, text="Vault settings", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
-            row=0, column=0, sticky="ew", padx=20, pady=(18, 4))
-        ctk.CTkLabel(self, text="When several parts are checked in or saved at once:", anchor="w").grid(
-            row=1, column=0, sticky="ew", padx=20)
-        names = {value: label for label, value in self.CHOICES.items()}
-        self.var = tk.StringVar(value=names.get(current, next(iter(self.CHOICES))))
-        ctk.CTkOptionMenu(self, variable=self.var, values=list(self.CHOICES), width=490, fg_color=GRAY,
-                          button_color=GRAY_HOVER, button_hover_color=ACCENT).grid(row=2, column=0, padx=20,
-                                                                                    pady=(6, 0), sticky="w")
-        ctk.CTkLabel(self, text="One commit per part keeps each part's history separate. One commit for the batch is "
-                                "faster (each commit takes about a second), but a part's history shows the whole "
-                                "batch's commit. This applies to everyone in the vault.",
-                     anchor="w", justify="left", wraplength=490, text_color=MUTED).grid(
-            row=3, column=0, sticky="ew", padx=20, pady=(8, 0))
+            row=0, column=0, sticky="ew", padx=20, pady=(18, 0))
+        ctk.CTkLabel(self, text="These apply to everyone in the vault.", anchor="w", text_color=MUTED).grid(
+            row=1, column=0, sticky="ew", padx=20, pady=(0, 6))
+        self.vars = {}
+        row = 2
+        for key, title, choices, note in (
+                ("commit_style", "When several parts are checked in or saved at once:", self.COMMITS,
+                 "One commit per part keeps each part's history separate. One commit for the batch is faster "
+                 "(each commit takes about a second), but every part's history shows the whole batch's commit."),
+                ("release_rule", "When a release uses parts that are out of date or not released:", self.RULES,
+                 "This is about an assembly's parts, checked when you release it."),
+                ("require_signatures", "Signed commits:", self.SIGNATURES,
+                 "If required, Litterbox refuses to upload a commit that is not signed by a key on the team "
+                 "list. Everyone must have signing set up first (Team > Signing...), or they cannot upload.")):
+            names = {value: label for label, value in choices.items()}
+            var = tk.StringVar(value=names.get(current.get(key), next(iter(choices))))
+            self.vars[key] = (var, choices)
+            ctk.CTkLabel(self, text=title, anchor="w").grid(row=row, column=0, sticky="ew", padx=20, pady=(8, 0))
+            ctk.CTkOptionMenu(self, variable=var, values=list(choices), width=510, fg_color=GRAY,
+                              button_color=GRAY_HOVER, button_hover_color=ACCENT).grid(
+                row=row + 1, column=0, padx=20, pady=(4, 0), sticky="w")
+            ctk.CTkLabel(self, text=note, anchor="w", justify="left", wraplength=510, text_color=MUTED).grid(
+                row=row + 2, column=0, sticky="ew", padx=20, pady=(4, 0))
+            row += 3
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=4, column=0, sticky="ew", padx=20, pady=(12, 16))
+        buttons.grid(row=row, column=0, sticky="ew", padx=20, pady=(14, 16))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
                       command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -2900,7 +2914,7 @@ class VaultSettingsDialog(ctk.CTkToplevel):
             pass
 
     def _ok(self):
-        self.result = self.CHOICES[self.var.get()]
+        self.result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
         self.destroy()
 
     def show(self):
@@ -4149,14 +4163,22 @@ class App(ctk.CTk):
             return
         repo = self.repo()
         try:
-            current = config.get_commit_style(repo)
-        except config.ConfigError:
-            current = "per_part"
-        style = VaultSettingsDialog(window, current).show()
-        if style is None or style == current:
+            current = {"commit_style": config.get_commit_style(repo), "release_rule": config.get_release_rule(repo),
+                       "require_signatures": config.get_require_signatures(repo)}
+        except config.ConfigError as e:
+            messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
-        self.run_task(lambda: vault_settings.edit(repo, commit_style=style), "Vault settings saved",
-                      on_success=lambda changed: window.refresh() if hasattr(window, "refresh") else None)
+        chosen = VaultSettingsDialog(window, current).show()
+        changes = logic.changed_settings(current, chosen)
+        if not changes:
+            return
+        if changes.get("require_signatures") and not messagebox.askokcancel(
+                "Require signed commits",
+                "From now on, Litterbox refuses to upload any commit that is not signed by a key on the team list. "
+                "Anyone who has not set up signing (Team > Signing...) will not be able to upload until they do."
+                "\n\nTurn this on?", parent=window):
+            return
+        self.run_task(lambda: vault_settings.edit(repo, **changes), "Vault settings saved")
 
     def edit_workflow(self, window):
         if not self._may("manage_workflows") or window.draft is None:

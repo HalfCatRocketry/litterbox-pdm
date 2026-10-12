@@ -187,6 +187,20 @@ def set_values(repo, **values):
                 data.pop(key, None)                  # the default needs no line
             else:
                 data[key] = value
+        elif key == "release_rule":
+            if value not in RELEASE_RULES:
+                raise ConfigError(f"release_rule must be one of {', '.join(RELEASE_RULES)}.")
+            if value == "warn":
+                data.pop(key, None)
+            else:
+                data[key] = value
+        elif key == "require_signatures":
+            if not isinstance(value, bool):
+                raise ConfigError("require_signatures must be true or false.")
+            if value:
+                data[key] = True
+            else:
+                data.pop(key, None)
         else:
             raise ConfigError(f"'{key}' is not a setting that can be changed here.")
     path = config_path(repo)
