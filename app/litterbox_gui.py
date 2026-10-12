@@ -41,6 +41,7 @@ import manifest as manifest_module
 import scan as scan_module
 import settings
 import updater
+import vault_settings
 import workflow
 from team_draft import TeamDraft
 import pn as pnmod
@@ -2849,6 +2850,64 @@ class ReassignDialog(ctk.CTkToplevel):
         return self.result
 
 
+class VaultSettingsDialog(ctk.CTkToplevel):
+    """The vault's shared settings. Today: whether Check In / Save Progress on several parts make one commit per
+    part or one for the whole batch. show() gives the chosen style (see config.COMMIT_STYLES) or None."""
+
+    CHOICES = {"One commit per part (default)": "per_part", "One commit for the whole batch (faster)": "per_batch"}
+
+    def __init__(self, parent, current="per_part"):
+        super().__init__(parent)
+        set_window_icon(self)
+        self.result = None
+        width, height = 540, 270
+        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
+        self.title("Vault settings")
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.columnconfigure(0, weight=1)
+        ctk.CTkLabel(self, text="Vault settings", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=20, pady=(18, 4))
+        ctk.CTkLabel(self, text="When several parts are checked in or saved at once:", anchor="w").grid(
+            row=1, column=0, sticky="ew", padx=20)
+        names = {value: label for label, value in self.CHOICES.items()}
+        self.var = tk.StringVar(value=names.get(current, next(iter(self.CHOICES))))
+        ctk.CTkOptionMenu(self, variable=self.var, values=list(self.CHOICES), width=490, fg_color=GRAY,
+                          button_color=GRAY_HOVER, button_hover_color=ACCENT).grid(row=2, column=0, padx=20,
+                                                                                    pady=(6, 0), sticky="w")
+        ctk.CTkLabel(self, text="One commit per part keeps each part's history separate. One commit for the batch is "
+                                "faster (each commit takes about a second), but a part's history shows the whole "
+                                "batch's commit. This applies to everyone in the vault.",
+                     anchor="w", justify="left", wraplength=490, text_color=MUTED).grid(
+            row=3, column=0, sticky="ew", padx=20, pady=(8, 0))
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=4, column=0, sticky="ew", padx=20, pady=(12, 16))
+        buttons.columnconfigure((0, 1), weight=1, uniform="c")
+        ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="Save", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._ok).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.after(150, self._grab)
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+        except tk.TclError:
+            pass
+
+    def _ok(self):
+        self.result = self.CHOICES[self.var.get()]
+        self.destroy()
+
+    def show(self):
+        self.wait_window(self)
+        return self.result
+
+
 class TasksWindow(ctk.CTkToplevel):
     """My Tasks: workflow requests waiting for sign-off, and what you can do about each."""
 
@@ -3058,6 +3117,8 @@ class TeamWindow(ctk.CTkToplevel):
             if identity.allows("transfer_owner")[0]:
                 self._button("Transfer Ownership", lambda: self.app.transfer_owner(self, self._selected()), PURPLE,
                              PURPLE_HOVER, 150)
+        if identity.allows("manage_settings")[0]:
+            self._button("Vault Settings...", lambda: self.app.edit_vault_settings(self), PURPLE, PURPLE_HOVER, 140)
         self._button("Who am I?", self.app.who_am_i)
         self._button("Signing...", lambda: SigningDialog(self.app, self.app.repo()))
         if self.draft is not None and (identity.allows("manage_people")[0] or identity.allows("manage_workflows")[0]):
@@ -3725,6 +3786,8 @@ class App(ctk.CTk):
         """Redraw the list using the search box and filters. Returns how many rows are shown."""
         rows = logic.filter_rows(self.rows, self.search.get(), self.view.get(), bool(self.void_box.get()))
         self.ticked &= {str(row.pn) for row in self.rows}                     # parts that no longer exist lose their tick
+        if not self.void_box.get():                                           # so do void parts that are now hidden
+            self.ticked -= {str(row.pn) for row in self.rows if row.kind == "void"}
         previous = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
         for row in rows:
@@ -4081,6 +4144,20 @@ class App(ctk.CTk):
         if problem:
             messagebox.showwarning("Team", problem, parent=window)
 
+    def edit_vault_settings(self, window):
+        if not self._may("manage_settings"):
+            return
+        repo = self.repo()
+        try:
+            current = config.get_commit_style(repo)
+        except config.ConfigError:
+            current = "per_part"
+        style = VaultSettingsDialog(window, current).show()
+        if style is None or style == current:
+            return
+        self.run_task(lambda: vault_settings.edit(repo, commit_style=style), "Vault settings saved",
+                      on_success=lambda changed: window.refresh() if hasattr(window, "refresh") else None)
+
     def edit_workflow(self, window):
         if not self._may("manage_workflows") or window.draft is None:
             return
@@ -4129,9 +4206,11 @@ class App(ctk.CTk):
         self.run_task(work, "Saved the team changes", on_success=self._team_changed, refresh=False)
 
     def _run_batch(self, action, plan, func):
-        repo = self.repo()
+        """Run an engine call for every planned part together: func(repo, parts) -> (done, failed), which does
+        one download and one upload for the lot."""
+        repo, targets = self.repo(), list(plan.targets)
         self.run_task(
-            lambda: logic.run_batch(plan.targets, lambda pn: func(repo, pn)),
+            lambda: func(repo, targets),
             "", on_success=lambda result: self._after_batch(action, plan, result))
 
     def _after_batch(self, action, plan, result):
@@ -4159,7 +4238,7 @@ class App(ctk.CTk):
     def check_out(self):
         plan = self._plan("checkout")
         if plan:
-            self._run_batch("checkout", plan, engine.checkout)
+            self._run_batch("checkout", plan, engine.checkout_many)
 
     def _ask_comment_and_check_in(self, action, plan, allow_unchanged=frozenset()):
         """Ask for a comment, then check in (or save progress on) the planned parts."""
@@ -4169,9 +4248,8 @@ class App(ctk.CTk):
             return
         comment = comment.strip() or "Update"
         reader = references.make_reader(log=lambda text: self.queue.put(("log", text)))
-        self._run_batch(action, plan, lambda repo, pn: engine.checkin(
-            repo, pn, comment, keep_lock=keep_lock, allow_unchanged=(pn in allow_unchanged),
-            references_reader=reader))
+        self._run_batch(action, plan, lambda repo, pns: engine.checkin_many(
+            repo, pns, comment, keep_lock=keep_lock, allow_unchanged=allow_unchanged, references_reader=reader))
 
     def _check_in(self, keep_lock):
         action = "save" if keep_lock else "checkin"
@@ -4184,7 +4262,7 @@ class App(ctk.CTk):
         # Check In: first look for parts with nothing to upload, and ask before going ahead.
         repo = self.repo()
         self.run_task(
-            lambda: [(pn, engine.change_report(repo, pn)) for pn in plan.targets], "",
+            lambda: engine.change_reports(repo, plan.targets), "",
             on_success=lambda reports: self._confirm_unchanged(plan, reports),
             refresh=False, is_refresh=True)
 
@@ -4214,30 +4292,34 @@ class App(ctk.CTk):
             return
         if not messagebox.askyesno("Undo checkout", logic.undo_prompt(plan.targets)):
             return
-        self._run_batch("undo", plan, engine.undo_checkout)
+        self._run_batch("undo", plan, engine.undo_checkout_many)
 
     def release(self):
         plan = self._plan("release")
         if not plan:
             return
-        if self._workflow_start("release", plan) or not self._one_part_only("release", plan):
+        if self._workflow_start("release", plan):
             return
-        repo, pn = self.repo(), plan.targets[0]
+        repo, pns = self.repo(), list(plan.targets)
         # Step 1: find out exactly what would be released. Step 2: ask. Step 3: do it.
-        self.run_task(lambda: engine.release_plan(repo, pn), "Checked what a release would include",
-                      on_success=lambda release_plan: self._confirm_release(repo, release_plan),
-                      refresh=False)
+        self.run_task(lambda: engine.release_plans(repo, pns), "Checked what a release would include",
+                      on_success=lambda plans: self._confirm_release(repo, plans), refresh=False)
 
-    def _confirm_release(self, repo, release_plan):
-        pn = release_plan.pn
-        if not release_plan.ok:
-            messagebox.showwarning(
-                "Can't release yet",
-                f"{pn} can't be released yet:\n\n" + "\n".join("- " + p for p in release_plan.problems))
+    def _confirm_release(self, repo, plans):
+        good, bad = [p for p in plans if p.ok], [p for p in plans if not p.ok]
+        if not good:
+            messagebox.showwarning("Can't release yet", logic.plans_problem_text(bad, "released"))
             return
-        if not messagebox.askokcancel(f"Release {pn}", logic.release_confirm_text(release_plan)):
+        if len(plans) == 1:
+            title, text = f"Release {good[0].pn}", logic.release_confirm_text(good[0])
+        else:
+            title, text = f"Release {len(good)} parts", logic.release_many_confirm_text(good, bad)
+        if not messagebox.askokcancel(title, text):
             return
-        self.run_task(lambda: engine.release(repo, pn), f"Released {pn}")
+        pns = [p.pn for p in good]
+        skipped = [(p.pn, p.problems[0]) for p in bad]
+        self.run_task(lambda: engine.release_many(repo, pns), "",
+                      on_success=lambda result: self._after_batch("release", logic.ActionPlan(pns, skipped), result))
 
     def open_part(self, drawing=False):
         """Open the part's model, or (drawing=True) its drawing, in the program for that file type.
@@ -4430,22 +4512,28 @@ class App(ctk.CTk):
         plan = self._plan("make_cots")
         if not plan:
             return
-        if self._workflow_start("make_cots", plan) or not self._one_part_only("make_cots", plan):
+        if self._workflow_start("make_cots", plan):
             return
-        repo, pn = self.repo(), plan.targets[0]
-        self.run_task(lambda: engine.make_cots_plan(repo, pn), "Checked whether it can be made COTS",
-                      on_success=lambda cots_plan: self._confirm_make_cots(repo, cots_plan),
-                      refresh=False)
+        repo, pns = self.repo(), list(plan.targets)
+        self.run_task(lambda: engine.make_cots_plans(repo, pns), "Checked whether they can be made COTS",
+                      on_success=lambda plans: self._confirm_make_cots(repo, plans), refresh=False)
 
-    def _confirm_make_cots(self, repo, cots_plan):
-        pn = cots_plan.pn
-        if not cots_plan.ok:
-            messagebox.showwarning("Can't make COTS yet", logic.make_cots_problem_text(pn, cots_plan.problems))
+    def _confirm_make_cots(self, repo, plans):
+        good, bad = [p for p in plans if p.ok], [p for p in plans if not p.ok]
+        if not good:
+            messagebox.showwarning("Can't make COTS yet", logic.plans_problem_text(bad, "made COTS"))
             return
-        if not messagebox.askokcancel(f"Make {pn} COTS",
-                                      logic.make_cots_confirm_text(pn, cots_plan.name, cots_plan.files)):
+        if len(plans) == 1:
+            title = f"Make {good[0].pn} COTS"
+            text = logic.make_cots_confirm_text(good[0].pn, good[0].name, good[0].files)
+        else:
+            title, text = f"Make {len(good)} parts COTS", logic.make_cots_many_confirm_text(good, bad)
+        if not messagebox.askokcancel(title, text):
             return
-        self.run_task(lambda: engine.make_cots(repo, pn), f"{pn} is now a COTS part")
+        pns = [p.pn for p in good]
+        skipped = [(p.pn, p.problems[0]) for p in bad]
+        self.run_task(lambda: engine.make_cots_many(repo, pns), "",
+                      on_success=lambda result: self._after_batch("make_cots", logic.ActionPlan(pns, skipped), result))
 
     def _ask_reason(self, text, title):
         """Ask for a reason. Returns None if cancelled or left blank (and says so)."""
@@ -4461,35 +4549,47 @@ class App(ctk.CTk):
         plan = self._plan("reopen")
         if not plan:
             return
-        if self._workflow_start("reopen", plan) or not self._one_part_only("reopen", plan):
+        if self._workflow_start("reopen", plan):
             return
-        repo, pn = self.repo(), plan.targets[0]
-        if self.rows_by_pn[pn].kind == "cots" and not messagebox.askyesno(
-                "Unrelease COTS part", logic.reopen_cots_warning(pn)):
+        repo, pns = self.repo(), list(plan.targets)
+        cots = [pn for pn in pns if self.rows_by_pn[pn].kind == "cots"]
+        if cots and not messagebox.askyesno("Unrelease COTS part" + ("s" if len(cots) > 1 else ""),
+                                            logic.reopen_cots_warning(cots)):
             return
-        reason = self._ask_reason(f"Why is {pn} being unreleased?", "Unrelease")
+        what = str(pns[0]) if len(pns) == 1 else f"these {len(pns)} parts"
+        reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being unreleased?", "Unrelease")
         if reason:
-            self.run_task(lambda: engine.reopen(repo, pn, reason), f"Unreleased {pn}")
+            self.run_task(lambda: engine.reopen_many(repo, pns, reason), "",
+                          on_success=lambda result: self._after_batch("reopen", plan, result))
 
     def void(self):
         plan = self._plan("void")
         if not plan:
             return
-        if self._workflow_start("void", plan) or not self._one_part_only("void", plan):
+        if self._workflow_start("void", plan):
             return
-        repo, pn = self.repo(), plan.targets[0]
-        problem = logic.void_problem(self.rows_by_pn[pn])
-        if problem:
-            messagebox.showwarning("Can't void", problem)
+        repo = self.repo()
+        pns, skipped = [], list(plan.skipped)
+        for pn in plan.targets:
+            problem = logic.void_problem(self.rows_by_pn[pn])
+            if problem:
+                skipped.append((pn, problem))
+            else:
+                pns.append(pn)
+        if not pns:
+            messagebox.showwarning("Can't void", "\n\n".join(why for _pn, why in skipped))
             return
-        reason = self._ask_reason(f"Why is {pn} being voided?", "Void")
+        what = str(pns[0]) if len(pns) == 1 else f"these {len(pns)} parts"
+        reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being voided?", "Void")
         if not reason:
             return
         if not messagebox.askyesno(
-                "Void part",
-                f"Void {pn}?\n\nIts number will never be used again, and it can't be checked out."):
+                "Void part" + ("s" if len(pns) != 1 else ""),
+                f"Void {pns[0]}?\n\nIts number will never be used again, and it can't be checked out."
+                if len(pns) == 1 else logic.void_many_confirm_text(pns)):
             return
-        self.run_task(lambda: engine.void(repo, pn, reason), f"Voided {pn}")
+        self.run_task(lambda: engine.void_many(repo, pns, reason), "",
+                      on_success=lambda result: self._after_batch("void", logic.ActionPlan(pns, skipped), result))
 
     def show_history(self, event=None):
         if event is not None and self.tree.identify_column(event.x) == "#1":

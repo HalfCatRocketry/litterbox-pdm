@@ -57,7 +57,7 @@ ACCESS_LABEL = {OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member"}
 
 # What read-only people may still do
 READ_ACTIONS = frozenset({"open", "open_drawing", "references", "history", "view"})
-ADMIN_ACTIONS = frozenset({"manage_people", "manage_workflows", "override_release"})
+ADMIN_ACTIONS = frozenset({"manage_people", "manage_workflows", "manage_settings", "override_release"})
 OWNER_ACTIONS = frozenset({"transfer_owner"})
 
 STANDARD_ROLES = ["Responsible Engineer", "Manufacturing", "Quality", "Analysis", "Manager", "Chief"]

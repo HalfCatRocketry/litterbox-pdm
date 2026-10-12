@@ -20,6 +20,13 @@ from datetime import datetime, timezone
 STORE = os.environ["LFS_STORE"]
 USER = os.environ["LFS_USER"]
 
+try:                                # Litterbox runs several lock commands at once; a real server handles each as one step
+    import fcntl
+    _guard = open(STORE + ".guard", "w")
+    fcntl.flock(_guard, fcntl.LOCK_EX)          # released when this process ends
+except ImportError:                 # not Linux: the tests that use this fake don't run there
+    pass
+
 
 def load():
     try:

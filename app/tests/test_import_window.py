@@ -429,7 +429,7 @@ class WorkflowWiring(unittest.TestCase):
         return [call for call in self.box.calls if call[0] == name]
 
     def targets(self, *pns):
-        self.app._plan = lambda action: self.SimpleNamespace(targets=list(pns))
+        self.app._plan = lambda action: self.SimpleNamespace(targets=list(pns), skipped=[])
 
     def test_release_in_a_vault_with_a_workflow_opens_the_workflow_window(self):
         self.targets("HCR-00001-001", "HCR-00002-001")
@@ -473,27 +473,57 @@ class WorkflowWiring(unittest.TestCase):
                 getattr(self.app, method)()
                 self.assertEqual(opened, [action])
 
+    def plan(self, n, ok=True, problems=()):
+        return self.SimpleNamespace(pn=f"HCR-0000{n}-001", name="Upright", files=["cad/a.SLDPRT"], warnings=[],
+                                    problems=list(problems), ok=ok)
+
     def test_without_a_workflow_release_works_as_before(self):
         self.templates = {}
         released = []
-        replace(self, self.gui.engine, "release", lambda repo, pn: released.append(pn))
-        self.app._confirm_release("C:/vault", self.SimpleNamespace(pn="HCR-00001-001", name="Upright",
-                                                                   files=["cad/a.SLDPRT"], warnings=[], problems=[],
-                                                                   ok=True))
+        replace(self, self.gui.engine, "release_many", lambda repo, pns: released.append(pns) or ([], []))
+        self.app._confirm_release("C:/vault", [self.plan(1)])
         self.tasks.pop()[0]()
-        self.assertEqual(released, ["HCR-00001-001"])
+        self.assertEqual(released, [["HCR-00001-001"]])
 
-    def test_without_a_workflow_several_parts_are_refused(self):
+    def test_without_a_workflow_several_parts_are_released_together(self):
         self.templates = {}
         self.targets("HCR-00001-001", "HCR-00002-001")
         self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001")}
+        looked = []
+        replace(self, self.gui.engine, "release_plans", lambda repo, pns: looked.append(pns) or "plans")
         self.app.release()
-        self.assertEqual(self.tasks, [])
-        self.assertIn("Select just one part", self.said[-1])
+        work, _done, on_success = self.tasks.pop()
+        self.assertEqual(work(), "plans")
+        self.assertEqual(looked, [["HCR-00001-001", "HCR-00002-001"]])
+
+        released = []
+        replace(self, self.gui.engine, "release_many", lambda repo, pns: released.append(pns) or ([], []))
+        self.app._confirm_release("C:/vault", [self.plan(1), self.plan(2), self.plan(3, False, ["Checked out by Bea."])])
+        question = self.shown("askokcancel")[-1][1]
+        self.assertIn("Release these 2 parts", question[1])
+        self.assertIn("HCR-00003-001: Checked out by Bea.", question[1])      # the one that can't go is named
+        self.tasks.pop()[0]()
+        self.assertEqual(released, [["HCR-00001-001", "HCR-00002-001"]])      # and left out
+
+    def test_void_and_unrelease_ask_one_reason_for_all_the_parts(self):
+        self.templates = {}
+        self.targets("HCR-00001-001", "HCR-00002-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001")}
+        self.app._ask_reason = lambda text, title: "Because"
+        got = []
+        for name in ("void_many", "reopen_many"):
+            replace(self, self.gui.engine, name, lambda repo, pns, reason, name=name: got.append((name, pns, reason))
+                    or ([], []))
+        self.app.void()
+        self.tasks.pop()[0]()
+        self.app.reopen()
+        self.tasks.pop()[0]()
+        pair = ["HCR-00001-001", "HCR-00002-001"]
+        self.assertEqual(got, [("void_many", pair, "Because"), ("reopen_many", pair, "Because")])
 
     def test_blockers_are_shown_instead_of_asking(self):
-        self.app._confirm_release("C:/vault", self.SimpleNamespace(
-            pn="HCR-00001-001", problems=["It is checked out by Bea."], ok=False))
+        self.app._confirm_release("C:/vault", [self.SimpleNamespace(
+            pn="HCR-00001-001", problems=["It is checked out by Bea."], ok=False)])
         self.assertEqual(self.tasks, [])
         self.assertIn("checked out by Bea", self.shown("showwarning")[0][1][1])
 
@@ -1035,6 +1065,21 @@ class ListAndFilenameWiring(unittest.TestCase):
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
                          ["\u2610", "00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
+
+    def test_a_voided_part_that_is_hidden_loses_its_tick(self):
+        from litterbox_engine import PartStatus
+        voided = PartStatus(self.pn, "Bracket", "void", "Void", "void")
+        for shown, expected in ((0, set()), (1, {"HCR-00007-001"})):
+            app = self.gui.App.__new__(self.gui.App)
+            app.rows = [voided]
+            app.search = types.SimpleNamespace(get=lambda: "")
+            app.view = types.SimpleNamespace(get=lambda: "All")
+            app.void_box = types.SimpleNamespace(get=lambda shown=shown: shown)
+            app.ticked = {"HCR-00007-001"}
+            app.tree = SortableFakeTree(["tick", "pn", "name", "description", "cots", "rev", "state", "files"])
+            app.sorter = self.gui.TableSorter(app.tree, [])
+            app._render()
+            self.assertEqual(app.ticked, expected)
 
     def test_search_finds_a_part_by_the_short_or_the_full_number(self):
         for text in ("00007-001", "HCR-00007-001"):

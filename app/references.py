@@ -396,9 +396,9 @@ def replace_references(repo, replacements, comment="Updated to the latest releas
     """Point assemblies that are still in work at the latest released revision of the parts they use.
 
     For each assembly: if nobody has it checked out, Litterbox checks it out, changes it, and checks it in
-    (one commit). If you already have it checked out, the change is made in your copy and left for you to
+    (one commit each). If you already have it checked out, the change is made in your copy and left for you to
     check in. If someone else has it, it is skipped. A failure on one assembly never stops the others and
-    never leaves it half done.
+    never leaves it half done. All the check-outs share one download and all the check-ins share one upload.
     Returns a ReplaceResult per assembly.
     """
     eng.validate_repo(repo)
@@ -407,36 +407,30 @@ def replace_references(repo, replacements, comment="Updated to the latest releas
         by_parent.setdefault(item.parent, []).append(item)
 
     owns_backend = backend is None
-    results = []
+    results = {}
     try:
         if owns_backend and by_parent:
             backend = _new_backend()
         reader = make_reader(backend, log)
         with _com_thread():
-            for parent in sorted(by_parent):
-                results.append(_replace_in_one(repo, parent, by_parent[parent], comment, backend, reader, log))
+            _replace_in_all(repo, by_parent, comment, backend, reader, log, results)
     finally:
         if owns_backend and backend is not None:
             backend.close()
-    return results
+    return [results[parent] for parent in sorted(by_parent) if parent in results]
 
 
-def _replace_in_one(repo, parent, items, comment, backend, reader, log):
-    user_checked_out = False
-    we_checked_out = False
+def _plan_replacement(repo, parent, items, locks):
+    """What to change in one assembly, worked out before anything is locked. Returns a ReplaceResult if there is
+    nothing to do (or it can't be done), else (revision, edits, names, user_checked_out)."""
     try:
         record = registry.load(repo, parent)
         if record.status != registry.STATUS_IN_WORK or record.cots:
             return ReplaceResult(parent, "skipped", f"Rev {record.revision} is {record.status}, so it can't be changed.")
-        revision = record.revision
-        record_rel = eng.record_relpath(parent)
-        locks = eng.get_locks(repo, strict=True)
-        lock = locks.get(record_rel.lower())
+        lock = locks.get(eng.record_relpath(parent).lower())
         if lock and lock[0] != "you":
             return ReplaceResult(parent, "skipped", f"Checked out by {lock[1]}.")
-        user_checked_out = bool(lock)
 
-        # Work out the edits first, before anything is locked
         edits, names = [], []
         for item in items:
             child_record = registry.load(repo, item.child)
@@ -454,41 +448,85 @@ def _replace_in_one(repo, parent, items, comment, backend, reader, log):
             names.append(f"{item.child} Rev {item.old_revision} -> {latest}")
         if not edits:
             return ReplaceResult(parent, "skipped", "Nothing to change.")
-
-        if not user_checked_out:
-            log(f"Checking out {parent} to update its references")
-            eng.checkout(repo, parent)
-            we_checked_out = True
-
-        # checkout pulls, so look again at what is on disk now
-        files = [f for f in registry.cad_files(repo, parent, revision) if _ext(f) in ASSEMBLY_EXTENSIONS]
-        if not files:
-            raise ReferencesError(f"{parent} has no assembly file in Rev {revision}.")
-        changed = 0
-        for rel in files:
-            log(f"Updating {_name(rel)}")
-            changed += _repoint_file(repo, rel, edits, backend)
-        if not changed:
-            raise ReferencesError("None of those parts are in the assembly file any more. Check In the assembly "
-                                  "so its list of parts is refreshed.")
+        return record.revision, edits, names, bool(lock)
     except Exception as e:
-        if we_checked_out:
-            try:
-                eng.undo_checkout(repo, parent)
-            except Exception as undo_error:
-                log(f"WARNING: could not undo the check-out of {parent}: {undo_error}")
         return ReplaceResult(parent, "failed", str(e))
 
-    if user_checked_out:
-        return ReplaceResult(parent, "left_checked_out",
-                             "Changed in your copy. Check it in to save the change.", names)
+
+def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
+    jobs = {}
     try:
-        eng.checkin(repo, parent, comment, references_reader=reader)
-    except Exception as e:
-        log(f"WARNING: the change to {parent} could not be checked in: {e}")
-        return ReplaceResult(parent, "left_checked_out",
-                             f"Changed and still checked out to you, but the check-in failed: {e}", names)
-    return ReplaceResult(parent, "done", "Updated and checked in.", names)
+        locks = eng.get_locks(repo, strict=True)
+    except eng.LitterboxError as e:
+        for parent in by_parent:
+            results[parent] = ReplaceResult(parent, "failed", str(e))
+        return
+    for parent in sorted(by_parent):
+        outcome = _plan_replacement(repo, parent, by_parent[parent], locks)
+        if isinstance(outcome, ReplaceResult):
+            results[parent] = outcome
+        else:
+            jobs[parent] = outcome
+
+    ours = [parent for parent, job in jobs.items() if not job[3]]          # the ones we have to check out
+    if ours:
+        log("Checking out " + ", ".join(map(str, ours)) + " to update their references")
+        try:
+            _done, failed = eng.checkout_many(repo, ours)
+        except Exception as e:
+            failed = [(parent, str(e)) for parent in ours]
+        for parent, why in failed:
+            if parent in jobs:
+                results[parent] = ReplaceResult(parent, "failed", why)
+                del jobs[parent]
+                ours.remove(parent)
+
+    undo = []
+    for parent, (revision, edits, names, user_checked_out) in list(jobs.items()):
+        try:
+            files = [f for f in registry.cad_files(repo, parent, revision) if _ext(f) in ASSEMBLY_EXTENSIONS]
+            if not files:
+                raise ReferencesError(f"{parent} has no assembly file in Rev {revision}.")
+            changed = 0
+            for rel in files:
+                log(f"Updating {_name(rel)}")
+                changed += _repoint_file(repo, rel, edits, backend)
+            if not changed:
+                raise ReferencesError("None of those parts are in the assembly file any more. Check In the assembly "
+                                      "so its list of parts is refreshed.")
+        except Exception as e:
+            results[parent] = ReplaceResult(parent, "failed", str(e))
+            del jobs[parent]
+            if parent in ours:
+                undo.append(parent)
+                ours.remove(parent)
+    if undo:
+        try:
+            eng.undo_checkout_many(repo, undo)
+        except Exception as e:
+            log(f"WARNING: could not undo the check-out of {', '.join(map(str, undo))}: {e}")
+
+    for parent, (_revision, _edits, names, user_checked_out) in jobs.items():
+        if user_checked_out:
+            results[parent] = ReplaceResult(parent, "left_checked_out",
+                                            "Changed in your copy. Check it in to save the change.", names)
+    if ours:
+        try:
+            _done, failed = eng.checkin_many(repo, ours, comment, references_reader=reader)
+        except Exception as e:
+            failed = [(parent, str(e)) for parent in ours]
+        failures = dict(failed)
+        notice = failures.pop("Locks", None)          # saved, but a lock could not be released
+        for parent in ours:
+            if parent in failures:
+                log(f"WARNING: the change to {parent} could not be checked in: {failures[parent]}")
+                results[parent] = ReplaceResult(
+                    parent, "left_checked_out",
+                    f"Changed and still checked out to you, but the check-in failed: {failures[parent]}", jobs[parent][2])
+            elif notice:
+                results[parent] = ReplaceResult(parent, "left_checked_out", notice, jobs[parent][2])
+            else:
+                results[parent] = ReplaceResult(parent, "done", "Updated and checked in.", jobs[parent][2])
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +543,7 @@ def rescan(repo, pns=None, backend=None, log=print):
     """
     eng.validate_repo(repo)
     owns = backend is None
-    results = {}
+    results, edits = {}, {}
     try:
         index = registry.cad_index(repo)
         locks = eng.get_locks(repo, strict=True)
@@ -522,12 +560,28 @@ def rescan(repo, pns=None, backend=None, log=print):
             try:
                 if backend is None:
                     backend = _new_backend()
-                results[pn] = _rescan_one(repo, pn, revisions, backend)
+                outcome = _rescan_one(repo, pn, revisions, backend)
             except eng.LitterboxError as e:
-                results[pn] = f"skipped: {e}"
+                outcome = f"skipped: {e}"
             except Exception as e:
-                results[pn] = f"skipped: {e}"
-            log(f"{pn}: {results[pn]}")
+                outcome = f"skipped: {e}"
+            if isinstance(outcome, tuple):
+                edits[pn] = outcome[1]                     # saved all together below
+            else:
+                results[pn] = outcome
+                log(f"{pn}: {results[pn]}")
+        if edits:                                           # one download and one upload for every record
+            try:
+                batch = eng._edit_records(repo, [(pn, "checkin", edit, f"{pn}: Updated list of parts used")
+                                                 for pn, edit in edits.items()])
+                errors, notice = batch.errors, batch.notice
+            except eng.LitterboxError as e:
+                errors, notice = {pn: e for pn in edits}, ""
+            if notice:
+                log(notice)
+            for pn in edits:
+                results[pn] = f"skipped: {errors[pn]}" if pn in errors else "updated"
+                log(f"{pn}: {results[pn]}")
     finally:
         if owns and backend is not None:
             backend.close()
@@ -557,5 +611,4 @@ def _rescan_one(repo, pn, revisions, backend):
         return registry.add_event(record, "references_updated", user,
                                   references={rev: record.references.get(rev, []) for rev in changed})
 
-    eng._edit_record(repo, pn, "checkin", edit, f"{pn}: Updated list of parts used")
-    return "updated"
+    return "edit", edit

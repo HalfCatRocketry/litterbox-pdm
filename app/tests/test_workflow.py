@@ -393,6 +393,28 @@ class TestSigning(Fixture, unittest.TestCase):
         released = [e for e in self.record().history if e["event"] == "released"][-1]
         self.assertEqual(released["signoffs"], ["Alex Smith", "Bea Jones"])
 
+    def test_a_batch_is_uploaded_once_per_step_not_once_per_part(self):
+        self.second_part()
+        self.set_template()
+        seen, real = [], eng.run
+
+        def recording(command, repo, quiet=False):
+            seen.append(" ".join(command))
+            return real(command, repo, quiet)
+
+        replace_run = mock.patch.object(eng, "run", recording)
+        with replace_run:
+            self.request(pns=(PART, PART2))                       # one upload for the request
+            requested = sum(1 for c in seen if c == "git push")
+            self.do("Alex", wf.sign_off, [PART, PART2])           # one for Alex's signatures
+            self.get_latest("Bea")
+            self.do("Bea", wf.sign_off, [PART, PART2])            # one for hers, one for the release itself
+        self.assertEqual(requested, 1)
+        self.assertEqual(sum(1 for c in seen if c == "git push"), 4)
+        self.assertEqual(sum(1 for c in seen if c.startswith("git commit")), 4)      # one commit per step, not per part
+        for pn in (PART, PART2):
+            self.assertEqual(self.record(pn).status, registry.STATUS_RELEASED)
+
     def test_a_batch_is_signed_once_for_every_part(self):
         self.second_part()
         self.request(pns=(PART, PART2))
@@ -422,12 +444,12 @@ class TestSigning(Fixture, unittest.TestCase):
         self.request()
         self.do("Alex", wf.sign_off, [PART])
         self.get_latest("Bea")
-        real = wf.complete
-        wf.complete = lambda repo, pn: (_ for _ in ()).throw(eng.LitterboxError("offline"))
+        real = wf._finish_many
+        wf._finish_many = lambda repo, pns, **k: (_ for _ in ()).throw(eng.LitterboxError("offline"))
         try:
             r = self.do("Bea", wf.sign_off, [PART])
         finally:
-            wf.complete = real
+            wf._finish_many = real
         self.assertEqual((r.signed, r.completed, r.errors), ([PART], [], {PART: "offline"}))
         self.get_latest("Alex")
         row = next(x for x in self.do("Alex", eng.get_status) if x.pn == PART)

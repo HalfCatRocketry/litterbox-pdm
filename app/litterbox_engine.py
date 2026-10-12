@@ -38,6 +38,8 @@ import os
 import stat
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -141,6 +143,8 @@ def run(command, repo, quiet=False):
     except FileNotFoundError:
         raise LitterboxError("Could not run 'git'. Is Git installed?")
     elapsed = time.monotonic() - started
+    if DEBUG:
+        _note_time(command, elapsed)
     if DEBUG and elapsed >= SLOW_SECONDS:                         # in debug mode, slow commands are logged even if quiet
         LOG(f"(slow: {elapsed:.1f}s) " + " ".join(command))
     if result.returncode != 0:
@@ -150,6 +154,45 @@ def run(command, repo, quiet=False):
                                      "nothing to save.")
         raise LitterboxError(f"Command failed: {' '.join(command)}\n\n{details}")
     return result.stdout.strip()
+
+
+# Debug mode: how long each kind of command took, so a slow batch can be explained (see _timed).
+_TIMES = {}
+_TIMES_LOCK = threading.Lock()
+
+
+def _note_time(command, elapsed):
+    key = " ".join(command[:3] if command[:2] == ["git", "lfs"] else command[:2])
+    with _TIMES_LOCK:
+        total, count = _TIMES.get(key, (0.0, 0))
+        _TIMES[key] = (total + elapsed, count + 1)
+
+
+def _timed(label):
+    """Decorator for the batch functions: in debug mode, log how long the batch took and where the time went, e.g.
+    'Timing: check in on 20 part(s) took 31.2s. git commit x20 = 19.8s; git push x1 = 6.1s; ...'. Commands that
+    run side by side (locks) add up to more than the total."""
+    def decorate(func):
+        @wraps(func)
+        def wrapper(repo, things, *args, **kwargs):
+            if not DEBUG:
+                return func(repo, things, *args, **kwargs)
+            with _TIMES_LOCK:
+                before = dict(_TIMES)
+            started = time.monotonic()
+            try:
+                return func(repo, things, *args, **kwargs)
+            finally:
+                total = time.monotonic() - started
+                with _TIMES_LOCK:
+                    after = dict(_TIMES)
+                spent = sorted(((after[key][0] - before.get(key, (0.0, 0))[0],
+                                 after[key][1] - before.get(key, (0.0, 0))[1], key) for key in after), reverse=True)
+                parts = "; ".join(f"{key} x{count} = {seconds:.1f}s" for seconds, count, key in spent if count)
+                LOG(f"Timing: {label} on {len(things) if hasattr(things, '__len__') else 1} part(s) took "
+                    f"{total:.1f}s. {parts}")
+        return wrapper
+    return decorate
 
 
 def validate_repo(repo):
@@ -410,32 +453,90 @@ def _lock(repo, path, label):
         raise
 
 
+LOCK_WORKERS = 6        # git-lfs locks one file per command, so several commands run at the same time
+
+
+def _parallel(func, items):
+    """[(result, error)] for func(item) on each item, several at a time. Only LitterboxError is caught."""
+    items = list(items)
+
+    def call(item):
+        try:
+            return func(item), None
+        except LitterboxError as e:
+            return None, e
+
+    if len(items) <= 1:
+        return [call(item) for item in items]
+    with ThreadPoolExecutor(max_workers=min(LOCK_WORKERS, len(items))) as pool:
+        return list(pool.map(call, items))
+
+
+def _lock_many(repo, wanted):
+    """Lock several files at once. `wanted` is [(path, label)]; returns {path: None, or the error}.
+
+    Somebody else's lock is reported as it is. Any other failure (a busy server, say) is tried once more, one at
+    a time, before it counts."""
+    results = _parallel(lambda item: _lock(repo, item[0], item[1]), wanted)
+    outcome = {}
+    for (path, label), (_value, error) in zip(wanted, results):
+        if error is not None and "already checked out" not in str(error):
+            try:
+                _lock(repo, path, label)
+                error = None
+            except LitterboxError as e:
+                error = e
+        outcome[path] = error
+    return outcome
+
+
 def _unlock_mine(repo, paths):
     """Unlock every one of these paths that you hold. Returns [(path, error), ...] for failures."""
     locks = get_locks(repo, strict=True)
-    failed = []
-    for path in paths:
-        if _is_mine(locks, path):
-            try:
-                run(["git", "lfs", "unlock", path], repo)
-            except LitterboxError as e:
-                failed.append((path, str(e)))
-    return failed
+    mine = [path for path in paths if _is_mine(locks, path)]
+    results = _parallel(lambda path: run(["git", "lfs", "unlock", path], repo), mine)
+    return [(path, str(error)) for path, (_value, error) in zip(mine, results) if error is not None]
 
 
 def _force_unlock_quietly(repo, paths):
     """Used when rolling back after an error: release locks, never raise."""
-    for path in paths:
+    paths = list(paths)
+    for path, (_value, error) in zip(paths, _parallel(
+            lambda path: run(["git", "lfs", "unlock", "--force", path], repo), paths)):
+        if error is not None:
+            LOG(f"WARNING: could not release the lock on {path}: {error}")
+
+
+CHUNK = 100             # paths per command, so a long list can't pass the Windows command-line limit
+
+
+def _run_chunked(command, paths, repo, quiet=False):
+    """Run `command + ['--'] + paths` in pieces. Returns the pieces' output joined together."""
+    paths, out = list(paths), []
+    for start in range(0, len(paths), CHUNK):
+        out.append(run(command + ["--"] + paths[start:start + CHUNK], repo, quiet=quiet))
+    return "\n".join(piece for piece in out if piece)
+
+
+def _commit_paths(repo, subject, body, paths):
+    """ONE commit of exactly these paths, however many there are (a list in a file, so it is never split up)."""
+    command = ["git", "commit", "-m", subject] + (["-m", body] if body else [])
+    handle = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8", newline="\n")
+    with handle:
+        handle.write("\n".join(paths) + "\n")
+    try:
+        run(command + [f"--pathspec-from-file={handle.name}"], repo)
+    finally:
         try:
-            run(["git", "lfs", "unlock", "--force", path], repo)
-        except LitterboxError as e:
-            LOG(f"WARNING: could not release the lock on {path}: {e}")
+            os.unlink(handle.name)
+        except OSError:
+            pass
 
 
 def _discard_quietly(repo, paths):
     """Throw away uncommitted changes to tracked files, never raise."""
     try:
-        run(["git", "restore", "--"] + list(paths), repo)
+        _run_chunked(["git", "restore"], paths, repo)
     except LitterboxError as e:
         LOG(f"WARNING: could not restore {', '.join(paths)}: {e}")
 
@@ -494,45 +595,133 @@ class CheckoutResult:
     changed_upstream: list      # files that were updated by the download during check-out
 
 
+@dataclass
+class Batch:
+    """What a batch action did: results and errors by part, plus a note about locks that could not be released."""
+    results: dict = field(default_factory=dict)
+    errors: dict = field(default_factory=dict)
+    notice: str = ""
+
+
+def _unique_pns(pns):
+    seen, unique = set(), []
+    for value in (pns if isinstance(pns, (list, tuple, set)) else [pns]):
+        pn = _as_pn(value)
+        if pn not in seen:
+            seen.add(pn)
+            unique.append(pn)
+    return unique
+
+
+def _single(batch, pn):
+    """The outcome of a batch of one: raise its error, or return its result."""
+    if pn in batch.errors:
+        raise batch.errors[pn]
+    if batch.notice:
+        raise LitterboxError(batch.notice)
+    return batch.results[pn]
+
+
+def _as_lists(batch, pns):
+    """(done, failed) for the window: done is [(pn, result)], failed is [(pn, message)]."""
+    done = [(pn, batch.results[pn]) for pn in pns if pn in batch.results]
+    failed = [(pn, str(batch.errors[pn])) for pn in pns if pn in batch.errors]
+    if batch.notice:
+        failed.append(("Locks", batch.notice))
+    return done, failed
+
+
+@_timed("check out")
+def _checkout_batch(repo, pns):
+    """Check out several parts with one pull: lock every record (several at a time), pull once, lock every part's
+    CAD files, log the check-outs. A part that can't be checked out (somebody has it) is left alone and reported;
+    the others carry on. If something goes wrong for the whole batch, every lock taken is released."""
+    validate_repo(repo)
+    pns = _unique_pns(pns)
+    user = get_user(repo)
+    _check_permission(repo, user, "checkout")
+    batch = Batch()
+    wanted = []
+    for pn in pns:
+        if (Path(repo) / record_relpath(pn)).is_file():
+            wanted.append(pn)
+        else:
+            batch.errors[pn] = LitterboxError(
+                f"There is no record for {pn} in your copy of the vault. Try Get Latest first.")
+    if not wanted:
+        return batch
+
+    got = _lock_many(repo, [(record_relpath(pn), str(pn)) for pn in wanted])        # whoever gets this lock gets the part
+    held = {}                                                                        # pn -> every path locked for it
+    for pn in wanted:
+        error = got[record_relpath(pn)]
+        if error is None:
+            held[pn] = [record_relpath(pn)]
+        else:
+            batch.errors[pn] = error
+    if not held:
+        return batch
+
+    def give_up(pn, error):
+        batch.errors[pn] = error
+        _discard_quietly(repo, [record_relpath(pn)])
+        _force_unlock_quietly(repo, held.pop(pn, []))
+
+    try:
+        before = _head(repo)
+        _pull(repo)                           # lock first, THEN pull: never edit a stale copy
+        index = registry.cad_index(repo)      # after the pull, so new files from others are included
+        plan = {}
+        for pn in list(held):
+            try:
+                record = registry.load(repo, pn)           # reload: it may have changed in the pull
+            except registry.RegistryError as e:
+                give_up(pn, e)
+                continue
+            plan[pn] = (record, index.get(pn, {}).get(record.revision, []))
+
+        got = _lock_many(repo, [(f, str(pn)) for pn, (_record, files) in plan.items() for f in files])
+        for pn, (record, files) in list(plan.items()):
+            held[pn] += [f for f in files if got[f] is None]
+            bad = next((got[f] for f in files if got[f] is not None), None)
+            if bad is not None:
+                give_up(pn, bad)
+                del plan[pn]
+
+        changed = set(_changed_between(repo, before, _head(repo)))
+        for pn, (record, files) in list(plan.items()):
+            try:
+                registry.record_checkout(record, user, files)       # refuses released / void parts
+                registry.save(repo, record)
+            except registry.RegistryError as e:
+                give_up(pn, e)
+                continue
+            batch.results[pn] = CheckoutResult(files, [p for p in files if p in changed])
+    except BaseException:
+        _discard_quietly(repo, [record_relpath(pn) for pn in held])
+        _force_unlock_quietly(repo, [path for paths in held.values() for path in paths])
+        raise
+
+    enforce_read_only(repo)
+    return batch
+
+
 @_converts_errors
 def checkout(repo, pn):
     """Lock a part (record first, then every CAD file), get the latest copy, log the check-out.
 
     If anything fails, every lock taken so far is released again.
     """
-    validate_repo(repo)
     pn = _as_pn(pn)
-    user = get_user(repo)
-    _check_permission(repo, user, "checkout")
+    return _single(_checkout_batch(repo, [pn]), pn)
 
-    record_path = record_relpath(pn)
-    if not (Path(repo) / record_path).is_file():
-        raise LitterboxError(f"There is no record for {pn} in your copy of the vault. Try Get Latest first.")
 
-    locked = []
-    try:
-        _lock(repo, record_path, pn)          # whoever gets this lock gets the part
-        locked.append(record_path)
-
-        before = _head(repo)
-        _pull(repo)                           # lock first, THEN pull: never edit a stale copy
-        record = registry.load(repo, pn)      # reload: it may have changed in the pull
-
-        files = registry.cad_files(repo, pn, record.revision)  # after the pull, so new files from others are included
-        for f in files:
-            _lock(repo, f, pn)
-            locked.append(f)
-
-        registry.record_checkout(record, user, files)   # refuses released / void parts
-        registry.save(repo, record)
-        changed = [p for p in _changed_between(repo, before, _head(repo)) if p in files]
-    except BaseException:
-        _discard_quietly(repo, [record_path])
-        _force_unlock_quietly(repo, locked)
-        raise
-
-    enforce_read_only(repo)
-    return CheckoutResult(files, changed)
+@_converts_errors
+def checkout_many(repo, pns):
+    """checkout() for several parts at once, with one download for all of them. Returns (done, failed): done is
+    [(pn, CheckoutResult)] and failed is [(pn, message)]. A part somebody else has is reported and skipped."""
+    pns = _unique_pns(pns)
+    return _as_lists(_checkout_batch(repo, pns), pns)
 
 
 # ---------------------------------------------------------------------------
@@ -580,10 +769,13 @@ class ChangeReport:
     unpushed: bool              # commits from an earlier failed attempt still need uploading
 
 
-def _change_report(repo, pn, user):
+def _change_report(repo, pn, user, cad=None, modified=None):
+    """`cad` and `modified` may be handed in when several parts are looked at together (they are read once)."""
     record_path = record_relpath(pn)
-    cad = registry.cad_files(repo, pn)
-    modified = get_modified(repo)
+    if cad is None:
+        cad = registry.cad_files(repo, pn)
+    if modified is None:
+        modified = get_modified(repo)
     changed = [f for f in cad if f.lower() in modified]
     record_edited = _record_edited_by_hand(repo, pn, user)
     unpushed = (_count(repo, "@{u}..HEAD", cad + [record_path]) or 0) > 0
@@ -606,6 +798,115 @@ def change_report(repo, pn):
 
 
 @_converts_errors
+def change_reports(repo, pns):
+    """change_report() for several parts, reading the vault's state once. Returns [(pn, ChangeReport)]."""
+    validate_repo(repo)
+    user, modified, index = get_user(repo), get_modified(repo), registry.cad_index(repo)
+    reports = []
+    for pn in _unique_pns(pns):
+        cad = index.get(pn, {}).get(registry.load(repo, pn).revision, [])
+        reports.append((pn, _change_report(repo, pn, user, cad, modified)))
+    return reports
+
+
+def _allowed(allow_unchanged, pn):
+    """allow_unchanged is True/False for every part, or the set of parts that may be checked in unchanged."""
+    if isinstance(allow_unchanged, bool):
+        return allow_unchanged
+    return pn in allow_unchanged
+
+
+@_timed("check in")
+def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader):
+    """Check in (or save progress on) several parts: commit each one, upload them all together, then release the
+    locks. A part with a problem (not yours, nothing changed) is reported and the others carry on. If the upload
+    fails, nothing is unlocked and every commit is kept so the whole thing can be tried again."""
+    validate_repo(repo)
+    pns = _unique_pns(pns)
+    user = get_user(repo)
+    _check_permission(repo, user, "checkin")
+    batch = Batch()
+
+    locks = get_locks(repo, strict=True)
+    modified = get_modified(repo)
+    index = registry.cad_index(repo)
+    groups, cads = {}, {}                                    # the parts to upload: pn -> every path / the CAD files
+    to_commit = []                                           # (pn, message, paths) in the order checked in
+    for pn in pns:
+        try:
+            record_path = record_relpath(pn)
+            record = registry.load(repo, pn)
+            cad = index.get(pn, {}).get(record.revision, [])
+            group = cad + [record_path]
+            if not any(_is_mine(locks, p) for p in group):
+                raise LitterboxError(f"You don't have {pn} checked out.")
+
+            report = _change_report(repo, pn, user, cad, modified)
+            changed = report.changed_files
+            if not report.has_changes and not _allowed(allow_unchanged, pn):
+                if keep_lock:
+                    LOG("No changes to save.")
+                    batch.results[pn] = CheckinResult(False, [])
+                    continue
+                raise NoChangesError(pn, report.unchanged_files)
+
+            # Commit unless the ONLY thing to do is upload commits left over from an earlier failed attempt.
+            if changed or report.record_edited or not report.unpushed:
+                found_references = None
+                if references_reader is not None:
+                    try:
+                        found_references = references_reader(repo, pn, record.revision, changed)
+                    except Exception as e:
+                        LOG(f"WARNING: could not read what {pn} uses: {e}")
+                registry.record_checkin(record, user, changed, comment, references=found_references)
+                registry.save(repo, record)
+                message = f"{pn}: {(comment or '').strip() or 'Update'}"
+                to_commit.append((pn, message, changed + [record_path]))
+            groups[pn], cads[pn] = group, cad
+            batch.results[pn] = CheckinResult(True, changed)
+        except (LitterboxError, registry.RegistryError) as e:
+            batch.errors[pn] = e
+
+    if config.get_commit_style(repo) == "per_batch" and len(to_commit) > 1:
+        # One commit for the whole batch (faster). A failure here fails the batch and keeps the locks.
+        paths = [path for _pn, _message, files in to_commit for path in files]
+        _run_chunked(["git", "add"], paths, repo)
+        subject, body = _batch_message([message for _pn, message, _files in to_commit])
+        _commit_paths(repo, subject, body, paths)
+    else:
+        for pn, message, files in to_commit:
+            try:
+                run(["git", "add", "--"] + files, repo)
+                run(["git", "commit", "-m", message, "--"] + files, repo)
+            except LitterboxError as e:
+                groups.pop(pn, None)
+                cads.pop(pn, None)
+                batch.results.pop(pn, None)
+                batch.errors[pn] = e
+
+    if not groups:
+        return batch
+    _push_with_retry(repo)                                   # one upload for all of them
+
+    if keep_lock:
+        # Brand-new files weren't lockable before they were uploaded. Lock them now.
+        locks = get_locks(repo, strict=True)
+        fresh = [(f, str(pn)) for pn, cad in cads.items() for f in cad if f.lower() not in locks]
+        got = _lock_many(repo, fresh)
+        for pn, cad in cads.items():
+            bad = next((got[f] for f in cad if got.get(f) is not None), None)
+            if bad is not None:
+                batch.errors[pn] = bad
+                batch.results.pop(pn, None)
+    else:
+        failed = _unlock_mine(repo, [path for group in groups.values() for path in group])
+        enforce_read_only(repo)
+        if failed:
+            batch.notice = _unlock_failure_message(failed)
+    return batch
+
+
+@_converts_errors
 def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, references_reader=None):
     """Commit your changes, upload them, then (unless keep_lock) release the locks.
 
@@ -622,57 +923,16 @@ def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, refere
     uses (see references.py), which is stored in the record in the same commit. It returns None
     when there is nothing to update, and any error it raises only costs the update, not the check-in.
     """
-    validate_repo(repo)
     pn = _as_pn(pn)
-    user = get_user(repo)
-    _check_permission(repo, user, "checkin")
+    return _single(_checkin_batch(repo, [pn], comment, keep_lock, allow_unchanged, references_reader), pn)
 
-    record_path = record_relpath(pn)
-    cad = registry.cad_files(repo, pn)
-    group = cad + [record_path]
 
-    locks = get_locks(repo, strict=True)
-    if not any(_is_mine(locks, p) for p in group):
-        raise LitterboxError(f"You don't have {pn} checked out.")
-
-    report = _change_report(repo, pn, user)
-    changed = report.changed_files
-
-    if not report.has_changes and not allow_unchanged:
-        if keep_lock:
-            LOG("No changes to save.")
-            return CheckinResult(False, [])
-        raise NoChangesError(pn, report.unchanged_files)
-
-    # Commit unless the ONLY thing to do is upload commits left over from an earlier failed attempt.
-    if changed or report.record_edited or not report.unpushed:
-        record = registry.load(repo, pn)
-        found_references = None
-        if references_reader is not None:
-            try:
-                found_references = references_reader(repo, pn, record.revision, changed)
-            except Exception as e:
-                LOG(f"WARNING: could not read what {pn} uses: {e}")
-        registry.record_checkin(record, user, changed, comment, references=found_references)
-        registry.save(repo, record)
-        message = f"{pn}: {(comment or '').strip() or 'Update'}"
-        run(["git", "add", "--"] + changed + [record_path], repo)
-        run(["git", "commit", "-m", message, "--"] + changed + [record_path], repo)
-
-    _push_with_retry(repo)
-
-    if keep_lock:
-        # Brand-new files weren't lockable before they were uploaded. Lock them now.
-        locks = get_locks(repo, strict=True)
-        for f in cad:
-            if f.lower() not in locks:
-                _lock(repo, f, pn)
-    else:
-        failed = _unlock_mine(repo, group)
-        enforce_read_only(repo)
-        if failed:
-            raise LitterboxError(_unlock_failure_message(failed))
-    return CheckinResult(True, changed)
+@_converts_errors
+def checkin_many(repo, pns, comment="", keep_lock=False, allow_unchanged=frozenset(), references_reader=None):
+    """checkin() for several parts at once, with one upload for all of them. `allow_unchanged` is the set of parts
+    that may be checked in even though nothing changed. Returns (done, failed) like checkout_many()."""
+    pns = _unique_pns(pns)
+    return _as_lists(_checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader), pns)
 
 
 @_converts_errors
@@ -700,6 +960,50 @@ def edit_details(repo, pn, name, description):
 # Undo check out
 # ---------------------------------------------------------------------------
 
+@_timed("undo checkout")
+def _undo_batch(repo, pns):
+    """Throw away your changes to several parts and release their locks, with one lock list and one restore."""
+    validate_repo(repo)
+    pns = _unique_pns(pns)
+    user = get_user(repo)
+    _check_permission(repo, user, "undo")
+    batch = Batch()
+
+    locks = get_locks(repo, strict=True)
+    index = registry.cad_index(repo)
+    groups = {}
+    for pn in pns:
+        try:
+            record_path = record_relpath(pn)
+            group = index.get(pn, {}).get(registry.load(repo, pn).revision, []) + [record_path]
+            if not any(_is_mine(locks, p) for p in group):
+                raise LitterboxError(f"You don't have {pn} checked out.")
+            if (_count(repo, "@{u}..HEAD", group) or 0) > 0:
+                raise LitterboxError(
+                    f"Some changes to {pn} were already saved on your computer but not uploaded yet.\n"
+                    "Use Check In to upload them. Undo would leave them stranded."
+                )
+            groups[pn] = group
+        except (LitterboxError, registry.RegistryError) as e:
+            batch.errors[pn] = e
+    if not groups:
+        return batch
+
+    everything = [path for group in groups.values() for path in group]
+    tracked = {t.lower() for t in _run_chunked(["git", "ls-files"], everything, repo, quiet=True).splitlines()}
+    to_restore = [p for p in everything if p.lower() in tracked]
+    if to_restore:
+        _run_chunked(["git", "restore"], to_restore, repo)
+    for pn, group in groups.items():
+        batch.results[pn] = [p for p in group if p.lower() not in tracked]       # never uploaded: kept, not deleted
+
+    failed = _unlock_mine(repo, everything)
+    enforce_read_only(repo)
+    if failed:
+        batch.notice = _unlock_failure_message(failed)
+    return batch
+
+
 @_converts_errors
 def undo_checkout(repo, pn):
     """Throw away your changes to a part and release its locks.
@@ -707,35 +1011,15 @@ def undo_checkout(repo, pn):
     The check-out event is discarded along with the changes. Brand-new files you
     created that were never uploaded are NOT deleted. Their names are returned.
     """
-    validate_repo(repo)
     pn = _as_pn(pn)
-    user = get_user(repo)
-    _check_permission(repo, user, "undo")
+    return _single(_undo_batch(repo, [pn]), pn)
 
-    record_path = record_relpath(pn)
-    group = registry.cad_files(repo, pn) + [record_path]
 
-    locks = get_locks(repo, strict=True)
-    if not any(_is_mine(locks, p) for p in group):
-        raise LitterboxError(f"You don't have {pn} checked out.")
-
-    if (_count(repo, "@{u}..HEAD", group) or 0) > 0:
-        raise LitterboxError(
-            f"Some changes to {pn} were already saved on your computer but not uploaded yet.\n"
-            "Use Check In to upload them. Undo would leave them stranded."
-        )
-
-    tracked = {t.lower() for t in run(["git", "ls-files", "--"] + group, repo, quiet=True).splitlines()}
-    to_restore = [p for p in group if p.lower() in tracked]
-    never_uploaded = [p for p in group if p.lower() not in tracked]
-    if to_restore:
-        run(["git", "restore", "--"] + to_restore, repo)
-
-    failed = _unlock_mine(repo, group)
-    enforce_read_only(repo)
-    if failed:
-        raise LitterboxError(_unlock_failure_message(failed))
-    return never_uploaded
+@_converts_errors
+def undo_checkout_many(repo, pns):
+    """undo_checkout() for several parts at once. Returns (done, failed): done is [(pn, never-uploaded files)]."""
+    pns = _unique_pns(pns)
+    return _as_lists(_undo_batch(repo, pns), pns)
 
 
 # ---------------------------------------------------------------------------
@@ -755,10 +1039,45 @@ class ReleasePlan:
         return not self.problems
 
 
+class _Context:
+    """What the checks on several parts share, so a batch looks at the vault once: one fetch, one lock list, one
+    list of modified files, one set of records."""
+
+    def __init__(self, repo):
+        self.repo = repo
+        self._fetched = False
+        self._locks = self._modified = self._records = None
+
+    def fetch(self):
+        if not self._fetched:
+            self._fetched = True
+            try:
+                run(["git", "fetch"], self.repo, quiet=True)
+            except LitterboxError as e:
+                LOG(f"WARNING: could not check the vault for newer changes. {e}")
+
+    def locks(self):
+        if self._locks is None:
+            self._locks = get_locks(self.repo, strict=True)
+        return self._locks
+
+    def modified(self):
+        if self._modified is None:
+            self._modified = get_modified(self.repo)
+        return self._modified
+
+    def records(self):
+        if self._records is None:
+            import references
+            self._records = references.LazyRecords(self.repo)
+        return self._records
+
+
 def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, required_label="in-work",
-              allow_pending=False):
+              allow_pending=False, ctx=None):
     """Shared by release, Make COTS and Revise: the working revision's CAD files, and the reasons
     the part can't go ahead yet (checked out, modified, behind the vault...)."""
+    ctx = ctx or _Context(repo)
     record_path = record_relpath(pn)
     cad = registry.cad_files(repo, pn, record.revision)
     group = cad + [record_path]
@@ -772,17 +1091,14 @@ def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, r
         problems.append("There are no CAD files for it in the cad folder.")
 
     if fetch:   # look at the vault's current state without changing any of your files
-        try:
-            run(["git", "fetch"], repo, quiet=True)
-        except LitterboxError as e:
-            LOG(f"WARNING: could not check the vault for newer changes. {e}")
+        ctx.fetch()
 
-    locks = get_locks(repo, strict=True)
+    locks = ctx.locks()
     owners = sorted({locks[p.lower()][1] for p in group if p.lower() in locks})
     if owners:
         problems.append("It is checked out by " + ", ".join(owners) + ".")
 
-    modified = get_modified(repo)
+    modified = ctx.modified()
     for f in cad:
         if f.lower() in modified:
             problems.append(f"{f} has changes that are not checked in.")
@@ -797,7 +1113,7 @@ def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, r
 
 
 @_converts_errors
-def release_plan(repo, pn, fetch=True, allow_pending=False):
+def release_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     """Work out what a release would freeze and whether anything blocks it.
 
     Show plan.files to the user for confirmation, and plan.problems if it isn't ok.
@@ -805,14 +1121,15 @@ def release_plan(repo, pn, fetch=True, allow_pending=False):
     validate_repo(repo)
     pn = _as_pn(pn)
     record = registry.load(repo, pn)
-    cad, problems = _blockers(repo, pn, record, "released", fetch, allow_pending=allow_pending)
+    ctx = ctx or _Context(repo)
+    cad, problems = _blockers(repo, pn, record, "released", fetch, allow_pending=allow_pending, ctx=ctx)
     if record.cots:
         problems.insert(0, "It is a COTS (purchased) part, which is never released.")
     warnings = []
     rule = config.get_release_rule(repo)
     if rule != "off" and not record.cots:
         import references
-        found = references.release_warnings(repo, pn)
+        found = references.release_warnings(repo, pn, ctx.records())
         if rule == "block":
             problems.extend(found)
         else:
@@ -821,18 +1138,122 @@ def release_plan(repo, pn, fetch=True, allow_pending=False):
 
 
 @_converts_errors
-def make_cots_plan(repo, pn, fetch=True, allow_pending=False):
+def make_cots_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     """Work out whether a part can be turned into a COTS part. Same checks as a release:
     nobody has it checked out, nothing is modified, and your copy is up to date."""
     validate_repo(repo)
     pn = _as_pn(pn)
     record = registry.load(repo, pn)
-    cad, problems = _blockers(repo, pn, record, "made COTS", fetch, allow_pending=allow_pending)
+    cad, problems = _blockers(repo, pn, record, "made COTS", fetch, allow_pending=allow_pending,
+                              ctx=ctx or _Context(repo))
     if record.cots:
         problems.insert(0, "It is already a COTS part.")
     elif record.released_revision or record.revision != pn_module.FIRST_REVISION:
         problems.insert(0, "It has been released or revised, so it is not an unmodified purchased part.")
     return ReleasePlan(pn, record.name, cad, problems)
+
+
+def _batch_message(messages):
+    """(subject, body) of the one commit for several records. Each message looks like 'HCR-00001-001: Voided - why'.
+    One record keeps its own message. Several get a subject saying what was done to how many, and a body with every
+    part's line, so searching the log for a part number still finds it."""
+    if len(messages) == 1:
+        return messages[0], ""
+    what = {message.split(": ", 1)[1] if ": " in message else message for message in messages}
+    subject = f"{len(messages)} parts: {what.pop()}" if len(what) == 1 else f"{len(messages)} parts changed"
+    return subject, "\n".join(messages)
+
+
+@_timed("record change")
+def _edit_records(repo, items, atomic=False):
+    """Change several records with ONE download and ONE upload.
+
+    `items` is [(pn, action, edit, message)]: `action` is the permission needed, `edit(record, user)` changes the
+    record (and raises if the change isn't allowed), `message` is that part's commit message. Every record is
+    locked (several at a time), the vault is pulled once, each edit is applied, and everything is committed and
+    pushed once, then unlocked.
+
+    A part whose edit is refused (or that somebody else has locked) is left as it was and goes in `errors`; the
+    rest carry on. With atomic=True, one refusal stops the whole thing and nothing is changed. If the upload fails,
+    every record is put back, the locks are released and the error is raised. All the records go in ONE commit
+    (several parts: a subject saying what was done to how many, and a line for each part in the body).
+    Returns a Batch: results[pn] is True for each part that was changed.
+    """
+    validate_repo(repo)
+    user = get_user(repo)
+    for action in dict.fromkeys(item[1] for item in items):
+        _check_permission(repo, user, action)
+
+    batch, todo, seen = Batch(), [], set()
+    for pn, _action, edit, message in items:
+        if pn in seen:
+            continue
+        seen.add(pn)
+        path = record_relpath(pn)
+        if (Path(repo) / path).is_file():
+            todo.append((pn, path, edit, message))
+        else:
+            batch.errors[pn] = LitterboxError(
+                f"There is no record for {pn} in your copy of the vault. Try Get Latest first.")
+    if atomic and batch.errors:
+        raise next(iter(batch.errors.values()))
+    if not todo:
+        return batch
+
+    got = _lock_many(repo, [(path, str(pn)) for pn, path, _edit, _message in todo])
+    locked = []
+    for entry in todo:
+        error = got[entry[1]]
+        if error is None:
+            locked.append(entry)
+        else:
+            batch.errors[entry[0]] = error
+    paths = [entry[1] for entry in locked]
+    if atomic and batch.errors:
+        _force_unlock_quietly(repo, paths)
+        raise next(iter(batch.errors.values()))
+    if not locked:
+        return batch
+
+    committed, edited = 0, []
+    try:
+        _pull(repo)
+        for pn, path, edit, message in locked:
+            try:
+                record = registry.load(repo, pn)       # reload after the pull
+                edit(record, user)                     # raises if the change isn't allowed
+                registry.save(repo, record)
+            except (LitterboxError, registry.RegistryError) as e:
+                batch.errors[pn] = e
+                _discard_quietly(repo, [path])
+                continue
+            edited.append((pn, path, message))
+        if atomic and batch.errors:
+            raise next(iter(batch.errors.values()))
+        if edited:
+            edited_paths = [path for _pn, path, _message in edited]
+            _run_chunked(["git", "add"], edited_paths, repo)
+            subject, body = _batch_message([message for _pn, _path, message in edited])
+            _commit_paths(repo, subject, body, edited_paths)    # ONE commit for every record changed
+            committed = 1
+            _push_with_retry(repo)
+    except BaseException:
+        try:
+            if committed:
+                run(["git", "reset", "--soft", f"HEAD~{committed}"], repo)       # take back our unpushed commits
+            _run_chunked(["git", "restore", "--staged", "--worktree"], paths, repo)
+        except LitterboxError as e:
+            LOG(f"WARNING: could not fully undo the change to {', '.join(paths)}: {e}")
+        _force_unlock_quietly(repo, paths)
+        raise
+
+    for pn, _path, _message in edited:
+        batch.results[pn] = True
+    failed = _unlock_mine(repo, paths)
+    enforce_read_only(repo)
+    if failed:
+        batch.notice = _unlock_failure_message(failed)
+    return batch
 
 
 def _edit_record(repo, pn, action, edit, message):
@@ -841,39 +1262,9 @@ def _edit_record(repo, pn, action, edit, message):
     If anything goes wrong the record is put back the way it was and the lock
     is released.
     """
-    validate_repo(repo)
-    user = get_user(repo)
-    _check_permission(repo, user, action)
-
-    record_path = record_relpath(pn)
-    if not (Path(repo) / record_path).is_file():
-        raise LitterboxError(f"There is no record for {pn} in your copy of the vault. Try Get Latest first.")
-
-    _lock(repo, record_path, pn)
-    committed = False
-    try:
-        _pull(repo)
-        record = registry.load(repo, pn)       # reload after the pull
-        edit(record, user)                     # raises if the change isn't allowed
-        registry.save(repo, record)
-        run(["git", "add", "--", record_path], repo)
-        run(["git", "commit", "-m", message, "--", record_path], repo)
-        committed = True
-        _push_with_retry(repo)
-    except BaseException:
-        try:
-            if committed:
-                run(["git", "reset", "--soft", "HEAD~1"], repo)       # take back our unpushed commit
-            run(["git", "restore", "--staged", "--worktree", "--", record_path], repo)
-        except LitterboxError as e:
-            LOG(f"WARNING: could not fully undo the change to {record_path}: {e}")
-        _force_unlock_quietly(repo, [record_path])
-        raise
-
-    failed = _unlock_mine(repo, [record_path])
-    enforce_read_only(repo)
-    if failed:
-        raise LitterboxError(_unlock_failure_message(failed))
+    batch = _edit_records(repo, [(pn, action, edit, message)], atomic=True)
+    if batch.notice:
+        raise LitterboxError(batch.notice)
 
 
 def _one_line(text):
@@ -946,6 +1337,91 @@ def void(repo, pn, reason):
         lambda record, user: registry.mark_void(record, user, reason),
         f"{pn}: Voided - {_one_line(reason)}",
     )
+
+
+def release_plans(repo, pns, allow_pending=False):
+    """release_plan() for several parts, looking at the vault once. A part that can't be read gets a plan with
+    that as its problem."""
+    ctx, plans = _Context(repo), []
+    for pn in _unique_pns(pns):
+        try:
+            plans.append(release_plan(repo, pn, allow_pending=allow_pending, ctx=ctx))
+        except LitterboxError as e:
+            plans.append(ReleasePlan(pn, "", [], [str(e)]))
+    return plans
+
+
+def make_cots_plans(repo, pns, allow_pending=False):
+    """make_cots_plan() for several parts, looking at the vault once."""
+    ctx, plans = _Context(repo), []
+    for pn in _unique_pns(pns):
+        try:
+            plans.append(make_cots_plan(repo, pn, allow_pending=allow_pending, ctx=ctx))
+        except LitterboxError as e:
+            plans.append(ReleasePlan(pn, "", [], [str(e)]))
+    return plans
+
+
+def _plan_batch(repo, plans, action, verb, change, message):
+    """Do `change(record, user, plan)` on every part whose plan is ok, in one go. Returns (done, failed)."""
+    batch, items, by_pn = Batch(), [], {}
+    for plan in plans:
+        if plan.ok:
+            by_pn[plan.pn] = plan
+            items.append((plan.pn, action,
+                          lambda record, user, plan=plan: change(record, user, plan), message.format(pn=plan.pn)))
+        else:
+            batch.errors[plan.pn] = LitterboxError(f"{plan.pn} can't be {verb} yet:\n- " + "\n- ".join(plan.problems))
+    if items:
+        edited = _edit_records(repo, items)
+        batch.results = {pn: by_pn[pn].files for pn in edited.results}
+        batch.errors.update(edited.errors)
+        batch.notice = edited.notice
+    return _as_lists(batch, [plan.pn for plan in plans])
+
+
+@_converts_errors
+def release_many(repo, pns):
+    """release() for several parts with one download and one upload. Call release_plans() first and get the user
+    to confirm. Returns (done, failed): done is [(pn, released files)]."""
+    pns = _unique_pns(pns)
+    _refuse_if_workflow(repo, "release")
+    return _plan_batch(repo, release_plans(repo, pns), "release", "released",
+                       lambda record, user, plan: registry.mark_released(record, user, plan.files), "{pn}: Released")
+
+
+@_converts_errors
+def make_cots_many(repo, pns):
+    """make_cots() for several parts with one download and one upload."""
+    pns = _unique_pns(pns)
+    _refuse_if_workflow(repo, "make_cots")
+    return _plan_batch(repo, make_cots_plans(repo, pns), "make_cots", "made COTS",
+                       lambda record, user, plan: registry.mark_cots(record, user, plan.files), "{pn}: Made COTS")
+
+
+def _reason_batch(repo, pns, action, change, message):
+    """`message(pn)` is each part's commit message."""
+    batch = _edit_records(repo, [(pn, action, change, message(pn)) for pn in pns])
+    batch.results = {pn: None for pn in batch.results}
+    return _as_lists(batch, pns)
+
+
+@_converts_errors
+def reopen_many(repo, pns, reason):
+    """reopen() (Unrelease) for several parts with one download and one upload; one reason for all of them."""
+    pns = _unique_pns(pns)
+    _refuse_if_workflow(repo, "reopen")
+    return _reason_batch(repo, pns, "reopen", lambda record, user: registry.mark_reopened(record, user, reason),
+                         lambda pn: f"{pn}: Unreleased - {_one_line(reason)}")
+
+
+@_converts_errors
+def void_many(repo, pns, reason):
+    """void() for several parts with one download and one upload; one reason for all of them."""
+    pns = _unique_pns(pns)
+    _refuse_if_workflow(repo, "void")
+    return _reason_batch(repo, pns, "void", lambda record, user: registry.mark_void(record, user, reason),
+                         lambda pn: f"{pn}: Voided - {_one_line(reason)}")
 
 
 # ---------------------------------------------------------------------------

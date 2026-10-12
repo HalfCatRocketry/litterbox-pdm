@@ -496,13 +496,13 @@ def _as_pns(pns):
     return [eng._as_pn(p) for p in pns]
 
 
-def _problems(repo, pn, action, reason, fetch):
+def _problems(repo, pn, action, reason, fetch, ctx=None):
     """(problems, files) for starting `action` on this part."""
     if action == RELEASE:
-        plan = eng.release_plan(repo, pn, fetch=fetch)
+        plan = eng.release_plan(repo, pn, fetch=fetch, ctx=ctx)
         return list(plan.problems), list(plan.files)
     if action == MAKE_COTS:
-        plan = eng.make_cots_plan(repo, pn, fetch=fetch)
+        plan = eng.make_cots_plan(repo, pn, fetch=fetch, ctx=ctx)
         return list(plan.problems), list(plan.files)
     record = registry.load(repo, pn)
     if record.pending:
@@ -570,9 +570,9 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
     if not pns:
         raise WorkflowError("Choose at least one part.")
 
-    problems, files = {}, {}
-    for number, pn in enumerate(pns):
-        found, cad = _problems(repo, pn, action, reason, fetch=(number == 0))
+    problems, files, ctx = {}, {}, eng._Context(repo)         # the vault is looked at once for all the parts
+    for pn in pns:
+        found, cad = _problems(repo, pn, action, reason, True, ctx)
         if found:
             problems[pn] = found
         files[pn] = cad
@@ -582,7 +582,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
     hashes = {pn: file_hashes(repo, files[pn]) for pn in pns}
 
     batch_id = uuid.uuid4().hex[:8]
-    started = []
+    items = []
     for pn in pns:
         def edit(record, user, pn=pn):
             if record.pending:
@@ -599,31 +599,14 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
             registry.add_event(record, registry.EVENT_RELEASE_REQUESTED, user, action=action,
                                waiting_on=waiting_on(record.pending), files=list(files[pn]) or None,
                                reason=reason or None)
-        try:
-            eng._edit_record(repo, pn, action, edit, f"{pn}: {label_of(action)} requested")
-            started.append(pn)
-        except (eng.LitterboxError, registry.RegistryError) as e:
-            undone = _undo_started(repo, started, batch_id)
-            more = f" The request was cancelled on {', '.join(map(str, undone))}." if undone else ""
-            raise WorkflowError(f"Could not start the workflow on {pn}:\n\n{e}{more}")
+        items.append((pn, action, edit, f"{pn}: {label_of(action)} requested"))
+    try:
+        batch = eng._edit_records(repo, items, atomic=True)      # all or nothing: one download, one upload
+    except (eng.LitterboxError, registry.RegistryError) as e:
+        raise WorkflowError(f"Could not start the workflow, so nothing was changed:\n\n{e}")
+    if batch.notice:
+        eng.LOG(batch.notice)
     return batch_id
-
-
-def _undo_started(repo, started, batch_id):
-    undone = []
-    for pn in started:
-        def edit(record, user):
-            if record.pending.get("id") == batch_id:
-                registry.add_event(record, registry.EVENT_RELEASE_WITHDRAWN, user,
-                                   action=record.pending.get("action"), reason="the request could not be "
-                                   "started on every part")
-                record.pending = {}
-        try:
-            eng._edit_record(repo, pn, "release", edit, f"{pn}: request cancelled")
-            undone.append(pn)
-        except eng.LitterboxError as e:
-            eng.LOG(f"WARNING: could not cancel the request on {pn}: {e}")
-    return undone
 
 
 @dataclass
@@ -637,11 +620,13 @@ class SignResult:
 @eng._converts_errors
 def sign_off(repo, pns, comment=""):
     """Approve, as the person named, every sign-off waiting for you on these parts. When a part then has all its
-    sign-offs, release / reopen / void happens straight away; if that fails the sign-off is still saved."""
+    sign-offs, release / reopen / void happens straight away; if that fails the sign-off is still saved.
+    All the parts are signed with one download and one upload, and finished together."""
     pns = _as_pns(pns)
     me = _me(repo, "signoff")
     comment = " ".join((comment or "").split())
     result = SignResult()
+    items = []
     for pn in pns:
         try:
             record = registry.load(repo, pn)
@@ -650,9 +635,8 @@ def sign_off(repo, pns, comment=""):
             continue
         if not record.pending or not open_slots(record.pending, me.id):
             continue                                            # nothing left for you here (or already done)
-        batch_id = record.pending.get("id")
 
-        def edit(record, user):
+        def edit(record, user, batch_id=record.pending.get("id")):
             pending = _pending_of(record, batch_id)
             mine = open_slots(pending, me.id)
             if not mine:
@@ -666,19 +650,30 @@ def sign_off(repo, pns, comment=""):
                                roles=[" or ".join(pending["slots"][i]["roles"]) for i in mine],
                                comment=comment or None, waiting_on=waiting_on(pending) or None)
 
-        try:
-            eng._edit_record(repo, pn, "signoff", edit, f"{pn}: signed off")
-            result.signed.append(pn)
-        except (eng.LitterboxError, registry.RegistryError) as e:
-            result.errors[pn] = str(e)
+        items.append((pn, "signoff", edit, f"{pn}: signed off"))
+    if items:
+        batch = eng._edit_records(repo, items)
+        result.signed = list(batch.results)
+        result.errors.update({pn: str(e) for pn, e in batch.errors.items()})
+        if batch.notice:
+            eng.LOG(batch.notice)
+
+    finishing = []
     for pn in result.signed:
         try:
             record = registry.load(repo, pn)
-            if record.pending and is_complete(record.pending) and record.pending["action"] in AUTO_COMPLETE:
-                complete(repo, pn)
-                result.completed.append(pn)
-        except eng.LitterboxError as e:
+        except registry.RegistryError as e:
             result.errors[pn] = str(e)
+            continue
+        if record.pending and is_complete(record.pending) and record.pending["action"] in AUTO_COMPLETE:
+            finishing.append(pn)
+    if finishing:
+        try:
+            done, failed, _files = _finish_many(repo, finishing)
+        except eng.LitterboxError as e:
+            failed, done = {pn: e for pn in finishing}, []
+        result.completed = done
+        result.errors.update({pn: str(e) for pn, e in failed.items()})
     if not result.signed and not result.errors:
         raise WorkflowError("There was nothing for you to sign on these parts. Run Get Latest.")
     if not result.signed and result.errors:
@@ -705,22 +700,8 @@ def _approval_entry(pending, completed_by, override=None, files=None, action=Non
     return {k: v for k, v in entry.items() if v is not None}
 
 
-def _finish(repo, pn, override_reason=None, override_action=None):
-    """Do the action now. Shared by complete() and override()."""
-    pn = eng._as_pn(pn)
-    record0 = registry.load(repo, pn)
-    action = record0.pending.get("action") if record0.pending else override_action
-    if action not in ACTIONS:
-        raise WorkflowError(f"{pn} has no request to complete.")
-    plan = None
-    if action == RELEASE:
-        plan = eng.release_plan(repo, pn, allow_pending=True)
-    elif action == MAKE_COTS:
-        plan = eng.make_cots_plan(repo, pn, allow_pending=True)
-    if plan is not None and not plan.ok:
-        what = "released" if action == RELEASE else "made COTS"
-        raise eng.LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
-
+def _finish_edit(repo, action, plan, override_reason):
+    """The change that does the action on a record. Shared by complete() and override()."""
     def edit(record, user):
         pending = record.pending or None
         if override_reason is None:
@@ -748,34 +729,68 @@ def _finish(repo, pn, override_reason=None, override_action=None):
         else:
             registry.mark_void(record, user, reason)
         record.approvals.append(approval)
+    return edit
 
-    message = f"{pn}: {label_of(action)} done" + (" (Admin override)" if override_reason is not None else
-                                                  " after sign-offs")
-    eng._edit_record(repo, pn, action, edit, message)
-    return plan.files if plan is not None else []
+
+def _finish_many(repo, pns, override_reason=None, override_action=None):
+    """Do the action now on several parts, with one download and one upload (the vault is checked once).
+    Returns (done, failed, files): done is [pn], failed is {pn: error}, files is {pn: [files released]}."""
+    ctx, failed, items, files = eng._Context(repo), {}, [], {}
+    for pn in _as_pns(pns):
+        try:
+            record0 = registry.load(repo, pn)
+            action = record0.pending.get("action") if record0.pending else override_action
+            if action not in ACTIONS:
+                raise WorkflowError(f"{pn} has no request to complete.")
+            plan = None
+            if action == RELEASE:
+                plan = eng.release_plan(repo, pn, allow_pending=True, ctx=ctx)
+            elif action == MAKE_COTS:
+                plan = eng.make_cots_plan(repo, pn, allow_pending=True, ctx=ctx)
+            if plan is not None and not plan.ok:
+                what = "released" if action == RELEASE else "made COTS"
+                raise eng.LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
+        except (eng.LitterboxError, registry.RegistryError) as e:
+            failed[pn] = e
+            continue
+        message = f"{pn}: {label_of(action)} done" + (" (Admin override)" if override_reason is not None
+                                                      else " after sign-offs")
+        items.append((pn, action, _finish_edit(repo, action, plan, override_reason), message))
+        files[pn] = list(plan.files) if plan is not None else []
+    done = []
+    if items:
+        batch = eng._edit_records(repo, items)
+        done = list(batch.results)
+        failed.update(batch.errors)
+        if batch.notice:
+            eng.LOG(batch.notice)
+    return done, failed, files
+
+
+def _report(done, failed):
+    if failed:
+        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
+                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
+    return done
 
 
 @eng._converts_errors
 def complete(repo, pn):
     """Do the action for a part whose request has every sign-off."""
     _me(repo, "signoff")
-    return _finish(repo, pn)
+    done, failed, files = _finish_many(repo, [pn])
+    if failed:
+        raise next(iter(failed.values()))
+    return files[done[0]]
 
 
 @eng._converts_errors
 def complete_many(repo, pns):
-    """complete() for each part; carries on past a failure and reports every one at the end."""
-    done, failed = [], {}
-    for pn in _as_pns(pns):
-        try:
-            complete(repo, pn)
-            done.append(pn)
-        except eng.LitterboxError as e:
-            failed[pn] = str(e)
-    if failed:
-        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
-                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
-    return done
+    """Do the action for each part whose request has every sign-off, with one download and one upload. Carries on
+    past a failure and reports every one at the end."""
+    _me(repo, "signoff")
+    done, failed, _files = _finish_many(repo, pns)
+    return _report(done, {pn: str(e) for pn, e in failed.items()})
 
 
 @eng._converts_errors
@@ -787,37 +802,30 @@ def override(repo, pns, reason, action=None):
     reason = " ".join((reason or "").split())
     if not reason:
         raise WorkflowError("A reason is required to go ahead without sign-offs.")
-    done, failed = [], {}
-    for pn in pns:
-        try:
-            _finish(repo, pn, override_reason=reason, override_action=action)
-            done.append(pn)
-        except eng.LitterboxError as e:
-            failed[pn] = str(e)
-    if failed:
-        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
-                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
-    return done
+    done, failed, _files = _finish_many(repo, pns, override_reason=reason, override_action=action)
+    return _report(done, {pn: str(e) for pn, e in failed.items()})
 
 
 def _each(repo, pns, edit_for, action_name, message):
-    """Apply a change to every part of a batch that still has a request; parts already dealt with are skipped."""
-    done, failed = [], {}
+    """Apply a change to every part of a batch that still has a request (parts already dealt with are skipped),
+    with one download and one upload."""
+    failed, items = {}, []
     for pn in _as_pns(pns):
         try:
             record = registry.load(repo, pn)
-            if not record.pending:
-                continue
-            eng._edit_record(repo, pn, action_name, edit_for(record.pending.get("id")), message.format(pn=pn))
-            done.append(pn)
-        except eng.LitterboxError as e:
+        except (eng.LitterboxError, registry.RegistryError) as e:
             failed[pn] = str(e)
-        except registry.RegistryError as e:
-            failed[pn] = str(e)
-    if failed:
-        raise WorkflowError(("Done on " + ", ".join(map(str, done)) + ".\n\n" if done else "") +
-                            "\n".join(f"{pn}: {why}" for pn, why in failed.items()))
-    return done
+            continue
+        if record.pending:
+            items.append((pn, action_name, edit_for(record.pending.get("id")), message.replace("{pn}", str(pn))))
+    done = []
+    if items:
+        batch = eng._edit_records(repo, items)
+        done = list(batch.results)
+        failed.update({pn: str(e) for pn, e in batch.errors.items()})
+        if batch.notice:
+            eng.LOG(batch.notice)
+    return _report(done, failed)
 
 
 @eng._converts_errors

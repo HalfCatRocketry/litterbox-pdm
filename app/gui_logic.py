@@ -799,9 +799,59 @@ def make_cots_confirm_text(pn, name, files):
             "afterwards, so its files can't be changed.")
 
 
-def reopen_cots_warning(pn):
+def reopen_cots_warning(pns):
+    """The question asked before unreleasing COTS parts: one part number, or a list of them."""
+    if isinstance(pns, (list, tuple)) and len(pns) != 1:
+        listing = "\n".join("  " + str(pn) for pn in pns)
+        return (f"These are COTS parts:\n{listing}\n\nUnreleasing them makes them normal parts again: they can be "
+                "checked out and changed until they are released or made COTS again.\n\nContinue?")
+    pn = pns[0] if isinstance(pns, (list, tuple)) else pns
     return (f"{pn} is a COTS part.\n\nUnreleasing it makes it a normal part again: it can be checked out and "
             "changed until it is released or made COTS again.\n\nContinue?")
+
+
+def plans_problem_text(plans, verb):
+    """Why parts can't be released (or made COTS) yet: `verb` is 'released' or 'made COTS'. `plans` are the ones
+    that have problems."""
+    if len(plans) == 1:
+        return f"{plans[0].pn} can't be {verb} yet:\n\n" + "\n".join("- " + p for p in plans[0].problems)
+    return (f"These can't be {verb} yet:\n\n" + "\n\n".join(
+        f"{plan.pn}:\n" + "\n".join("- " + p for p in plan.problems) for plan in plans))
+
+
+def _skipped_text(bad, verb):
+    if not bad:
+        return ""
+    return (f"\n\nThese can't be {verb} yet, so they will be skipped:\n"
+            + "\n".join(f"  {plan.pn}: {plan.problems[0]}" for plan in bad))
+
+
+def release_many_confirm_text(good, bad=()):
+    """The question asked before releasing several parts at once. `good` are the plans that can go ahead."""
+    listing = "\n".join(f"  {plan.pn}  {plan.name}  ({len(plan.files)} file{'s' if len(plan.files) != 1 else ''})"
+                        for plan in good)
+    text = (f"Release these {len(good)} parts?\n\n{listing}\n\nTheir CAD files will be frozen. Nobody will be "
+            "able to check them out unless they are unreleased.")
+    warned = [plan for plan in good if plan.warnings]
+    if warned:
+        text += ("\n\nWARNING - the parts these use are not all final:\n" + "\n".join(
+            f"- {plan.pn}: {w}" for plan in warned for w in plan.warnings)
+            + "\n\nReleasing now freezes the assemblies with those parts.")
+    return text + _skipped_text(bad, "released")
+
+
+def make_cots_many_confirm_text(good, bad=()):
+    """The question asked before making several parts COTS at once."""
+    listing = "\n".join(f"  {plan.pn}  {plan.name}" for plan in good)
+    return (f"Record these {len(good)} parts as COTS, purchased parts?\n\n{listing}\n\nOnly do this for parts you "
+            "bought and have NOT modified. Nobody will be able to check them out afterwards, so their files can't "
+            "be changed." + _skipped_text(bad, "made COTS"))
+
+
+def void_many_confirm_text(pns):
+    listing = "\n".join("  " + str(pn) for pn in pns)
+    return (f"Void these {len(pns)} parts?\n\n{listing}\n\nTheir numbers will never be used again, and they can't be "
+            "checked out.")
 
 
 def edit_details_result(old_name, old_description, name, description):

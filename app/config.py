@@ -158,6 +158,48 @@ def get_release_rule(repo):
     return value
 
 
+COMMIT_STYLES = ("per_part", "per_batch")
+
+
+def get_commit_style(repo):
+    """How Check In and Save Progress commit when several parts are done at once: 'per_part' (the default: one
+    commit for each part) or 'per_batch' (one commit for all of them, which is faster)."""
+    value = load(repo).get("commit_style")
+    if value in (None, ""):
+        return "per_part"
+    value = str(value).strip().lower()
+    if value not in COMMIT_STYLES:
+        raise ConfigError(f"commit_style in {CONFIG_DIR}/{CONFIG_FILE} must be one of "
+                          f"{', '.join(COMMIT_STYLES)}, not {value!r}.")
+    return value
+
+
+def set_values(repo, **values):
+    """Change vault settings that anyone may be allowed to edit (see vault_settings.py). Only the values given are
+    changed. Raises ConfigError for an unknown setting or a bad value."""
+    data = load(repo)
+    original = dict(data)
+    for key, value in values.items():
+        if key == "commit_style":
+            if value not in COMMIT_STYLES:
+                raise ConfigError(f"commit_style must be one of {', '.join(COMMIT_STYLES)}.")
+            if value == "per_part":
+                data.pop(key, None)                  # the default needs no line
+            else:
+                data[key] = value
+        else:
+            raise ConfigError(f"'{key}' is not a setting that can be changed here.")
+    path = config_path(repo)
+    if data == original:
+        return data                                  # nothing to change: leave the file (and its comments) alone
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(".tmp-config.yaml")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
+    tmp.replace(path)
+    return data
+
+
 def get_require_signatures(repo):
     """True if this vault refuses uploads of commits that aren't signed by a key on the team list."""
     value = load(repo).get("require_signatures", False)
