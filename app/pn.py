@@ -301,6 +301,13 @@ def free_bases(used_bases, count, start=MIN_BASE):
     return found
 
 
+def base_after(number, steps, start=MIN_BASE):
+    """The base number `steps` places along the hand-out loop (see base_order) from `number`."""
+    start = start if MIN_BASE <= start <= MAX_BASE else MIN_BASE
+    position = (number - start) % MAX_BASE
+    return (start + (position + steps) % MAX_BASE - 1) % MAX_BASE + 1
+
+
 def next_base(used_bases, start=MIN_BASE):
     """The next unused base number: the lowest free one from `start` up, then, past the highest the digits allow,
     the lowest free one from 1 up to just below `start`. Numbers someone typed in by hand are simply treated as

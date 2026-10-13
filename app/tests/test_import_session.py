@@ -33,7 +33,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.window = queue.Queue()
         self.threads_seen = set()
         self.session = import_session.ImportSession(
-            self.a, self.window.put, backend_factory=lambda: self.fake)
+            self.a, self.window.put, backend_factory=lambda: self.fake, gap=0, jitter=0)
         self.addCleanup(self.stop_session)
 
     def stop_session(self):
@@ -265,7 +265,8 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         config.save(self.a, org="HCR", start_number=10001)       # the vault also has HCR-00001-001, below the start
         with self.user("Alex"):
             self.make_manifest()
-            prepared = importer.prepare(self.a, self.manifest_path, backend=self.fake, log=lambda *_: None)
+            prepared = importer.prepare(self.a, self.manifest_path, backend=self.fake, gap=0, jitter=0,
+                                        log=lambda *_: None)
             self.assertEqual([p.base for p in prepared.proposal.pns()], list(range(10001, 10005)))
             self.assertIn("start number is 10001", prepared.proposal.note)
             self.assertIn("highest part number in use is 00001", prepared.proposal.note)
@@ -309,7 +310,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             (other / "unique.SLDPRT").write_text("unique\n")
             path = self.tmp / "other-manifest.yaml"
             manifest.save(import_session.scan_module.scan([other], repo=self.a), path)
-            prepared = importer.prepare(self.a, path, backend=self.fake, log=lambda *_: None, cots=True)
+            prepared = importer.prepare(self.a, path, backend=self.fake, gap=0, jitter=0, log=lambda *_: None, cots=True)
             names = [e.name for e in prepared.proposal.entries]
             found = importer.find_duplicates(self.a, prepared)
         row = {n: names.index(n) for n in names}

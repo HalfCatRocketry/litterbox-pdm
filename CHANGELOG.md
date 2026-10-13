@@ -11,7 +11,7 @@
 - Create new vault... now suggests 6 digits in the part number (was 5). Vaults that don't say how many digits they use keep 5, so no existing vault changes.
 - **Part numbers now loop.** Numbers count up from the vault's start number to the highest the digits allow (999999 for 6 digits), then start again at 1 and go up to just below the start number, so the start number is only the first point of a complete loop and every number gets used. Zero is never used. Voided parts keep their numbers.
 - When every part number is taken, New Part, the suggested number and Import say so plainly ("this vault has no part numbers left") instead of complaining about the number of digits.
-- **Import now proposes the lowest free part numbers**, filling any gaps, instead of starting about 100 above the highest one in use. If someone else takes a proposed number while you work, the numbers Litterbox chose are swapped for the next free ones when you finish, as before. The `--gap` option of `importer.py` is gone.
+- **Import numbering counts from the lowest free part number.** It still proposes numbers about 100 ahead (plus a random extra, so two big imports started together are unlikely to collide), but the 100 is now counted from the lowest free part number, not from the highest one in use, so one number typed in far above the rest no longer pushes imports up with it. Past the highest number the digits allow, it loops round to 1. If someone takes a proposed number while you work, the numbers Litterbox chose are swapped for the next free ones when you finish, as before.
 - Create new vault no longer warns about a high start number leaving little room, since the numbers loop round.
 
 ## 0.3.1

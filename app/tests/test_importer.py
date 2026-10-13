@@ -9,6 +9,7 @@ Run from the app folder with:  python -m unittest discover -s tests -v
 """
 
 import os
+import random
 import sys
 import tempfile
 import unittest
@@ -115,6 +116,7 @@ class ImportFixture(TwoUserVault):
         return {str(p): p.read_bytes() for p in self.src.rglob("*") if p.is_file()}
 
     def run_import(self, **kwargs):
+        kwargs.setdefault("gap", 0)                    # numbers right at the lowest free one, to keep these tests simple
         kwargs.setdefault("backend", self.fake)
         kwargs.setdefault("log", lambda *_: None)
         return importer.run(self.a, self.manifest_path, **kwargs)
@@ -459,6 +461,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
     # -- proposing, editing and checking part numbers --------------------------
     def prepare(self, **kwargs):
+        kwargs.setdefault("gap", 0)
         kwargs.setdefault("backend", self.fake)
         kwargs.setdefault("log", lambda *_: None)
         return importer.prepare(self.a, self.manifest_path, **kwargs)
@@ -478,6 +481,24 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             create.new_part(self.a, "Six", base=6)
             prepared = self.prepare()
             self.assertEqual([p.base for p in prepared.proposal.pns()], [4, 5, 7, 8])      # the gap at 4 and 5 is filled
+
+    def test_a_gap_is_counted_from_the_lowest_free_number_not_the_highest_in_use(self):
+        self.make_manifest()
+        with self.user("Alex"):
+            create.new_part(self.a, "Typed high", base=5000)      # the highest in use is far away; the lowest free is 2
+            prepared = self.prepare(gap=100, jitter=0)
+            self.assertEqual([p.base for p in prepared.proposal.pns()], [102, 103, 104, 105])
+            prepared = self.prepare(gap=100, jitter=50, rng=random.Random(3))
+            first = prepared.proposal.entries[0].pn.base
+            self.assertTrue(102 <= first < 152)
+            self.assertEqual([e.pn.base for e in prepared.proposal.entries], list(range(first, first + 4)))
+
+    def test_the_gap_skips_numbers_already_in_use_and_loops_round(self):
+        config.save(self.a, org="HCR", start_number=99950)        # 5 digits: the highest is 99999
+        self.make_manifest()
+        with self.user("Alex"):
+            prepared = self.prepare(gap=100, jitter=0)            # 99950 + 100 is past the top, so round to 1 and on
+            self.assertEqual([p.base for p in prepared.proposal.pns()], [51, 52, 53, 54])
 
     def test_starting_an_import_gets_the_newest_numbers_first(self):
         self.make_manifest()

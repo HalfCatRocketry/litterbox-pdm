@@ -244,3 +244,18 @@ class TestWrapAround(unittest.TestCase):
             next_base(set(range(1, 1000)), 900)
         self.assertIn("no part numbers left", str(caught.exception))
         self.assertEqual(pn_module.free_bases(set(range(1, 997)), 5, 900), [997, 998, 999])      # fewer than asked
+
+
+class TestBaseAfter(unittest.TestCase):
+    def setUp(self):
+        pn_module.configure(base_digits=3)               # 1..999
+        self.addCleanup(pn_module.configure)
+
+    def test_steps_along_the_loop(self):
+        self.assertEqual(pn_module.base_after(10, 100), 110)
+        self.assertEqual(pn_module.base_after(999, 1), 1)                  # past the top, back round to 1
+        self.assertEqual(pn_module.base_after(5, 0, 900), 5)
+        self.assertEqual(pn_module.base_after(900, 99, 900), 999)
+        self.assertEqual(pn_module.base_after(900, 100, 900), 1)           # zero is skipped
+        self.assertEqual(pn_module.base_after(898, 1, 900), 899)           # the last number of the loop
+        self.assertEqual(pn_module.base_after(899, 1, 900), 900)           # and round to the start again

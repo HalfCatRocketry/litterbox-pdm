@@ -38,8 +38,10 @@ def default_manifest_path(root, now=None):
 
 
 class ImportSession:
-    def __init__(self, repo, post, backend_factory=None, log=lambda text: None, org=None):
+    def __init__(self, repo, post, backend_factory=None, log=lambda text: None, org=None,
+                 gap=importer.DEFAULT_GAP, jitter=importer.DEFAULT_JITTER):
         self.repo, self.post, self.log, self.org = repo, post, log, org
+        self.gap, self.jitter = gap, jitter
         self.backend_factory = backend_factory or importer.SolidWorksBackend
         self.prepared = None                    # importer.Prepared, once start() has succeeded
         self.manifest_path = ""
@@ -129,7 +131,8 @@ class ImportSession:
             try:
                 self.prepared = importer.prepare(
                     self.repo, path, backend=backend, allow_external=allow_external, cots=cots,
-                    cancel=self._cancel_requested, progress=progress, log=self.log, org=self.org)
+                    cancel=self._cancel_requested, progress=progress, log=self.log, org=self.org,
+                    gap=self.gap, jitter=self.jitter)
             except BaseException:
                 close = getattr(backend, "close", None)
                 if close:
