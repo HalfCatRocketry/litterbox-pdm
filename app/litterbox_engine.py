@@ -49,6 +49,7 @@ from pathlib import Path
 import yaml
 
 import config
+import file_snapshot
 import registry
 import pn as pn_module
 from pn import PN, PNError
@@ -542,7 +543,19 @@ def _discard_quietly(repo, paths):
 
 
 def _pull(repo):
-    run(["git", "pull", "--rebase", "--autostash"], repo)
+    file_snapshot.before_pull(repo)
+    try:
+        run(["git", "pull", "--rebase", "--autostash"], repo)
+    finally:
+        file_snapshot.after_pull(repo)
+
+
+def watch_files(repo, revisions):
+    """Remember the size and modified time of these parts' CAD files, as they are right now ({PN: revision}).
+    Pass the result to checkin_many(snapshot=...) so a part saved after you pressed Check In is not uploaded.
+    Cheap: one look at the cad folder and one metadata lookup per file; nothing is read."""
+    index = registry.cad_index(repo)
+    return file_snapshot.FileSnapshot(repo, {pn: index.get(pn, {}).get(rev, []) for pn, rev in revisions.items()})
 
 
 def _push_with_retry(repo, attempts=3):
@@ -817,10 +830,13 @@ def _allowed(allow_unchanged, pn):
 
 
 @_timed("check in")
-def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader):
+def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot=None):
     """Check in (or save progress on) several parts: commit each one, upload them all together, then release the
     locks. A part with a problem (not yours, nothing changed) is reported and the others carry on. If the upload
-    fails, nothing is unlocked and every commit is kept so the whole thing can be tried again."""
+    fails, nothing is unlocked and every commit is kept so the whole thing can be tried again.
+
+    A part whose files were saved after the click (see file_snapshot.py), or while they were being read, is
+    refused and stays checked out; the others carry on."""
     validate_repo(repo)
     pns = _unique_pns(pns)
     user = get_user(repo)
@@ -840,6 +856,13 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
             group = cad + [record_path]
             if not any(_is_mine(locks, p) for p in group):
                 raise LitterboxError(f"You don't have {pn} checked out.")
+            if snapshot is not None and not keep_lock and snapshot.covers(pn):
+                saved = snapshot.problems(pn, cad)           # (Save Progress is meant to be used while you work)
+                if saved:
+                    raise LitterboxError(
+                        f"{pn}: {file_snapshot.names(saved)} changed after you pressed Check In, so nothing was "
+                        "uploaded for this part. It is still checked out to you. Check In again when you have "
+                        "finished saving it.")
 
             report = _change_report(repo, pn, user, cad, modified)
             changed = report.changed_files
@@ -858,31 +881,67 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                         found_references = references_reader(repo, pn, record.revision, changed)
                     except Exception as e:
                         LOG(f"WARNING: could not read what {pn} uses: {e}")
+                record_before = (Path(repo) / record_path).read_bytes()
                 registry.record_checkin(record, user, changed, comment, references=found_references)
                 registry.save(repo, record)
                 message = f"{pn}: {(comment or '').strip() or 'Update'}"
-                to_commit.append((pn, message, changed + [record_path]))
+                to_commit.append((pn, message, changed, record_path, record_before))
             groups[pn], cads[pn] = group, cad
             batch.results[pn] = CheckinResult(True, changed)
         except (LitterboxError, registry.RegistryError) as e:
             batch.errors[pn] = e
 
+    def fail(pn, error):
+        groups.pop(pn, None)
+        cads.pop(pn, None)
+        batch.results.pop(pn, None)
+        batch.errors[pn] = error
+
+    def saved_during(pn, saved):
+        return LitterboxError(f"{pn}: {file_snapshot.names(saved)} was saved while Litterbox was reading it, so "
+                              "nothing was uploaded for this part. It is still checked out to you. Check In again "
+                              "when you have finished saving it.")
+
+    def take_back(changed, record_path, record_before):
+        """Unstage a part and put its record back as it was before this check-in touched it."""
+        try:
+            _run_chunked(["git", "reset", "-q"], changed + [record_path], repo)
+            (Path(repo) / record_path).write_bytes(record_before)
+        except (LitterboxError, OSError) as e:
+            LOG(f"WARNING: could not fully take back the check-in of {record_path}: {e}")
+
     if config.get_commit_style(repo) == "per_batch" and len(to_commit) > 1:
         # One commit for the whole batch (faster). A failure here fails the batch and keeps the locks.
-        paths = [path for _pn, _message, files in to_commit for path in files]
-        _run_chunked(["git", "add"], paths, repo)
-        subject, body = _batch_message([message for _pn, message, _files in to_commit])
-        _commit_paths(repo, subject, body, paths)
+        before = {entry[0]: file_snapshot.stats(repo, entry[2]) for entry in to_commit}
+        _run_chunked(["git", "add"], [path for _pn, _m, changed, record_path, _b in to_commit
+                                      for path in changed + [record_path]], repo)
+        survivors = []
+        for entry in to_commit:
+            pn, _message, changed, record_path, record_before = entry
+            saved = file_snapshot.moved(repo, before[pn])
+            if saved:
+                take_back(changed, record_path, record_before)
+                fail(pn, saved_during(pn, saved))
+            else:
+                survivors.append(entry)
+        if survivors:
+            subject, body = _batch_message([entry[1] for entry in survivors])
+            _commit_paths(repo, subject, body, [path for _pn, _m, changed, record_path, _b in survivors
+                                                 for path in changed + [record_path]])
     else:
-        for pn, message, files in to_commit:
+        for pn, message, changed, record_path, record_before in to_commit:
+            files = changed + [record_path]
             try:
+                before = file_snapshot.stats(repo, changed)
                 run(["git", "add", "--"] + files, repo)
+                saved = file_snapshot.moved(repo, before)
+                if saved:
+                    take_back(changed, record_path, record_before)
+                    fail(pn, saved_during(pn, saved))
+                    continue
                 run(["git", "commit", "-m", message, "--"] + files, repo)
             except LitterboxError as e:
-                groups.pop(pn, None)
-                cads.pop(pn, None)
-                batch.results.pop(pn, None)
-                batch.errors[pn] = e
+                fail(pn, e)
 
     if not groups:
         return batch
@@ -907,7 +966,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
 
 
 @_converts_errors
-def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, references_reader=None):
+def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, references_reader=None, snapshot=None):
     """Commit your changes, upload them, then (unless keep_lock) release the locks.
 
     Order matters: commit, then push, and only then unlock. If any step fails
@@ -924,15 +983,26 @@ def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, refere
     when there is nothing to update, and any error it raises only costs the update, not the check-in.
     """
     pn = _as_pn(pn)
-    return _single(_checkin_batch(repo, [pn], comment, keep_lock, allow_unchanged, references_reader), pn)
+    try:
+        return _single(_checkin_batch(repo, [pn], comment, keep_lock, allow_unchanged, references_reader, snapshot), pn)
+    finally:
+        if snapshot is not None:
+            snapshot.release()
 
 
 @_converts_errors
-def checkin_many(repo, pns, comment="", keep_lock=False, allow_unchanged=frozenset(), references_reader=None):
+def checkin_many(repo, pns, comment="", keep_lock=False, allow_unchanged=frozenset(), references_reader=None,
+                 snapshot=None):
     """checkin() for several parts at once, with one upload for all of them. `allow_unchanged` is the set of parts
-    that may be checked in even though nothing changed. Returns (done, failed) like checkout_many()."""
+    that may be checked in even though nothing changed. `snapshot` is from watch_files(): parts saved after it was
+    taken are refused (and stay checked out). Returns (done, failed) like checkout_many()."""
     pns = _unique_pns(pns)
-    return _as_lists(_checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader), pns)
+    try:
+        return _as_lists(_checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot),
+                         pns)
+    finally:
+        if snapshot is not None:
+            snapshot.release()
 
 
 @_converts_errors

@@ -201,3 +201,46 @@ class TestConfigurableDigits(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWrapAround(unittest.TestCase):
+    """Part numbers count up from the start number, then loop round to 1 and stop just below the start."""
+
+    def setUp(self):
+        pn_module.configure(base_digits=3)               # 1..999
+        self.addCleanup(pn_module.configure)
+
+    def test_after_the_highest_number_it_starts_again_at_one(self):
+        self.assertEqual(next_base({900, 901, 999}, 900), 902)
+        self.assertEqual(next_base(set(range(900, 1000)), 900), 1)
+        self.assertEqual(next_base(set(range(900, 1000)) | {1, 2}, 900), 3)
+
+    def test_zero_is_never_used(self):
+        self.assertNotIn(0, list(pn_module.base_order(900)))
+        self.assertEqual(list(pn_module.base_order(900))[:2], [900, 901])
+        self.assertEqual(list(pn_module.base_order(900))[100], 1)
+        self.assertEqual(len(list(pn_module.base_order(900))), 999)
+
+    def test_the_start_number_is_only_the_first_point_of_the_loop(self):
+        order = list(pn_module.base_order(500))
+        self.assertEqual(order[0], 500)
+        self.assertEqual(order[-1], 499)
+        self.assertEqual(sorted(order), list(range(1, 1000)))
+
+    def test_the_numbers_below_the_start_are_used_last(self):
+        self.assertEqual(next_base({1, 2, 3}, 900), 900)           # free numbers above the start come first
+        self.assertEqual(next_base(set(range(900, 1000)) | {1}, 900), 2)
+
+    def test_a_start_that_does_not_fit_in_the_digits_means_start_at_one(self):
+        self.assertEqual(next_base(set(), 5000), 1)
+
+    def test_free_bases_gives_the_lowest_free_ones_in_order(self):
+        self.assertEqual(pn_module.free_bases({900, 902}, 4, 900), [901, 903, 904, 905])
+        self.assertEqual(pn_module.free_bases(set(range(900, 1000)) | {2}, 3, 900), [1, 3, 4])
+        self.assertEqual(pn_module.free_bases(set(), 0), [])
+
+    def test_a_full_vault_says_so(self):
+        with self.assertRaises(pn_module.PNError) as caught:
+            next_base(set(range(1, 1000)), 900)
+        self.assertIn("no part numbers left", str(caught.exception))
+        self.assertEqual(pn_module.free_bases(set(range(1, 997)), 5, 900), [997, 998, 999])      # fewer than asked

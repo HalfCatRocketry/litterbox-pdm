@@ -1240,7 +1240,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
 
     def make_session(self, repo, post, log=None, org=None):
         self.session = REAL_SESSION(repo, post, backend_factory=lambda: self.fake, log=log or (lambda t: None),
-                                                    org=org, gap=0, jitter=0)
+                                                    org=org)
         self.addCleanup(lambda: (self.session.close(), self.session._thread.join(5)))
         return self.session
 

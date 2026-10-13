@@ -25,7 +25,8 @@ the right ones every time it starts work on a vault.
 import re
 from dataclasses import dataclass
 
-DEFAULT_BASE_DIGITS = 5
+DEFAULT_BASE_DIGITS = 5          # what a vault with no setting uses (so existing vaults never change)
+NEW_VAULT_BASE_DIGITS = 6        # what the Create new vault dialog suggests for a new one
 DEFAULT_VARIANT_DIGITS = 3
 BASE_DIGITS_RANGE = (1, 9)
 VARIANT_DIGITS_RANGE = (1, 4)
@@ -279,11 +280,36 @@ def lowest_unused(used, minimum, maximum=None, label="number"):
     return number
 
 
+def base_order(start=MIN_BASE):
+    """Base numbers in the order they are handed out: `start` up to the highest the digits allow, then round to
+    1 and up to just below `start`. So the start number is only the first point of a complete loop. Zero is never used."""
+    start = start if MIN_BASE <= start <= MAX_BASE else MIN_BASE
+    yield from range(start, MAX_BASE + 1)
+    yield from range(MIN_BASE, start)
+
+
+def free_bases(used_bases, count, start=MIN_BASE):
+    """Up to `count` unused base numbers, in hand-out order (see base_order). Fewer if the vault is nearly full."""
+    taken, found = set(used_bases), []
+    if count <= 0:
+        return found
+    for number in base_order(start):
+        if number not in taken:
+            found.append(number)
+            if len(found) == count:
+                break
+    return found
+
+
 def next_base(used_bases, start=MIN_BASE):
-    """Lowest unused base number at or above `start` (the org's starting number).
-    Numbers someone typed in by hand are simply treated as taken, so the
-    sequence skips over them."""
-    return lowest_unused(used_bases, max(start, MIN_BASE), label="part number")
+    """The next unused base number: the lowest free one from `start` up, then, past the highest the digits allow,
+    the lowest free one from 1 up to just below `start`. Numbers someone typed in by hand are simply treated as
+    taken, so the sequence skips over them. Raises PNError when every part number is used."""
+    found = free_bases(used_bases, 1, start)
+    if not found:
+        raise PNError(f"Every part number from {format_base(MIN_BASE)} to {format_base(MAX_BASE)} is already used "
+                      "(voided parts keep theirs), so this vault has no part numbers left.")
+    return found[0]
 
 
 def next_variant(used_variants):

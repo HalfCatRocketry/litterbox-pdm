@@ -369,5 +369,112 @@ class BatchActions(TwoUserVault, unittest.TestCase):
         self.assertFalse([line for line in lines if line.startswith("Timing:")])
 
 
+    # -- files saved after the click -----------------------------------------------------------------------------
+    def snapshot(self, pns):
+        return eng.watch_files(self.a, {pn: "A" for pn in pns})
+
+    def test_a_part_saved_after_the_click_is_refused_and_stays_checked_out(self):
+        import file_snapshot
+        with self.user("Alex"):
+            eng.checkout_many(self.a, self.pns)
+            self.change(self.pns)
+            snap = self.snapshot(self.pns)
+            (self.a / cad(self.pns[1])).write_bytes(b"saved again, after the click")
+            record_before = (self.a / eng.record_relpath(self.pns[1])).read_bytes()
+            (done, failed), _ = self.commands(eng.checkin_many, self.a, self.pns, "Tweaks", snapshot=snap)
+            self.assertEqual([pn for pn, _r in done], [p for p in self.pns if p != self.pns[1]])
+            self.assertEqual([pn for pn, _why in failed], [self.pns[1]])
+            self.assertIn("changed after you pressed Check In", failed[0][1])
+            self.assertIn("still checked out to you", failed[0][1])
+            mine = {path for path, (who, _n) in self.locks(self.a).items() if who == "you"}
+            self.assertIn(cad(self.pns[1]).lower(), mine)               # its locks are kept
+            self.assertEqual(len(mine), 3)                              # and nobody else's were
+            self.assertEqual((self.a / eng.record_relpath(self.pns[1])).read_bytes(), record_before)
+        self.assertEqual(file_snapshot._ACTIVE, [])                     # released
+
+    def test_the_part_can_be_checked_in_again_afterwards(self):
+        with self.user("Alex"):
+            eng.checkout_many(self.a, self.pns[:1])
+            self.change(self.pns[:1])
+            snap = self.snapshot(self.pns[:1])
+            (self.a / cad(self.pns[0])).write_bytes(b"saved after the click")
+            _done, failed = eng.checkin_many(self.a, self.pns[:1], "Try 1", snapshot=snap)
+            self.assertEqual(len(failed), 1)
+            done, failed = eng.checkin_many(self.a, self.pns[:1], "Try 2", snapshot=self.snapshot(self.pns[:1]))
+            self.assertEqual((len(done), failed), (1, []))
+            self.assertEqual(self.locks(self.a), {})
+
+    def test_a_snapshot_with_no_change_lets_everything_through(self):
+        import file_snapshot
+        with self.user("Alex"):
+            eng.checkout_many(self.a, self.pns)
+            self.change(self.pns)
+            done, failed = eng.checkin_many(self.a, self.pns, "Tweaks", snapshot=self.snapshot(self.pns))
+            self.assertEqual((len(done), failed), (COUNT, []))
+        self.assertEqual(file_snapshot._ACTIVE, [])
+
+    def test_save_progress_is_meant_for_working_so_a_later_save_is_fine(self):
+        with self.user("Alex"):
+            eng.checkout_many(self.a, self.pns[:2])
+            self.change(self.pns[:2])
+            snap = self.snapshot(self.pns[:2])
+            (self.a / cad(self.pns[0])).write_bytes(b"kept working, saved again")
+            done, failed = eng.checkin_many(self.a, self.pns[:2], "Checkpoint", keep_lock=True, snapshot=snap)
+            self.assertEqual((len(done), failed), (2, []))
+
+    def test_a_download_in_between_does_not_look_like_a_save(self):
+        from vault_fixture import PART, PRT
+        with self.user("Alex"):
+            eng.checkout_many(self.a, self.pns[:2])
+            self.change(self.pns[:2])
+            snap = self.snapshot(self.pns[:2])
+        with self.user("Bea"):                                          # somebody else uploads something
+            eng.checkout(self.b, PART)
+            (self.b / PRT).write_bytes(b"Bea's change")
+            eng.checkin(self.b, PART, "Bea")
+        with self.user("Alex"):
+            before = (self.a / cad(self.pns[0])).stat().st_mtime_ns
+            eng._pull(self.a)                                           # git stashes and restores Alex's edits
+            self.assertNotEqual((self.a / cad(self.pns[0])).stat().st_mtime_ns, before)   # so the time did change
+            done, failed = eng.checkin_many(self.a, self.pns[:2], "Tweaks", snapshot=snap)
+            self.assertEqual((len(done), failed), (2, []))
+
+    def saving_during_add(self, victim):
+        """eng.run that rewrites the victim's file while 'git add' is reading it."""
+        real = eng.run
+
+        def run(command, repo, quiet=False):
+            if command[:2] == ["git", "add"] and cad(victim) in command:
+                (self.a / cad(victim)).write_bytes(b"saved in the middle of the upload!")
+            return real(command, repo, quiet)
+        return run
+
+    def check_save_during_add(self):
+        victim = self.pns[1]
+        with self.user("Alex"):
+            eng.checkout_many(self.a, self.pns[:3])
+            self.change(self.pns[:3])
+            record_before = (self.a / eng.record_relpath(victim)).read_bytes()
+            with mock.patch.object(eng, "run", self.saving_during_add(victim)):
+                done, failed = eng.checkin_many(self.a, self.pns[:3], "Tweaks")
+            self.assertEqual([pn for pn, _r in done], [self.pns[0], self.pns[2]])
+            self.assertEqual([pn for pn, _why in failed], [victim])
+            self.assertIn("was saved while Litterbox was reading it", failed[0][1])
+            self.assertEqual((self.a / eng.record_relpath(victim)).read_bytes(), record_before)
+            self.assertEqual(git(self.a, "diff", "--cached", "--name-only"), "")        # nothing left staged
+            self.assertIn(cad(victim).lower(), self.locks(self.a))                       # still checked out
+        log = self.remote_log()
+        self.assertIn(f"{self.pns[0]}: Tweaks", " ".join(log) + " ".join(
+            git(self.a, "log", "-3", "--format=%B").splitlines()))
+        self.assertFalse(any(f"{victim}: Tweaks" in line for line in git(self.a, "log", "-5", "--format=%B").splitlines()))
+
+    def test_a_save_in_the_middle_of_reading_is_caught_per_part(self):
+        self.check_save_during_add()
+
+    def test_a_save_in_the_middle_of_reading_is_caught_in_a_one_commit_batch(self):
+        self.use_style("per_batch")
+        self.check_save_during_add()
+
+
 if __name__ == "__main__":
     unittest.main()

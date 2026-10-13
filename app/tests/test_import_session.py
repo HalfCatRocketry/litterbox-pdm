@@ -33,7 +33,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.window = queue.Queue()
         self.threads_seen = set()
         self.session = import_session.ImportSession(
-            self.a, self.window.put, backend_factory=lambda: self.fake, gap=0, jitter=0)
+            self.a, self.window.put, backend_factory=lambda: self.fake)
         self.addCleanup(self.stop_session)
 
     def stop_session(self):
@@ -261,19 +261,16 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             self.wait(lambda d, p: self.session.include(top, True, d))
         self.assertEqual(next(r for r in self.rows() if r.item_id == top).name, "Renamed while unticked")
 
-    def test_proposed_numbers_never_go_below_the_start_number(self):
+    def test_proposed_numbers_start_at_the_start_number(self):
         config.save(self.a, org="HCR", start_number=10001)       # the vault also has HCR-00001-001, below the start
         with self.user("Alex"):
             self.make_manifest()
-            for gap in (0, 100):
-                prepared = importer.prepare(self.a, self.manifest_path, backend=self.fake, gap=gap, jitter=0,
-                                            log=lambda *_: None)
-                first = 10001 if gap == 0 else 10100
-                self.assertEqual([p.base for p in prepared.proposal.pns()], list(range(first, first + 4)))
-                self.assertIn("start number is 10001", prepared.proposal.note)
-                self.assertIn("highest part number in use is 00001", prepared.proposal.note)
-                self.assertIn("start_number is 10001", prepared.proposal.note)
-            # a number freed up by a conflict, or a row ticked later, also stays at or above the start
+            prepared = importer.prepare(self.a, self.manifest_path, backend=self.fake, log=lambda *_: None)
+            self.assertEqual([p.base for p in prepared.proposal.pns()], list(range(10001, 10005)))
+            self.assertIn("start number is 10001", prepared.proposal.note)
+            self.assertIn("highest part number in use is 00001", prepared.proposal.note)
+            self.assertIn("start_number is 10001", prepared.proposal.note)
+            # a number freed up by a conflict, or a row ticked later, also comes from the same sequence
             top = prepared.candidates[0]
             importer.set_included(self.a, prepared, top.id, False)
             importer.set_included(self.a, prepared, top.id, True)
@@ -312,7 +309,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             (other / "unique.SLDPRT").write_text("unique\n")
             path = self.tmp / "other-manifest.yaml"
             manifest.save(import_session.scan_module.scan([other], repo=self.a), path)
-            prepared = importer.prepare(self.a, path, backend=self.fake, gap=0, jitter=0, log=lambda *_: None, cots=True)
+            prepared = importer.prepare(self.a, path, backend=self.fake, log=lambda *_: None, cots=True)
             names = [e.name for e in prepared.proposal.entries]
             found = importer.find_duplicates(self.a, prepared)
         row = {n: names.index(n) for n in names}

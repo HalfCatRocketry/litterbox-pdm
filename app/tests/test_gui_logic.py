@@ -1008,3 +1008,57 @@ class TestShiftRange(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InspectVaultFolder(unittest.TestCase):
+    """Add org... reads the org from a vault that already exists instead of asking for it."""
+
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.folder = Path(self.dir.name)
+
+    def vault(self, config_text=None, git=True):
+        if git:
+            (self.folder / ".git").mkdir()
+        if config_text is not None:
+            (self.folder / ".litterbox").mkdir()
+            (self.folder / ".litterbox" / "config.yaml").write_text(config_text)
+
+    def test_a_vault_gives_its_org(self):
+        self.vault("org: HCR\n")
+        self.assertEqual(logic.inspect_vault_folder(self.folder), ("HCR", ""))
+
+    def test_a_missing_folder_or_a_plain_folder_is_explained(self):
+        org, problem = logic.inspect_vault_folder(self.folder / "nope")
+        self.assertEqual((org, problem), ("", "That folder doesn't exist."))
+        self.vault(git=False)
+        org, problem = logic.inspect_vault_folder(self.folder)
+        self.assertEqual(org, "")
+        self.assertIn("isn't a git repository", problem)
+
+    def test_an_empty_repository_points_to_create_new_vault(self):
+        self.vault()
+        org, problem = logic.inspect_vault_folder(self.folder)
+        self.assertEqual(org, "")
+        self.assertIn("Create new vault", problem)
+
+    def test_a_bad_config_is_reported(self):
+        self.vault("org: TOOLONGCODE\n")
+        org, problem = logic.inspect_vault_folder(self.folder)
+        self.assertEqual(org, "")
+        self.assertIn("org code", problem)
+
+
+class AddOrgWiring(unittest.TestCase):
+    def test_add_org_no_longer_opens_the_org_setup_dialog(self):
+        source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
+        self.assertIn("self.add_org()", source)
+        self.assertNotIn("self._org_setup(None)", source)
+        self.assertIn("pnmod.NEW_VAULT_BASE_DIGITS", source)
+
+    def test_new_vaults_suggest_six_digits_but_existing_vaults_keep_their_default(self):
+        import pn
+        self.assertEqual(pn.NEW_VAULT_BASE_DIGITS, 6)
+        self.assertEqual(pn.DEFAULT_BASE_DIGITS, 5)

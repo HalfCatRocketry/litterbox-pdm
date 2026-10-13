@@ -58,6 +58,24 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             numbers = [create.new_part(self.a, f"Part {n}").base for n in range(3)]
             self.assertEqual(numbers, [2, 3, 5])
 
+    def test_numbers_loop_round_to_the_bottom_after_the_highest(self):
+        import config
+        config.save(self.a, org="HCR", start_number=99998)       # 5 digits: the highest is 99999
+        with self.user("Alex"):
+            numbers = [create.new_part(self.a, f"Part {n}").base for n in range(4)]
+            self.assertEqual(numbers, [99998, 99999, 2, 3])      # 1 is already in use; zero is never used
+            self.assertEqual(create.suggest_part_number(self.a), 4)
+
+    def test_a_vault_with_no_numbers_left_says_so_plainly(self):
+        with self.user("Alex"):
+            with mock.patch.object(registry, "used_bases", return_value=set(range(1, 100000))):
+                with self.assertRaises(create.CreateError) as caught:
+                    create.new_part(self.a, "One too many")
+                self.assertIn("no part numbers left", str(caught.exception))
+                with self.assertRaises(create.CreateError):
+                    create.suggest_part_number(self.a)
+            self.assertEqual(sorted(p.name for p in (self.a / "PN-logs").iterdir()), ["HCR-00001-001.yaml"])
+
     def test_part_number_in_use_gets_its_lowest_free_variant(self):
         with self.user("Alex"):
             self.assertEqual(create.new_part(self.a, "Right hand", base=1), PN("HCR", 1, 2))
@@ -123,16 +141,6 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(create.new_part(self.a, "Fifth"), PN("HCR", 10005, 1))
             self.assertEqual(create.new_part(self.a, "Typed below", base=2, variant=1), PN("HCR", 2, 1))
             self.assertEqual(create.suggest_part_number(self.a), 10006)       # a part at 00002 changes nothing
-
-    def test_running_out_of_part_numbers_is_reported(self):
-        import config
-        with self.user("Alex"):
-            config.save(self.a, start_number=99999)
-            self.assertEqual(create.new_part(self.a, "Last one"), PN("HCR", 99999, 1))
-            with self.assertRaises(create.CreateError) as ctx:
-                create.new_part(self.a, "One too many")
-            self.assertIn("99999", str(ctx.exception))
-            self.assertEqual(self.record_names(self.a)[-1], "HCR-99999-001.yaml")      # nothing half-made
 
     def test_explicit_part_number_and_variant_that_are_taken_are_refused(self):
         commits = len(self.remote_log())

@@ -24,7 +24,8 @@ removed again and any commit is undone, so you can simply run it again.
 CHOOSING THE NUMBERS (they can't be changed once the first part number exists)
     digits in the part number   5 (default) allows 99,999 parts; 4 allows 9,999; 6 allows 999,999.
     digits in the variant       3 (default) allows 999 variants of one part number.
-    first part number           the first number handed out; leave at 1 unless you want to start higher (10001...).
+    first part number           the first number handed out; leave at 1 unless you want to start higher (10001...). Numbers count up
+                                from there, then loop round to 1 and up to just below it, so every number gets used.
 """
 
 import argparse
@@ -109,12 +110,10 @@ class InitResult:
 def numbering_warnings(start_number, base_digits, variant_digits):
     """Things worth a second thought about the part-number format. Returns a list of sentences."""
     warnings = []
-    room = 10 ** base_digits - start_number
+    room = 10 ** base_digits - 1          # the numbers loop round past the highest, so the start number doesn't matter
     if base_digits < 4:
         warnings.append(f"{base_digits} digit{'s' if base_digits != 1 else ''} in the part number leaves room for "
                         f"only {room:,} parts. That can't be changed later.")
-    elif room < 1000:
-        warnings.append(f"Starting at {start_number} with {base_digits} digits leaves room for only {room:,} parts.")
     if base_digits > 7:
         warnings.append(f"{base_digits} digits makes long part numbers and file names, and Windows limits full "
                         "paths to about 260 characters.")
@@ -350,7 +349,7 @@ def main(argv=None):
     parser.add_argument("folder", help="the cloned, empty repository")
     parser.add_argument("--org", required=True, help="org code, 2 to 4 letters (HCR)")
     parser.add_argument("--start", type=int, default=1, help="first part number to hand out (default 1)")
-    parser.add_argument("--base-digits", type=int, default=pn_module.DEFAULT_BASE_DIGITS)
+    parser.add_argument("--base-digits", type=int, default=pn_module.NEW_VAULT_BASE_DIGITS)
     parser.add_argument("--variant-digits", type=int, default=pn_module.DEFAULT_VARIANT_DIGITS)
     parser.add_argument("--no-push", action="store_true", help="commit locally only")
     parser.add_argument("--no-team", action="store_true", help="don't set up the team (do it later in Team...)")

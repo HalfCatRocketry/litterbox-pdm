@@ -507,6 +507,40 @@ def vault_created_text(result):
     return "\n\n".join(lines)
 
 
+def plan_add_org(url, root, known):
+    """What Add org... will do with the URL the user pasted: (folder to clone into, problem). `known` is the
+    {org: folder} Litterbox already has, so a vault that is already added is said so, not cloned again."""
+    import vault_clone
+    name, problem = vault_clone.parse_url(url)
+    if problem:
+        return None, problem
+    target = vault_clone.target_folder(root, name)
+    for org, folder in known.items():
+        if str(Path(folder)).lower() == str(target).lower():
+            return None, f"{org} is already added: it is in {target}. Choose it from the box next to the title."
+    return target, ""
+
+
+def inspect_vault_folder(folder):
+    """Look at a folder the user chose for Add org... Returns (org code, "") if it is a Litterbox vault, or
+    ("", what is wrong and what to do about it)."""
+    import config
+    path = Path(folder)
+    if not path.is_dir():
+        return "", "That folder doesn't exist."
+    if not (path / ".git").exists():
+        return "", ("That folder isn't a git repository. Clone your vault first (the clone is the vault folder), "
+                    "then choose it here.")
+    try:
+        config.check_compatible(path)
+        return config.get_org(path), ""
+    except config.NoOrgError:
+        return "", ("That repository isn't a Litterbox vault yet: it has no .litterbox/config.yaml and no parts. "
+                    "If it is a new, empty repository, use Create new vault... instead.")
+    except config.ConfigError as e:
+        return "", str(e)
+
+
 def remember_org(data, org, folder):
     """Add or update an org and make it the last one worked on."""
     orgs = known_orgs(data)

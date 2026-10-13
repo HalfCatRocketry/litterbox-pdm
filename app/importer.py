@@ -43,7 +43,6 @@ PART NUMBERS
 import argparse
 import json
 import os
-import random
 import shutil
 import sys
 import uuid
@@ -630,14 +629,12 @@ def _verify(repo, plan, backend, before, log):
 # ---------------------------------------------------------------------------
 # Part numbers: proposing them, editing them, checking them
 #
-# An import PROPOSES numbers when it starts, far above the numbers in use so that
-# nobody else is likely to reach them before you finish. Nothing is reserved or
-# pushed. The numbers are checked again, for real, when you finish.
+# An import PROPOSES the lowest part numbers nobody is using, counting up from the vault's start number (and round
+# again from 1 once past the highest the digits allow). Nothing is reserved or pushed. If someone else takes a
+# proposed number while you work, the numbers are checked again, for real, when you finish, and the ones Litterbox
+# chose are replaced by the next free ones.
 # ---------------------------------------------------------------------------
 
-DEFAULT_GAP = 100           # propose numbers this far above the highest one in use
-DEFAULT_JITTER = 100        # plus up to this many more at random, so two big imports started
-                            # at the same moment are unlikely to land on the same numbers
 
 
 @dataclass
@@ -705,18 +702,11 @@ def _used_numbers(repo, org):
     return set(existing), {pn.base for pn in existing}
 
 
-def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=None):
-    """`count` consecutive part numbers (variant 001) to propose, above everything in use."""
+def pick_block(repo, count, org):
+    """`count` part numbers (variant 001) to propose: the lowest ones nobody is using, counting up from the vault's
+    start number and, once past the highest the digits allow, round again from 1."""
     _taken, bases = _used_numbers(repo, org)
-    start = config.get_start_number(repo)
-    last = max(bases | {start - 1})
-    extra = (rng or random).randrange(jitter) if jitter > 0 and gap > 0 else 0
-    first = max(last + 1, last + gap + extra, start)          # never below the vault's start number
-    if first + count - 1 > pn_module.MAX_BASE:               # no room up there: use the lowest free numbers
-        first = max(last + 1, pn_module.MAX_BASE - count + 1)
-    if first + count - 1 <= pn_module.MAX_BASE and first > last:
-        return [PN(org, first + i, 1) for i in range(count)]
-    free = [b for b in range(start, pn_module.MAX_BASE + 1) if b not in bases][:count]   # still never below start
+    free = pn_module.free_bases(bases, count, config.get_start_number(repo))
     if len(free) < count:
         raise ImportFailed(f"The vault does not have {count} free part numbers left.")
     return [PN(org, b, 1) for b in free]
@@ -809,21 +799,15 @@ def _renumber_automatic(repo, proposal, conflicts):
     taken, bases = _used_numbers(repo, proposal.org)
     in_use = {e.pn.base for i, e in enumerate(proposal.entries) if i not in {c.index for c in conflicts if not c.manual}}
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
-    candidate = max(min(automatic, default=1), config.get_start_number(repo))      # stay near the proposed block
+    bad = [c for c in conflicts if not c.manual]
+    free = pn_module.free_bases(bases | in_use, len(bad), config.get_start_number(repo))
+    if len(free) < len(bad):
+        raise ImportFailed("The vault has run out of part numbers for this import.")
     changes = []
-    for conflict in conflicts:
-        if conflict.manual:
-            continue
-        while candidate in bases or candidate in in_use or (PN(proposal.org, candidate, 1) in taken):
-            candidate += 1
-        try:
-            pn_module.check_new_base(candidate)
-        except pn_module.PNError:
-            raise ImportFailed("The vault has run out of part numbers for this import.") from None
+    for conflict, candidate in zip(bad, free):
         entry = proposal.entries[conflict.index]
         changes.append((conflict.index, entry.pn, PN(proposal.org, candidate, 1)))
         entry.pn = PN(proposal.org, candidate, 1)
-        in_use.add(candidate)
     return changes
 
 
@@ -903,15 +887,10 @@ def _free_pn(repo, proposal):
         return PN(proposal.org, proposal.family, free[0])
     _taken, bases = _used_numbers(repo, proposal.org)
     here = {e.pn.base for e in proposal.entries}
-    automatic = [e.pn.base for e in proposal.entries if not e.manual]
-    candidate = (max(automatic) + 1) if automatic else pick_block(repo, 1, proposal.org)[0].base
-    while candidate in bases or candidate in here:
-        candidate += 1
-    try:
-        pn_module.check_new_base(candidate)
-    except pn_module.PNError:
-        raise ImportFailed("The vault has run out of part numbers for this import.") from None
-    return PN(proposal.org, candidate, 1)
+    free = pn_module.free_bases(bases | here, 1, config.get_start_number(repo))
+    if not free:
+        raise ImportFailed("The vault has run out of part numbers for this import.")
+    return PN(proposal.org, free[0], 1)
 
 
 def set_included(repo, prepared, item_id, include):
@@ -940,7 +919,7 @@ def set_included(repo, prepared, item_id, include):
 
 
 def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None, progress=None,
-            log=print, org=None, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=None, cots=False):
+            log=print, org=None, cots=False):
     """Check the manifest, read every file's references, refresh the vault and propose part numbers.
 
     Writes nothing to the vault. Returns a Prepared with a `proposal` (the table to show).
@@ -981,12 +960,12 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
         try:
             create.sync_latest(repo)                               # the newest list of part numbers
             org = create._org(repo, org)
-            block = pick_block(repo, len(items), org, gap, jitter, rng)
+            block = pick_block(repo, len(items), org)
         except (create.CreateError, config.ConfigError, registry.RegistryError) as e:
             raise ImportFailed(str(e)) from None
         proposal = Proposal([Entry(item, pn, item.name, item.description) for item, pn in zip(items, block)], org)
         _taken, bases = _used_numbers(repo, org)
-        proposal.note = (f"Proposed part numbers start at {pn_module.format_base(block[0].base)}. This vault's start number is "
+        proposal.note = (f"Proposed part numbers are the lowest free ones, starting at {pn_module.format_base(block[0].base)}. This vault's start number is "
                          f"{pn_module.format_base(config.get_start_number(repo))}; the highest part number in use is "
                          + (pn_module.format_base(max(bases)) if bases else "(none yet)") + ". "
                          + config.explain_start_number(repo))
@@ -1077,13 +1056,13 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
 
 
 def run(repo, manifest_path, backend=None, dry_run=False, allow_external=False, cancel=None,
-        progress=None, log=print, org=None, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=None, cots=False):
+        progress=None, log=print, org=None, cots=False):
     """prepare() and finish() in one go, with the proposed numbers and names as they are (no table to edit).
 
     Raises ImportFailed (ImportCancelled if cancelled; PNConflict never happens here because
     nothing is typed in) with nothing left behind.
     """
-    prepared = prepare(repo, manifest_path, backend, allow_external, cancel, progress, log, org, gap, jitter, rng, cots)
+    prepared = prepare(repo, manifest_path, backend, allow_external, cancel, progress, log, org, cots)
     try:
         return finish(repo, prepared, dry_run, cancel, progress, log)
     finally:
@@ -1188,8 +1167,6 @@ def main(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="check everything and show the plan; write nothing")
     parser.add_argument("--allow-external", action="store_true",
                         help="allow references to files that are not part of the import")
-    parser.add_argument("--gap", type=int, default=DEFAULT_GAP,
-                        help=f"propose part numbers this far above the highest in use (default {DEFAULT_GAP})")
     parser.add_argument("--cots", action="store_true", help="record every imported part as COTS (purchased)")
     parser.add_argument("--recover", action="store_true", help="clean up after an interrupted import and stop")
     args = parser.parse_args(argv)
@@ -1199,7 +1176,7 @@ def main(argv=None):
             return 0
         if not args.manifest:
             parser.error("the manifest file is required")
-        result = run(args.repo, args.manifest, dry_run=args.dry_run, allow_external=args.allow_external, gap=args.gap, cots=args.cots,
+        result = run(args.repo, args.manifest, dry_run=args.dry_run, allow_external=args.allow_external, cots=args.cots,
                      progress=lambda done, total, text: print(f"[{done}/{total}] {text}"))
     except eng.LitterboxError as e:
         print(f"\nERROR: {e}")

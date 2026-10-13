@@ -5,7 +5,8 @@ They live INSIDE the vault, in .litterbox/config.yaml, so the whole team uses th
 same ones:
 
     org: HCR              the org code that starts every part number
-    start_number: 10001   the first part number to hand out (optional, default 1)
+    start_number: 10001   the first part number to hand out (optional, default 1). Numbers count up from here to
+                          the highest the digits allow, then start again at 1 and stop just below it
     pn_base_digits: 5     digits in the part number (HCR-10001-001), default 5
     pn_variant_digits: 3  digits in the variant number (HCR-10001-001), default 3
     format_version: 1     the layout of the vault's files (see version.py), default 1
@@ -94,7 +95,7 @@ def get_org(repo):
 
 
 def get_start_number(repo):
-    """The first part number to hand out (default 1). Numbers below it are never suggested."""
+    """The first part number to hand out (default 1). Numbers count up from it, then round again from 1 (see pn.next_base)."""
     value = load(repo).get("start_number")
     if value in (None, ""):
         return 1

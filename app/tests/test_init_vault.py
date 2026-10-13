@@ -209,7 +209,7 @@ class Planning(EmptyRepo):
         self.assertTrue(any("only 999" in w for w in iv.plan(self.vault, "HCR", base_digits=3).warnings))
         self.assertTrue(any("only 9 variants" in w for w in iv.plan(self.vault, "HCR", variant_digits=1).warnings))
         self.assertTrue(any("long part numbers" in w for w in iv.plan(self.vault, "HCR", base_digits=8).warnings))
-        self.assertTrue(any("room for only" in w for w in iv.plan(self.vault, "HCR", start_number=99500).warnings))
+        self.assertEqual(iv.plan(self.vault, "HCR", start_number=99500).warnings, [])     # numbers loop round, so a high start is fine
 
     def test_folder_that_is_not_a_repository(self):
         plain = self.root / "plain"

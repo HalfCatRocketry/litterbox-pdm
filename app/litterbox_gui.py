@@ -42,6 +42,7 @@ import manifest as manifest_module
 import scan as scan_module
 import settings
 import updater
+import vault_clone
 import vault_settings
 import workflow
 from team_draft import TeamDraft
@@ -549,7 +550,7 @@ class OrgDialog(ctk.CTkToplevel):
         ctk.CTkEntry(self, textvariable=self.start_var, height=34, width=140).grid(
             row=5, column=0, sticky="w", padx=20)
 
-        ctk.CTkLabel(self, text="Digits in the part number and in the variant (for example 5 and 3)", anchor="w").grid(
+        ctk.CTkLabel(self, text="Digits in the part number and in the variant (for example 6 and 3)", anchor="w").grid(
             row=6, column=0, sticky="ew", padx=20, pady=(12, 2))
         digits = ctk.CTkFrame(self, fg_color="transparent")
         digits.grid(row=7, column=0, sticky="w", padx=20)
@@ -2954,6 +2955,73 @@ class ErrorDetailsWindow(ctk.CTkToplevel):
         self.clipboard_append(text)
 
 
+class CloneDialog(ctk.CTkToplevel):
+    """Add org...: the URL of a vault on the Git host. show() gives the URL typed, or None."""
+
+    def __init__(self, parent, root):
+        super().__init__(parent)
+        set_window_icon(self)
+        self.result, self.root = None, root
+        width, height = 560, 250
+        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
+        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
+        self.title("Add org")
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.columnconfigure(0, weight=1)
+        ctk.CTkLabel(self, text="Repository URL", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=20, pady=(18, 2))
+        ctk.CTkLabel(self, text="On your Git host, press Clone and copy the https address.", text_color=MUTED,
+                     anchor="w").grid(row=1, column=0, sticky="ew", padx=20)
+        self.url_var = tk.StringVar()
+        self.entry = ctk.CTkEntry(self, textvariable=self.url_var, height=34,
+                                  placeholder_text="https://dev.azure.com/team/project/_git/hcr-litterbox")
+        self.entry.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.where = ctk.CTkLabel(self, text="", text_color=MUTED, anchor="w", justify="left", wraplength=520)
+        self.where.grid(row=3, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.url_var.trace_add("write", lambda *_: self._preview())
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=4, column=0, sticky="ew", padx=20, pady=(14, 16))
+        buttons.columnconfigure((0, 1), weight=1, uniform="c")
+        ReleaseButton(buttons, text="Cancel", height=38, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ReleaseButton(buttons, text="Add", height=38, fg_color=GREEN, hover_color=GREEN_HOVER,
+                      command=self._ok).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
+        self.bind("<Return>", lambda event: self._ok())
+        self.bind("<Escape>", lambda event: self.destroy())
+        self.after(150, self._grab)
+
+    def _grab(self):
+        try:
+            self.grab_set()
+            self.focus_force()
+            self.entry.focus_set()
+        except tk.TclError:
+            pass
+
+    def _preview(self):
+        name, problem = vault_clone.parse_url(self.url_var.get())
+        if self.url_var.get().strip() and not problem:
+            self.where.configure(text=f"It will be copied to {vault_clone.target_folder(self.root, name)}",
+                                 text_color=MUTED)
+        else:
+            self.where.configure(text="")
+
+    def _ok(self):
+        name, problem = vault_clone.parse_url(self.url_var.get())
+        if problem:
+            self.where.configure(text=problem, text_color=ERROR)
+            return
+        self.result = self.url_var.get().strip()
+        self.destroy()
+
+    def show(self):
+        self.wait_window(self)
+        return self.result
+
+
 class TasksWindow(ctk.CTkToplevel):
     """My Tasks: workflow requests waiting for sign-off, and what you can do about each."""
 
@@ -3516,7 +3584,7 @@ class App(ctk.CTk):
     def on_org_chosen(self, choice):
         """The dropdown changed: switch org (everything reloads) or open the setup pop-up."""
         if choice == logic.ADD_ORG:
-            self._org_setup(None)
+            self.add_org()
         elif choice == logic.CREATE_VAULT:
             self.create_vault()
         elif choice == logic.EDIT_ORG:
@@ -3538,8 +3606,51 @@ class App(ctk.CTk):
         else:
             self._say(f"The vault folder for {org} wasn't found: {self.repo()}. Use Org setup to fix it.", "warn")
 
+    def add_org(self):
+        """Add org...: paste the URL of a vault on your Git host. Litterbox clones it into its own folder (see
+        vault_clone.py), reads the org code and numbering from it, and opens it. A brand-new vault is made with
+        Create new vault... instead."""
+        known = logic.known_orgs(self.settings)
+        url = CloneDialog(self, settings.ROOT).show()
+        if not url:
+            return
+        target, problem = logic.plan_add_org(url, settings.ROOT, known)
+        if problem:
+            messagebox.showwarning("Add org", problem, parent=self)
+            return
+
+        def work():
+            if target.exists():
+                org, _problem = logic.inspect_vault_folder(target)
+                if org:
+                    return target                              # cloned already (an earlier try): just use it
+                if any(target.iterdir()):
+                    raise engine.LitterboxError(f"{target} already exists and isn't a vault. Rename or remove it, "
+                                                "then try again.")
+            vault_clone.clone(url.strip(), target)
+            try:
+                engine.enforce_read_only(target)
+            except engine.LitterboxError as e:
+                engine.LOG(f"WARNING: could not set the files read-only: {e}")
+            return target
+
+        def cloned(folder):
+            org, problem = logic.inspect_vault_folder(folder)
+            if problem:
+                messagebox.showwarning("Add org", f"The vault was copied to {folder}, but:\n\n{problem}",
+                                       parent=self)
+                return
+            logic.remember_org(self.settings, org, str(folder))
+            settings.save(self.settings)
+            self._reload_org_menu()
+            self.note = f"Added {org}"
+            self.switch_org(org)
+
+        self.run_task(work, "Vault copied to this computer", on_success=cloned, refresh=False,
+                      label="Cloning the vault (this can take a while)")
+
     def _org_setup(self, org):
-        """Add a new org (org=None) or edit one: its code, vault folder and starting part number."""
+        """Edit an org: its code, vault folder and starting part number."""
         folder = logic.known_orgs(self.settings).get(org, "") if org else ""
         start, base_digits, variant_digits = 1, pnmod.DEFAULT_BASE_DIGITS, pnmod.DEFAULT_VARIANT_DIGITS
         if folder and Path(folder).is_dir():
@@ -3549,7 +3660,7 @@ class App(ctk.CTk):
             except config.ConfigError:
                 pass
         result = OrgDialog(self, org or "", folder, start, base_digits, variant_digits,
-                           title="Add org" if not org else f"Org setup - {org}").show()
+                           title=f"Org setup - {org}" if org else "Org setup").show()
         if not result:
             return
         new_org, new_folder, new_start, new_base_digits, new_variant_digits = result
@@ -3572,7 +3683,7 @@ class App(ctk.CTk):
         """Create new vault...: turn an empty cloned repository into a vault (see init_vault.py)."""
         if not messagebox.askyesno("Create new vault", logic.CREATE_VAULT_INTRO, parent=self):
             return
-        result = OrgDialog(self, "", "", 1, pnmod.DEFAULT_BASE_DIGITS, pnmod.DEFAULT_VARIANT_DIGITS,
+        result = OrgDialog(self, "", "", 1, pnmod.NEW_VAULT_BASE_DIGITS, pnmod.DEFAULT_VARIANT_DIGITS,
                            title="Create new vault", save_text="Create").show()
         if not result:
             return
@@ -4377,8 +4488,19 @@ class App(ctk.CTk):
             return
         comment = comment.strip() or "Update"
         reader = references.make_reader(log=lambda text: self.queue.put(("log", text)))
+        snapshot = self._watch_files(plan.targets)
         self._run_batch(action, plan, lambda repo, pns: engine.checkin_many(
-            repo, pns, comment, keep_lock=keep_lock, allow_unchanged=allow_unchanged, references_reader=reader))
+            repo, pns, comment, keep_lock=keep_lock, allow_unchanged=allow_unchanged, references_reader=reader,
+            snapshot=snapshot))
+
+    def _watch_files(self, targets):
+        """Remember the files' sizes and times now, so a part saved after this click is not uploaded half way
+        (see file_snapshot.py). Never stops the check-in: if it can't be done, there is just no protection."""
+        try:
+            return engine.watch_files(self.repo(), {pn: self.rows_by_pn[pn].revision for pn in targets})
+        except Exception as e:
+            self._log(f"Could not watch the files for changes: {e!r}")
+            return None
 
     def _check_in(self, keep_lock):
         action = "save" if keep_lock else "checkin"

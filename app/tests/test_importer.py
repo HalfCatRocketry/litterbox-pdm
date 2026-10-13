@@ -19,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git, is_writable  # noqa: E402
 
+import config  # noqa: E402
 import create  # noqa: E402
 import importer  # noqa: E402
 import litterbox_engine as eng  # noqa: E402
@@ -116,7 +117,6 @@ class ImportFixture(TwoUserVault):
     def run_import(self, **kwargs):
         kwargs.setdefault("backend", self.fake)
         kwargs.setdefault("log", lambda *_: None)
-        kwargs.setdefault("gap", 0)                    # numbers right after the last one, to keep these tests simple
         return importer.run(self.a, self.manifest_path, **kwargs)
 
     def assert_clean(self, repo):
@@ -461,35 +461,54 @@ class ImportFlow(ImportFixture, unittest.TestCase):
     def prepare(self, **kwargs):
         kwargs.setdefault("backend", self.fake)
         kwargs.setdefault("log", lambda *_: None)
-        kwargs.setdefault("gap", 0)
         return importer.prepare(self.a, self.manifest_path, **kwargs)
 
-    def test_proposed_numbers_start_a_gap_above_the_highest_in_use(self):
+    def test_proposed_numbers_are_the_lowest_free_ones(self):
         self.make_manifest()
         with self.user("Alex"):
-            prepared = self.prepare(gap=100, jitter=0)
-            self.assertEqual(prepared.proposal.pns(), [PN("HCR", n, 1) for n in range(101, 105)])
-            prepared = self.prepare(gap=100, jitter=50)
-            first = prepared.proposal.entries[0].pn.base
-            self.assertTrue(101 <= first < 151)
-            self.assertEqual([e.pn.base for e in prepared.proposal.entries], list(range(first, first + 4)))
+            prepared = self.prepare()
+            self.assertEqual(prepared.proposal.pns(), [PN("HCR", n, 1) for n in range(2, 6)])    # 1 is in use
             self.assert_nothing_left()                            # proposing writes nothing
+
+    def test_proposed_numbers_fill_gaps_below_the_highest(self):
+        self.make_manifest()
+        with self.user("Alex"):
+            create.new_part(self.a, "Two")
+            create.new_part(self.a, "Three")
+            create.new_part(self.a, "Six", base=6)
+            prepared = self.prepare()
+            self.assertEqual([p.base for p in prepared.proposal.pns()], [4, 5, 7, 8])      # the gap at 4 and 5 is filled
 
     def test_starting_an_import_gets_the_newest_numbers_first(self):
         self.make_manifest()
         with self.user("Bea"):
             create.new_part(self.b, "Bea's new part")             # HCR-00002-001, pushed
         with self.user("Alex"):
-            prepared = self.prepare(gap=100, jitter=0)
-            self.assertEqual(prepared.proposal.entries[0].pn, PN("HCR", 102, 1))
+            prepared = self.prepare()
+            self.assertEqual(prepared.proposal.entries[0].pn, PN("HCR", 3, 1))
             self.assertTrue((self.a / "PN-logs" / "HCR-00002-001.yaml").exists())
 
-    def test_the_block_is_placed_in_the_gap_so_normal_new_parts_do_not_collide_with_it(self):
+    def test_the_import_and_normal_new_parts_use_the_next_free_numbers_in_turn(self):
         self.make_manifest()
         with self.user("Alex"):
-            result = self.run_import(gap=100, jitter=0)
-            self.assertEqual(sorted(p.base for p in result.pns), [101, 102, 103, 104])
-            self.assertEqual(create.new_part(self.a, "Ordinary part"), PN("HCR", 2, 1))    # gap still filled normally
+            result = self.run_import()
+            self.assertEqual(sorted(p.base for p in result.pns), [2, 3, 4, 5])
+            self.assertEqual(create.new_part(self.a, "Ordinary part"), PN("HCR", 6, 1))
+
+    def test_import_numbers_loop_round_after_the_highest(self):
+        config.save(self.a, org="HCR", start_number=99998)       # 5 digits: the highest is 99999
+        self.make_manifest()
+        with self.user("Alex"):
+            prepared = self.prepare()
+            self.assertEqual([p.base for p in prepared.proposal.pns()], [99998, 99999, 2, 3])
+
+    def test_import_with_too_few_numbers_left_is_refused(self):
+        self.make_manifest()
+        with self.user("Alex"):
+            with mock.patch.object(importer, "_used_numbers", return_value=(set(), set(range(1, 99999)))):
+                with self.assertRaises(importer.ImportFailed) as caught:
+                    self.prepare()
+            self.assertIn("free part numbers left", str(caught.exception))
 
     def test_names_descriptions_and_numbers_can_be_edited_before_finishing(self):
         self.make_manifest()
