@@ -106,6 +106,11 @@ class FakeBox:
         return call
 
 
+def fake_jobs(busy=False, pending=None):
+    """Stands in for the window's job queue in tests that build the window without running its __init__."""
+    return types.SimpleNamespace(active=lambda: busy, working=lambda: busy, pending_parts=lambda: dict(pending or {}))
+
+
 def load_gui_with_fakes(box):
     ctk = types.ModuleType("customtkinter")
     ctk.__getattr__ = lambda name: Anything
@@ -216,7 +221,7 @@ class TeamWiring(unittest.TestCase):
 
     def test_new_part_and_import_are_refused_too(self):
         self.app.identity = self.people.Identity(self.people.UNVERIFIED)
-        self.app.busy = False
+        self.app.jobs = fake_jobs()
         self.app.new_part()
         self.app.import_cad()
         self.assertEqual(len(self.said), 2)
@@ -327,7 +332,7 @@ class CreateVaultWiring(unittest.TestCase):
         self.gui = load_gui_with_fakes(self.box)
         app = self.gui.App.__new__(self.gui.App)
         self.tasks, self.switched = [], []
-        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False: self.tasks.append(
+        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
             (work, done, on_success))
         app.switch_org = self.switched.append
         app._reload_org_menu = lambda: None
@@ -391,7 +396,7 @@ class WorkflowWiring(unittest.TestCase):
         self.wf = self.gui.workflow
         app = self.gui.App.__new__(self.gui.App)
         self.tasks, self.said = [], []
-        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False: self.tasks.append(
+        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
             (work, done, on_success))
         app._say = lambda text, tone="normal": self.said.append(text)
         app.repo = lambda: "C:/vault"
@@ -765,7 +770,7 @@ class TickAndSaveWiring(unittest.TestCase):
         from types import SimpleNamespace
         from litterbox_engine import PartStatus
         app = self.app
-        app.busy = False
+        app.jobs = fake_jobs()
         app.rows_by_pn = {self.PN.parse if False else None: None}
         pns = {n: self.PN("HCR", n, 1) for n in (1, 2, 3)}
         kinds = {1: "ok", 2: "mine", 3: "released"}
@@ -790,12 +795,23 @@ class TickAndSaveWiring(unittest.TestCase):
         self.assertEqual(log["Check Out"], "disabled")
         self.assertEqual(log["Deselect All"], "disabled")
 
-    def test_everything_is_grey_while_busy(self):
+    def test_buttons_stay_usable_while_other_parts_have_jobs(self):
         log = self._buttons()
         self.app._set_ticks(["HCR-00001-001"], True)
-        self.app.busy = True
+        self.app.jobs = fake_jobs(busy=True, pending={"HCR-00002-001": "Checking in 1 part"})
         self.app._update_buttons()
-        self.assertEqual(set(log[t] for t in self.gui.logic.BUTTON_ACTIONS), {"disabled"})
+        self.assertEqual(log["Check Out"], "normal")                # part 1 has nothing going on
+
+    def test_a_part_with_a_job_in_progress_cannot_be_acted_on(self):
+        log = self._buttons()
+        self.app._set_ticks(["HCR-00002-001"], True)
+        self.app.jobs = fake_jobs(busy=True, pending={"HCR-00002-001": "Checking in 1 part"})
+        self.app._update_buttons()
+        for text in ("Check In", "Save Progress", "Undo Checkout", "Edit Details", "Void"):
+            self.assertEqual(log[text], "disabled", text)
+        plan = self.app._plan("undo")
+        self.assertIsNone(plan)
+        self.assertIn("busy: checking in 1 part", self.said[-1][0] if isinstance(self.said[-1], tuple) else self.said[-1])
 
     def test_deselect_all_clears_every_box_and_the_highlight(self):
         self._buttons()
@@ -836,12 +852,31 @@ class TickAndSaveWiring(unittest.TestCase):
         self.gui.messagebox.showinfo = lambda *a, **k: shown.append(("info", k.get("parent")))
         self.gui.messagebox.showerror = lambda *a, **k: shown.append(("error", None))
         app = self.app
-        app._set_busy = lambda busy: None
+        app._sync_busy = lambda: None
+        app.jobs = self.gui.jobs.JobQueue(deliver=lambda outcome: None)
         app._popup_parent = lambda: "TEAM"
         app._log = lambda text: None
         app.note = "x"
-        app._finish(None, self.gui.engine.NothingToSaveError("Nothing was different."), "", None, False, False)
+        job = self.gui.jobs.Job("Checking in", lambda: None, token=("", None, False, False))
+        app._finish(self.gui.jobs.Outcome(job, error=self.gui.engine.NothingToSaveError("Nothing was different.")))
         self.assertEqual(shown, [("info", "TEAM")])
+        self.assertEqual(app.jobs.errors(), [])
+
+    def test_a_real_error_turns_the_banner_red_without_a_popup(self):
+        shown = []
+        self.gui.messagebox.showerror = lambda *a, **k: shown.append("error")
+        app = self.app
+        app._sync_busy = lambda: None
+        app.jobs = self.gui.jobs.JobQueue(deliver=lambda outcome: None)
+        app._log = lambda text: None
+        app.note = "x"
+        job = self.gui.jobs.Job("Checking in 2 parts", lambda: None, token=("", None, False, False))
+        app._finish(self.gui.jobs.Outcome(job, error="fatal: unable to access 'https://x': Could not resolve host"))
+        self.assertEqual(shown, [])
+        (note,) = app.jobs.errors()
+        self.assertEqual(note.label, "Checking in 2 parts")
+        self.assertIn("internet connection", note.advice)
+        self.assertEqual(app.jobs.banner().kind, "error")
 
 
 class UpdateWiring(unittest.TestCase):
@@ -855,7 +890,7 @@ class UpdateWiring(unittest.TestCase):
         app = self.gui.App.__new__(self.gui.App)
         self.said, self.tasks, self.scheduled = [], [], []
         app._say = lambda text, tone="normal": self.said.append(text)
-        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False: self.tasks.append(
+        app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
             (work, on_success))
         app.after = lambda ms, fn=None: self.scheduled.append((ms, fn))
         app.queue = __import__("queue").Queue()
@@ -1055,6 +1090,7 @@ class ListAndFilenameWiring(unittest.TestCase):
 
     def test_the_list_shows_the_short_part_number_and_the_revision(self):
         app = self.gui.App.__new__(self.gui.App)
+        app.jobs = fake_jobs()
         app.rows = [self.row]
         app.search = types.SimpleNamespace(get=lambda: "")
         app.view = types.SimpleNamespace(get=lambda: "All")
@@ -1071,6 +1107,7 @@ class ListAndFilenameWiring(unittest.TestCase):
         voided = PartStatus(self.pn, "Bracket", "void", "Void", "void")
         for shown, expected in ((0, set()), (1, {"HCR-00007-001"})):
             app = self.gui.App.__new__(self.gui.App)
+            app.jobs = fake_jobs()
             app.rows = [voided]
             app.search = types.SimpleNamespace(get=lambda: "")
             app.view = types.SimpleNamespace(get=lambda: "All")

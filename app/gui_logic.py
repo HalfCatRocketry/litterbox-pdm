@@ -6,6 +6,7 @@ says, how history is laid out. Keeping this separate from the window code means
 all of it can be tested automatically.
 """
 
+import time
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -117,10 +118,12 @@ class ActionPlan:
     message: str = ""                               # if not empty: show this and do nothing
 
 
-def plan_action(action, selected, rows_by_pn):
+def plan_action(action, selected, rows_by_pn, pending=None):
     """Decide which of the selected parts an action applies to.
 
-    `selected` is a list of PN objects; `rows_by_pn` maps PN -> PartStatus.
+    `selected` is a list of PN objects; `rows_by_pn` maps PN -> PartStatus. `pending` maps a part (as text) to the
+    job that is queued or running for it: a part with a job in progress can't have anything else done to it yet
+    (except looking at it).
     """
     if not selected:
         return ActionPlan(message="Select a part first (use its box on the left)." if action not in VIEW_ONLY else "Click a part first.")
@@ -131,7 +134,9 @@ def plan_action(action, selected, rows_by_pn):
     targets, skipped = [], []
     for pn in selected:
         row = rows_by_pn.get(pn)
-        if row is not None and row.kind in allowed:
+        if pending and action not in VIEW_ONLY and str(pn) in pending:
+            skipped.append((pn, f"busy: {pending[str(pn)].lower()}"))
+        elif row is not None and row.kind in allowed:
             targets.append(pn)
         else:
             skipped.append((pn, row.state if row is not None else "not in the list"))
@@ -172,10 +177,12 @@ BUTTON_ACTIONS = {
 }
 
 
-def action_available(action, ticked, highlighted, rows_by_pn):
+def action_available(action, ticked, highlighted, rows_by_pn, pending=None):
     """True if every part the action would act on is one it can be used on (so its button may light up)."""
     targets = choose_targets("open" if action == "history" else action, ticked, highlighted)
     if not targets:
+        return False
+    if pending and action not in VIEW_ONLY and action != "history" and any(str(pn) in pending for pn in targets):
         return False
     if action == "history":
         return len(targets) == 1
@@ -189,9 +196,10 @@ def action_available(action, ticked, highlighted, rows_by_pn):
     return True
 
 
-def button_states(ticked, highlighted, rows_by_pn):
+def button_states(ticked, highlighted, rows_by_pn, pending=None):
     """{button text: True if it should be usable} for the main window's selection-dependent buttons."""
-    return {text: action_available(action, ticked, highlighted, rows_by_pn) for text, action in BUTTON_ACTIONS.items()}
+    return {text: action_available(action, ticked, highlighted, rows_by_pn, pending)
+            for text, action in BUTTON_ACTIONS.items()}
 
 
 def import_base_placeholder(repo, org):
@@ -1380,3 +1388,67 @@ def changed_settings(current, chosen):
     if not chosen:
         return {}
     return {key: value for key, value in chosen.items() if current.get(key) != value}
+
+
+# ---------------------------------------------------------------------------
+# Background jobs and the status banner (see job_queue.py)
+# ---------------------------------------------------------------------------
+
+PROGRESS = {        # what the banner says while a job runs: "<progress> 3 parts"
+    "checkout": "Checking out", "checkin": "Checking in", "save": "Saving progress on", "undo": "Undoing checkout of",
+    "edit": "Editing", "release": "Releasing", "make_cots": "Making COTS", "revise": "Revising",
+    "cancel_revision": "Cancelling the revision of", "reopen": "Unreleasing", "void": "Voiding",
+}
+
+
+def job_label(action, count):
+    """'Checking in 3 parts' (or 'Checking in HCR-00007-001' is left to the caller for one part's name)."""
+    return f"{PROGRESS.get(action, 'Working on')} {_parts(count)}"
+
+
+def busy_state_text(state, label):
+    """What the Status column shows for a part that has a job queued or running."""
+    return f"\u23f3 {label.lower()}..."
+
+
+def error_advice(message):
+    """A plain next step for an error message, from what it says. Always returns something."""
+    text = str(message).lower()
+    if "could not unlock" in text or "could not be unlocked" in text:
+        return ("Your changes are saved. Press Check In on the same parts again to finish releasing their locks.")
+    if any(k in text for k in ("could not resolve host", "unable to access", "timed out", "connection refused",
+                               "network is unreachable", "could not read from remote", "early eof", "ssl")):
+        return "Check your internet connection (and VPN, if you use one), then press Refresh. Nothing was lost."
+    if any(k in text for k in ("authentication failed", "permission denied", "401", "403", "could not read username",
+                               "access denied", "login")):
+        return ("Git rejected your sign-in. Sign in to the host again (for example by running a git command in a "
+                "terminal), then try again.")
+    if "already checked out by" in text or "locked by" in text:
+        return "Someone else has it. Ask them to check it in, or ask an Admin to release their lock."
+    if "push was rejected" in text or "non-fast-forward" in text or "failed to push" in text:
+        return "Press Get Latest and try again. If it keeps happening, ask an Admin: the vault may be locked down."
+    if "not allowed" in text or "you can't" in text or "role" in text and "need" in text:
+        return "You don't have the role for that. Ask an Admin if you should."
+    if "unexpected error" in text:
+        return ("Something Litterbox did not expect. Press Refresh. If it happens again, send the log below to "
+                "whoever looks after Litterbox.")
+    return "Press Refresh to see where things stand, then try again. The log below has the details."
+
+
+def error_report_text(notes):
+    """The text of the error Details window: each problem, what it was doing, and what to do about it."""
+    blocks = []
+    for note in notes:
+        when = time.strftime("%H:%M:%S", time.localtime(note.when))
+        blocks.append(f"[{when}] {note.label}\n\n{shorten(note.message)}\n\nWhat to do: {note.advice}")
+    return "\n\n----------------------------------------\n\n".join(blocks)
+
+
+CHECKIN_CAUTION = ("Litterbox uploads in the background. Until the banner says Ready, don't open these parts in "
+                   "SolidWorks and don't save them: a save in the middle of an upload can end up half in the vault.")
+
+
+def open_while_busy_text(pn, label):
+    """The question asked before opening a part that has a job queued or running."""
+    return (f"{pn} is busy: {label.lower()}.\n\nOpening it now is safe, but don't save it in SolidWorks until the "
+            "banner says Ready, or the upload can end up half in the vault.\n\nOpen it anyway?")

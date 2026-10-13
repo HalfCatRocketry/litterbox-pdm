@@ -36,6 +36,7 @@ import signing
 import create
 import init_vault
 import import_session
+import job_queue as jobs
 import importer
 import manifest as manifest_module
 import scan as scan_module
@@ -64,6 +65,7 @@ RED, RED_HOVER = "#8b3a3a", "#6f2e2e"
 PURPLE, PURPLE_HOVER = "#6b4fa3", "#573f87"
 MUTED = "#9a9a9a"
 WARN = "#e5c07b"
+BANNER_YELLOW = "#d9a520"
 GREEN_TEXT = "#5fd38d"
 ERROR = "#e06c75"
 
@@ -2922,6 +2924,36 @@ class VaultSettingsDialog(ctk.CTkToplevel):
         return self.result
 
 
+class ErrorDetailsWindow(ctk.CTkToplevel):
+    """The problems behind the red banner: what Litterbox was doing, what went wrong, and what to do about it."""
+
+    def __init__(self, parent, text, on_dismiss):
+        super().__init__(parent)
+        set_window_icon(self)
+        self.title("What went wrong")
+        self.geometry("720x480")
+        self.minsize(520, 320)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.box = ctk.CTkTextbox(self, wrap="word")
+        self.box.grid(row=0, column=0, sticky="nsew", padx=16, pady=(16, 8))
+        self.box.insert("1.0", text)
+        self.box.configure(state="disabled")
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.grid(row=1, column=0, sticky="e", padx=16, pady=(0, 14))
+        ReleaseButton(buttons, text="Copy", width=90, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=lambda: self._copy(text)).grid(row=0, column=0, padx=(0, 6))
+        ReleaseButton(buttons, text="Dismiss all", width=110, fg_color=RED, hover_color=RED_HOVER,
+                      command=lambda: (on_dismiss(), self.destroy())).grid(row=0, column=1, padx=(0, 6))
+        ReleaseButton(buttons, text="Close", width=90, fg_color=GRAY, hover_color=GRAY_HOVER,
+                      command=self.destroy).grid(row=0, column=2)
+        self.after(100, self.lift)
+
+    def _copy(self, text):
+        self.clipboard_clear()
+        self.clipboard_append(text)
+
+
 class TasksWindow(ctk.CTkToplevel):
     """My Tasks: workflow requests waiting for sign-off, and what you can do about each."""
 
@@ -3172,7 +3204,10 @@ class App(ctk.CTk):
         self.minsize(1000, 600)
 
         self.queue = queue.Queue()      # messages from the background thread to the window
-        self.busy = False
+        # Every task runs here, one at a time, in the background (see job_queue.py). The window stays usable meanwhile.
+        self.jobs = jobs.JobQueue(deliver=lambda outcome: self.queue.put(("done", outcome)))
+        self._was_busy = False
+        self._shown_pending = {}
         self.rows = []                  # every PartStatus from the engine
         self.identity = people.Identity(people.LEGACY)      # who you are on this vault's team (see people.py)
         self.rows_by_pn = {}
@@ -3185,6 +3220,7 @@ class App(ctk.CTk):
         engine.LOG = lambda message: self.queue.put(("log", message))
 
         self._build_ui()
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind("<F5>", lambda event: self.refresh())
         self.after(100, self._poll_queue)
         if settings.DEBUG:
@@ -3292,7 +3328,7 @@ class App(ctk.CTk):
         # Header and vault folder
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 6))
-        header.columnconfigure(0, weight=1)
+        header.columnconfigure((0, 2), weight=1)
         title_row = ctk.CTkFrame(header, fg_color="transparent")
         title_row.grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(title_row, text="Litterbox", font=ctk.CTkFont(size=26, weight="bold"),
@@ -3305,7 +3341,7 @@ class App(ctk.CTk):
         self.org_menu.grid(row=0, column=1, sticky="w", padx=(16, 0))
         self.buttons.append(self.org_menu)
         who_box = ctk.CTkFrame(header, fg_color="transparent")
-        who_box.grid(row=0, column=1, rowspan=3, sticky="ne")
+        who_box.grid(row=0, column=2, rowspan=3, sticky="ne")
         self.identity_label = ctk.CTkLabel(who_box, text="", text_color=MUTED, anchor="e")
         self.identity_label.grid(row=0, column=0, padx=(0, 10))
         self.tasks_button = self._button(who_box, "My Tasks", self.show_tasks, width=100, height=30, fg_color=GRAY,
@@ -3324,6 +3360,26 @@ class App(ctk.CTk):
                      anchor="w").grid(row=1, column=0, sticky="w")
         self.folder_label = ctk.CTkLabel(header, text=self.repo(), text_color=MUTED, anchor="w")
         self.folder_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
+
+        # The status banner: green Ready / yellow Working / red Error (see job_queue.py). A compact box in the middle
+        # of the header, between the title and the person's own buttons.
+        self.banner = ctk.CTkFrame(header, corner_radius=10, width=280, height=78, fg_color=GREEN)
+        self.banner.grid(row=0, column=1, rowspan=3, padx=24)
+        self.banner.grid_propagate(False)
+        self.banner.columnconfigure(0, weight=1)
+        self.banner_title = ctk.CTkLabel(self.banner, text="Ready", font=ctk.CTkFont(size=24, weight="bold"),
+                                         text_color="white", anchor="w")
+        self.banner_title.grid(row=0, column=0, padx=(16, 4), pady=(8, 0), sticky="w")
+        self.banner_detail = ctk.CTkLabel(self.banner, text="", text_color="white", anchor="nw", justify="left",
+                                          wraplength=248, font=ctk.CTkFont(size=11))
+        self.banner_detail.grid(row=1, column=0, columnspan=3, padx=16, pady=(0, 6), sticky="nw")
+        self.banner_details_button = ctk.CTkButton(self.banner, text="Details...", width=76, height=26,
+                                                   fg_color="white", text_color=RED, hover_color="#e8e8e8",
+                                                   command=self.show_errors)
+        self.banner_dismiss_button = ctk.CTkButton(self.banner, text="Dismiss", width=66, height=26,
+                                                   fg_color="transparent", border_width=1, border_color="white",
+                                                   text_color="white", hover_color=RED_HOVER,
+                                                   command=self.dismiss_errors)
 
         # Search, filters, refresh
         toolbar = ctk.CTkFrame(self, fg_color="transparent")
@@ -3373,6 +3429,7 @@ class App(ctk.CTk):
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._update_buttons(), add="+")
         for kind, color in ROW_COLORS.items():
             self.tree.tag_configure(kind, foreground=color)
+        self.tree.tag_configure("busy", foreground=BANNER_YELLOW)
         self.tree.tag_configure("ticked", background=TICK_BG)       # last, so it wins for the background only
         self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
         self.tree.bind("<Double-1>", self.show_history)
@@ -3572,15 +3629,59 @@ class App(ctk.CTk):
             click_log(f"the window was frozen for {now - last:.1f}s")
         self.after(250, lambda: self._watch_for_freezes(now))
 
-    def _set_busy(self, busy):
-        click_log(f"busy={busy}")
-        self.busy = busy
-        for button in self.buttons:
-            if button not in self.action_buttons.values():
-                button.configure(state="disabled" if busy else "normal")
-        self._update_buttons()
-        for window in self._team_windows():
-            window.set_busy(busy)
+    @property
+    def busy(self):
+        """True while any job is queued, running or about to be shown. The window still works; only things that
+        must not overlap with a running job (switching org, the Import window) check this."""
+        return self.jobs.active()
+
+    def _sync_busy(self):
+        """Bring the banner, the buttons and the 'busy' marks in the list up to date with the job queue."""
+        busy = self.busy
+        if busy != self._was_busy:
+            click_log(f"busy={busy}")
+            self._was_busy = busy
+            self.org_menu.configure(state="disabled" if busy else "normal")      # not while jobs run on this vault
+            for window in self._team_windows():
+                window.set_busy(busy)
+        self._update_banner()
+        if self.jobs.pending_parts() != self._shown_pending:
+            self._render()                                                        # also updates the buttons
+        else:
+            self._update_buttons()
+
+    def _update_banner(self):
+        state = self.jobs.banner()
+        color = {jobs.READY: GREEN, jobs.WORKING: BANNER_YELLOW, jobs.ERROR: RED}[state.kind]
+        text_color = "#1b1b1b" if state.kind == jobs.WORKING else "white"
+        self.banner.configure(fg_color=color)
+        self.banner_title.configure(text=state.title, text_color=text_color)
+        self.banner_detail.configure(text=state.detail, text_color=text_color)
+        if state.kind == jobs.ERROR:
+            self.banner_details_button.grid(row=0, column=1, padx=(4, 4), pady=(8, 0))
+            self.banner_dismiss_button.grid(row=0, column=2, padx=(0, 10), pady=(8, 0))
+        else:
+            self.banner_details_button.grid_remove()
+            self.banner_dismiss_button.grid_remove()
+
+    def show_errors(self):
+        notes = self.jobs.errors()
+        if notes:
+            ErrorDetailsWindow(self, logic.error_report_text(notes), self.dismiss_errors)
+
+    def dismiss_errors(self):
+        self.jobs.dismiss_errors()
+        self._update_banner()
+        self._say("Ready")
+
+    def _on_close(self):
+        """Closing while jobs are still running could leave half-finished work, so ask first."""
+        if self.busy and not messagebox.askyesno(
+                "Litterbox is still working",
+                "Litterbox is still working in the background. Closing now can leave a check-in half done "
+                "(your locks stay, and you can run it again next time).\n\nClose anyway?", parent=self):
+            return
+        self.destroy()
 
     def _ask(self, text, title):
         """Ask for one line of text. Returns None if the user cancels."""
@@ -3588,14 +3689,14 @@ class App(ctk.CTk):
 
     def _update_buttons(self):
         """Grey out the buttons that can't be used on the current selection: a button is lit only if every part it
-        would act on is one it can be used on. Everything is greyed while a task is running."""
+        would act on is one it can be used on, and has no job in progress."""
         if not getattr(self, "action_buttons", None):
             return
         tree = self.tree
         highlighted = [parse_pn(iid) for iid in tree.selection()]
-        states = logic.button_states(self._ticked_pns(), highlighted, self.rows_by_pn)
+        states = logic.button_states(self._ticked_pns(), highlighted, self.rows_by_pn, self.jobs.pending_parts())
         for text, button in self.action_buttons.items():
-            button.configure(state="normal" if states.get(text) and not self.busy else "disabled")
+            button.configure(state="normal" if states.get(text) else "disabled")
         deselect = getattr(self, "deselect_button", None)
         if deselect is not None:
             deselect.configure(state="normal" if self.ticked or highlighted else "disabled")
@@ -3662,7 +3763,7 @@ class App(ctk.CTk):
         if not allowed:
             self._say(why, "warn")
             return None
-        plan = logic.plan_action(action, self._selected_pns(action), self.rows_by_pn)
+        plan = logic.plan_action(action, self._selected_pns(action), self.rows_by_pn, self.jobs.pending_parts())
         if plan.message:
             self._say(plan.message, "warn")
             return None
@@ -3671,34 +3772,25 @@ class App(ctk.CTk):
     # ------------------------------------------------------------------
     # Running git work in the background so the window never freezes
     # ------------------------------------------------------------------
-    def run_task(self, work, done_text, on_success=None, refresh=True, is_refresh=False):
-        """Run work() in a thread. Then show done_text, call on_success(result), and refresh the list."""
-        if self.busy:
-            self._say("Still working on the last request...", "warn")
-            return False
-        self._set_busy(True)
-        self._say("Working...")
-        if settings.DEBUG:
+    def run_task(self, work, done_text, on_success=None, refresh=True, is_refresh=False, label="Working",
+                 parts=(), kind="task"):
+        """Queue work() to run in the background, after anything already queued. Then show done_text, call
+        on_success(result) and refresh the list. `label` is what the banner says while it runs; `parts` are the
+        parts it changes, which are marked busy until it is done."""
+        ahead = self.jobs.active()
+        job = jobs.Job(label=label, work=work, parts=tuple(str(p) for p in parts), kind=kind,
+                       token=(done_text, on_success, refresh, is_refresh))
+        if not ahead and settings.DEBUG:
             self._working_since = time.monotonic()
             self.after(1000, self._show_elapsed)
-
-        def worker():
-            try:
-                result, error = work(), None
-            except engine.NothingToSaveError as e:     # not a failure: nothing was different
-                result, error = None, e
-            except engine.LitterboxError as e:
-                result, error = None, str(e)
-            except Exception as e:                      # anything unexpected
-                result, error = None, f"Unexpected error: {e!r}"
-            self.queue.put(("done", (result, error, done_text, on_success, refresh, is_refresh)))
-
-        threading.Thread(target=worker, daemon=True).start()
+        self.jobs.submit(job)
+        self._say(f"Queued: {label.lower()}" if ahead else f"{label}...")
+        self._sync_busy()
         return True
 
     def _show_elapsed(self):
         """While a task runs, show how long it has taken, so a slow host looks slow rather than stuck."""
-        if not self.busy:
+        if not self.jobs.working():
             return
         seconds = int(time.monotonic() - self._working_since)
         if seconds >= 3:
@@ -3720,26 +3812,35 @@ class App(ctk.CTk):
                 elif kind == "update":
                     self._offer_update(payload)
                 elif kind == "done":
-                    try:
-                        self._finish(*payload)
-                    except Exception as e:              # a bug in a handler must not kill the window
-                        self._log(f"INTERNAL ERROR: {e!r}")
-                        self._set_busy(False)
-                        messagebox.showerror("Litterbox", f"Something unexpected went wrong:\n{e!r}")
+                    self._finish(payload)
         except queue.Empty:
             pass
 
-    def _finish(self, result, error, done_text, on_success, refresh, is_refresh):
-        self._set_busy(False)
+    def _finish(self, outcome):
+        """A job has finished: show how it went, run its follow-up, and free its parts."""
+        job = outcome.job
+        done_text, on_success, refresh, is_refresh = job.token
+        try:
+            self._show_outcome(job, outcome.result, outcome.error, done_text, on_success, refresh, is_refresh)
+        except Exception as e:                      # a bug in a handler must not kill the window
+            self._log(f"INTERNAL ERROR: {e!r}")
+            self.jobs.add_error(job.label, f"Something unexpected went wrong: {e!r}",
+                                logic.error_advice("unexpected error"))
+        finally:
+            self.jobs.finished(job)
+            self._sync_busy()
+
+    def _show_outcome(self, job, result, error, done_text, on_success, refresh, is_refresh):
         if isinstance(error, engine.NothingToSaveError):
             self.note = ""
             self._say("Nothing to save: nothing was different.")
             messagebox.showinfo("Nothing to save", str(error), parent=self._popup_parent())
         elif error:
+            # A real problem: no pop-up (you may be busy elsewhere). The banner turns red; Details says what to do.
             self.note = ""
             self._log("ERROR: " + error)
-            self._say("Something went wrong. See the message, or the log below.", "error")
-            messagebox.showerror("Litterbox", logic.shorten(error), parent=self._popup_parent())
+            self.jobs.add_error(job.label, error, logic.error_advice(error))
+            self._say("Something went wrong. Press Details... on the red banner.", "error")
         else:
             if not is_refresh:
                 self.note = done_text
@@ -3776,7 +3877,8 @@ class App(ctk.CTk):
             self._show_identity()
             self._show_rows(rows)
 
-        self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True)
+        self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",
+                      kind="refresh")
 
     def _show_rows(self, rows):
         self.rows = rows
@@ -3804,10 +3906,16 @@ class App(ctk.CTk):
             self.ticked -= {str(row.pn) for row in self.rows if row.kind == "void"}
         previous = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
+        busy = self.jobs.pending_parts()                                    # parts with a job queued or running
+        self._shown_pending = dict(busy)
         for row in rows:
-            self.tree.insert("", "end", iid=str(row.pn), tags=logic.row_tags(row.kind, str(row.pn) in self.ticked), values=(
+            mark = busy.get(str(row.pn))
+            self.tree.insert("", "end", iid=str(row.pn),
+                             tags=logic.row_tags(row.kind, str(row.pn) in self.ticked) + (("busy",) if mark else ()),
+                             values=(
                 logic.TICK_ON if str(row.pn) in self.ticked else logic.TICK_OFF,
-                row.pn.short, row.name, row.description, "Yes" if row.cots else "", row.revision, row.state,
+                row.pn.short, row.name, row.description, "Yes" if row.cots else "", row.revision,
+                logic.busy_state_text(row.state, mark) if mark else row.state,
                 logic.file_types(row.files)))
         keep = [str(row.pn) for row in rows if str(row.pn) in previous]
         if keep:
@@ -3821,15 +3929,12 @@ class App(ctk.CTk):
     # ------------------------------------------------------------------
     def get_latest(self):
         repo = self.repo()
-        self.run_task(lambda: engine.get_latest(repo), "Downloaded the latest changes",
+        self.run_task(lambda: engine.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
                       on_success=lambda changed: self._warn_open_files(changed))
 
     def new_part(self):
         """Open the New Part pop-up, then create the number in the background."""
         if not self._may("create"):
-            return
-        if self.busy:
-            self._say("Still working on the last request...", "warn")
             return
         if not self.org or not Path(self.repo()).is_dir():
             self._say("Choose an org with a vault folder first (box next to the title).", "warn")
@@ -3865,7 +3970,7 @@ class App(ctk.CTk):
         if not self._may("create"):
             return
         if self.busy:
-            self._say("Still working on the last request...", "warn")
+            self._say("Import needs the vault to itself. Wait for the banner to turn green, then try again.", "warn")
             return
         if not self.org or not Path(self.repo()).is_dir():
             self._say("Choose an org with a vault folder first (box next to the title).", "warn")
@@ -4233,7 +4338,8 @@ class App(ctk.CTk):
         repo, targets = self.repo(), list(plan.targets)
         self.run_task(
             lambda: func(repo, targets),
-            "", on_success=lambda result: self._after_batch(action, plan, result))
+            "", on_success=lambda result: self._after_batch(action, plan, result),
+            label=logic.job_label(action, len(targets)), parts=targets)
 
     def _after_batch(self, action, plan, result):
         done, failed = result
@@ -4265,7 +4371,8 @@ class App(ctk.CTk):
     def _ask_comment_and_check_in(self, action, plan, allow_unchanged=frozenset()):
         """Ask for a comment, then check in (or save progress on) the planned parts."""
         keep_lock = action == "save"
-        comment = self._ask("Describe your changes:", "Save Progress" if keep_lock else "Check In")
+        comment = self._ask("Describe your changes:\n\n" + logic.CHECKIN_CAUTION,
+                            "Save Progress" if keep_lock else "Check In")
         if comment is None:                                  # cancelled
             return
         comment = comment.strip() or "Update"
@@ -4341,7 +4448,8 @@ class App(ctk.CTk):
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
         self.run_task(lambda: engine.release_many(repo, pns), "",
-                      on_success=lambda result: self._after_batch("release", logic.ActionPlan(pns, skipped), result))
+                      on_success=lambda result: self._after_batch("release", logic.ActionPlan(pns, skipped), result),
+                      label=logic.job_label("release", len(pns)), parts=pns)
 
     def open_part(self, drawing=False):
         """Open the part's model, or (drawing=True) its drawing, in the program for that file type.
@@ -4352,6 +4460,10 @@ class App(ctk.CTk):
             return
         pn = plan.targets[0]
         row = self.rows_by_pn[pn]
+        waiting = self.jobs.pending_parts().get(str(pn))
+        if waiting and not messagebox.askokcancel(
+                "Still being uploaded", logic.open_while_busy_text(pn, waiting), parent=self):
+            return
         problem = logic.open_message(row, drawing)
         if problem:
             self._say(problem, "warn")
@@ -4555,7 +4667,8 @@ class App(ctk.CTk):
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
         self.run_task(lambda: engine.make_cots_many(repo, pns), "",
-                      on_success=lambda result: self._after_batch("make_cots", logic.ActionPlan(pns, skipped), result))
+                      on_success=lambda result: self._after_batch("make_cots", logic.ActionPlan(pns, skipped), result),
+                      label=logic.job_label("make_cots", len(pns)), parts=pns)
 
     def _ask_reason(self, text, title):
         """Ask for a reason. Returns None if cancelled or left blank (and says so)."""
@@ -4582,7 +4695,8 @@ class App(ctk.CTk):
         reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being unreleased?", "Unrelease")
         if reason:
             self.run_task(lambda: engine.reopen_many(repo, pns, reason), "",
-                          on_success=lambda result: self._after_batch("reopen", plan, result))
+                          on_success=lambda result: self._after_batch("reopen", plan, result),
+                          label=logic.job_label("reopen", len(pns)), parts=pns)
 
     def void(self):
         plan = self._plan("void")
@@ -4611,7 +4725,8 @@ class App(ctk.CTk):
                 if len(pns) == 1 else logic.void_many_confirm_text(pns)):
             return
         self.run_task(lambda: engine.void_many(repo, pns, reason), "",
-                      on_success=lambda result: self._after_batch("void", logic.ActionPlan(pns, skipped), result))
+                      on_success=lambda result: self._after_batch("void", logic.ActionPlan(pns, skipped), result),
+                      label=logic.job_label("void", len(pns)), parts=pns)
 
     def show_history(self, event=None):
         if event is not None and self.tree.identify_column(event.x) == "#1":
