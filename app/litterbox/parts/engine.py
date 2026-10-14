@@ -39,11 +39,9 @@ import stat
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from functools import wraps
 from pathlib import Path
 
 import yaml
@@ -52,48 +50,11 @@ from litterbox.vault import config
 from litterbox.jobs import file_snapshot
 from litterbox.records import registry
 from litterbox.core import pn as pn_module
-from litterbox.core.pn import PN, PNError
+from litterbox.core.pn import PN
 from litterbox.core.pn import parse as parse_pn
-
-# Where log messages go. The GUI replaces this with its own function.
-LOG = print
-
-
-class LitterboxError(Exception):
-    """Raised when something goes wrong. The message is safe to show to a user."""
-
-
-class NothingToSaveError(LitterboxError):
-    """A save found nothing different from what the vault already has, so there was nothing to commit. This is not
-    a failure: the window shows it as information."""
-
-
-class NoChangesError(LitterboxError):
-    """A check-in found nothing to upload. Nothing was changed: the part is still checked out.
-
-    `files` lists the CAD files that have no changes. To check in anyway, call
-    checkin(..., allow_unchanged=True).
-    """
-
-    def __init__(self, pn, files):
-        self.pn = pn
-        self.files = list(files)
-        names = ", ".join(Path(f).name for f in self.files)
-        super().__init__(
-            f"No changes were detected in {pn}" + (f" ({names})" if names else "") + ".\n"
-            "It is still checked out to you. Use Undo Checkout to release it, or check in anyway."
-        )
-
-
-def _converts_errors(func):
-    """Make every public function raise only LitterboxError, so callers need one 'except'."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except (registry.RegistryError, PNError) as e:
-            raise LitterboxError(str(e)) from e
-    return wrapper
+from litterbox.errors import LitterboxError, NoChangesError, NothingToSaveError
+from litterbox.records.error_conversion import converts_errors
+from litterbox import diagnostics
 
 
 def _check_permission(repo, user, action):
@@ -113,10 +74,6 @@ def _check_permission(repo, user, action):
 # Running commands
 # ---------------------------------------------------------------------------
 
-SLOW_SECONDS = 2.0
-DEBUG = False                  # set from settings.yaml (debug_mode); slow commands are logged only when on
-
-
 def _nothing_to_commit(text):
     text = text.lower()
     return "nothing to commit" in text or "no changes added to commit" in text or "nothing added to commit" in text
@@ -128,7 +85,7 @@ def run(command, repo, quiet=False):
     Raises LitterboxError if the command fails.
     """
     if not quiet:
-        LOG("> " + " ".join(command))
+        diagnostics.LOG("> " + " ".join(command))
     started = time.monotonic()
     try:
         result = subprocess.run(
@@ -144,10 +101,10 @@ def run(command, repo, quiet=False):
     except FileNotFoundError:
         raise LitterboxError("Could not run 'git'. Is Git installed?")
     elapsed = time.monotonic() - started
-    if DEBUG:
-        _note_time(command, elapsed)
-    if DEBUG and elapsed >= SLOW_SECONDS:                         # in debug mode, slow commands are logged even if quiet
-        LOG(f"(slow: {elapsed:.1f}s) " + " ".join(command))
+    if diagnostics.DEBUG:
+        diagnostics.note_time(command, elapsed)
+    if diagnostics.DEBUG and elapsed >= diagnostics.SLOW_SECONDS:                         # in debug mode, slow commands are logged even if quiet
+        diagnostics.LOG(f"(slow: {elapsed:.1f}s) " + " ".join(command))
     if result.returncode != 0:
         details = result.stderr.strip() or result.stdout.strip()
         if command[:2] == ["git", "commit"] and _nothing_to_commit(result.stdout + "\n" + result.stderr):
@@ -155,45 +112,6 @@ def run(command, repo, quiet=False):
                                      "nothing to save.")
         raise LitterboxError(f"Command failed: {' '.join(command)}\n\n{details}")
     return result.stdout.strip()
-
-
-# Debug mode: how long each kind of command took, so a slow batch can be explained (see _timed).
-_TIMES = {}
-_TIMES_LOCK = threading.Lock()
-
-
-def _note_time(command, elapsed):
-    key = " ".join(command[:3] if command[:2] == ["git", "lfs"] else command[:2])
-    with _TIMES_LOCK:
-        total, count = _TIMES.get(key, (0.0, 0))
-        _TIMES[key] = (total + elapsed, count + 1)
-
-
-def _timed(label):
-    """Decorator for the batch functions: in debug mode, log how long the batch took and where the time went, e.g.
-    'Timing: check in on 20 part(s) took 31.2s. git commit x20 = 19.8s; git push x1 = 6.1s; ...'. Commands that
-    run side by side (locks) add up to more than the total."""
-    def decorate(func):
-        @wraps(func)
-        def wrapper(repo, things, *args, **kwargs):
-            if not DEBUG:
-                return func(repo, things, *args, **kwargs)
-            with _TIMES_LOCK:
-                before = dict(_TIMES)
-            started = time.monotonic()
-            try:
-                return func(repo, things, *args, **kwargs)
-            finally:
-                total = time.monotonic() - started
-                with _TIMES_LOCK:
-                    after = dict(_TIMES)
-                spent = sorted(((after[key][0] - before.get(key, (0.0, 0))[0],
-                                 after[key][1] - before.get(key, (0.0, 0))[1], key) for key in after), reverse=True)
-                parts = "; ".join(f"{key} x{count} = {seconds:.1f}s" for seconds, count, key in spent if count)
-                LOG(f"Timing: {label} on {len(things) if hasattr(things, '__len__') else 1} part(s) took "
-                    f"{total:.1f}s. {parts}")
-        return wrapper
-    return decorate
 
 
 def validate_repo(repo):
@@ -269,7 +187,7 @@ def get_locks(repo, strict=False):
     except (LitterboxError, json.JSONDecodeError) as e:
         if strict:
             raise LitterboxError(f"Could not read the lock list. Are you online?\n\n{e}")
-        LOG(f"WARNING: could not read locks (offline?). {e}")
+        diagnostics.LOG(f"WARNING: could not read locks (offline?). {e}")
         return {}
 
     locks = {}
@@ -335,7 +253,7 @@ def enforce_read_only(repo):
     try:
         locks = get_locks(repo, strict=True)
     except LitterboxError:
-        LOG("WARNING: skipped the read-only check because locks could not be read.")
+        diagnostics.LOG("WARNING: skipped the read-only check because locks could not be read.")
         return
     index = registry.cad_index(repo)
     for pn in registry.list_pns(repo):
@@ -505,7 +423,7 @@ def _force_unlock_quietly(repo, paths):
     for path, (_value, error) in zip(paths, _parallel(
             lambda path: run(["git", "lfs", "unlock", "--force", path], repo), paths)):
         if error is not None:
-            LOG(f"WARNING: could not release the lock on {path}: {error}")
+            diagnostics.LOG(f"WARNING: could not release the lock on {path}: {error}")
 
 
 CHUNK = 100             # paths per command, so a long list can't pass the Windows command-line limit
@@ -539,7 +457,7 @@ def _discard_quietly(repo, paths):
     try:
         _run_chunked(["git", "restore"], paths, repo)
     except LitterboxError as e:
-        LOG(f"WARNING: could not restore {', '.join(paths)}: {e}")
+        diagnostics.LOG(f"WARNING: could not restore {', '.join(paths)}: {e}")
 
 
 def _pull(repo):
@@ -571,7 +489,7 @@ def _push_with_retry(repo, attempts=3):
         except LitterboxError:
             if attempt == attempts:
                 raise
-            LOG("Push was rejected. Syncing and trying again...")
+            diagnostics.LOG("Push was rejected. Syncing and trying again...")
 
 
 def _unlock_failure_message(failed):
@@ -585,7 +503,7 @@ def _unlock_failure_message(failed):
 # Get latest
 # ---------------------------------------------------------------------------
 
-@_converts_errors
+@converts_errors
 def get_latest(repo):
     """Download the newest changes. Returns the list of files that changed.
 
@@ -644,7 +562,7 @@ def _as_lists(batch, pns):
     return done, failed
 
 
-@_timed("check out")
+@diagnostics.timed("check out")
 def _checkout_batch(repo, pns):
     """Check out several parts with one pull: lock every record (several at a time), pull once, lock every part's
     CAD files, log the check-outs. A part that can't be checked out (somebody has it) is left alone and reported;
@@ -719,7 +637,7 @@ def _checkout_batch(repo, pns):
     return batch
 
 
-@_converts_errors
+@converts_errors
 def checkout(repo, pn):
     """Lock a part (record first, then every CAD file), get the latest copy, log the check-out.
 
@@ -729,7 +647,7 @@ def checkout(repo, pn):
     return _single(_checkout_batch(repo, [pn]), pn)
 
 
-@_converts_errors
+@converts_errors
 def checkout_many(repo, pns):
     """checkout() for several parts at once, with one download for all of them. Returns (done, failed): done is
     [(pn, CheckoutResult)] and failed is [(pn, message)]. A part somebody else has is reported and skipped."""
@@ -801,7 +719,7 @@ def _change_report(repo, pn, user, cad=None, modified=None):
     )
 
 
-@_converts_errors
+@converts_errors
 def change_report(repo, pn):
     """What a check-in of this part would find. Changes nothing. The GUI uses it to
     warn before checking in a part that has no changes."""
@@ -810,7 +728,7 @@ def change_report(repo, pn):
     return _change_report(repo, pn, get_user(repo))
 
 
-@_converts_errors
+@converts_errors
 def change_reports(repo, pns):
     """change_report() for several parts, reading the vault's state once. Returns [(pn, ChangeReport)]."""
     validate_repo(repo)
@@ -829,7 +747,7 @@ def _allowed(allow_unchanged, pn):
     return pn in allow_unchanged
 
 
-@_timed("check in")
+@diagnostics.timed("check in")
 def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot=None):
     """Check in (or save progress on) several parts: commit each one, upload them all together, then release the
     locks. A part with a problem (not yours, nothing changed) is reported and the others carry on. If the upload
@@ -868,7 +786,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
             changed = report.changed_files
             if not report.has_changes and not _allowed(allow_unchanged, pn):
                 if keep_lock:
-                    LOG("No changes to save.")
+                    diagnostics.LOG("No changes to save.")
                     batch.results[pn] = CheckinResult(False, [])
                     continue
                 raise NoChangesError(pn, report.unchanged_files)
@@ -880,7 +798,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                     try:
                         found_references = references_reader(repo, pn, record.revision, changed)
                     except Exception as e:
-                        LOG(f"WARNING: could not read what {pn} uses: {e}")
+                        diagnostics.LOG(f"WARNING: could not read what {pn} uses: {e}")
                 record_before = (Path(repo) / record_path).read_bytes()
                 registry.record_checkin(record, user, changed, comment, references=found_references)
                 registry.save(repo, record)
@@ -908,7 +826,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
             _run_chunked(["git", "reset", "-q"], changed + [record_path], repo)
             (Path(repo) / record_path).write_bytes(record_before)
         except (LitterboxError, OSError) as e:
-            LOG(f"WARNING: could not fully take back the check-in of {record_path}: {e}")
+            diagnostics.LOG(f"WARNING: could not fully take back the check-in of {record_path}: {e}")
 
     if config.get_commit_style(repo) == "per_batch" and len(to_commit) > 1:
         # One commit for the whole batch (faster). A failure here fails the batch and keeps the locks.
@@ -965,7 +883,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
     return batch
 
 
-@_converts_errors
+@converts_errors
 def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, references_reader=None, snapshot=None):
     """Commit your changes, upload them, then (unless keep_lock) release the locks.
 
@@ -990,7 +908,7 @@ def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, refere
             snapshot.release()
 
 
-@_converts_errors
+@converts_errors
 def checkin_many(repo, pns, comment="", keep_lock=False, allow_unchanged=frozenset(), references_reader=None,
                  snapshot=None):
     """checkin() for several parts at once, with one upload for all of them. `allow_unchanged` is the set of parts
@@ -1005,7 +923,7 @@ def checkin_many(repo, pns, comment="", keep_lock=False, allow_unchanged=frozens
             snapshot.release()
 
 
-@_converts_errors
+@converts_errors
 def edit_details(repo, pn, name, description):
     """Change a part's name and description. You must have the part checked out.
 
@@ -1030,7 +948,7 @@ def edit_details(repo, pn, name, description):
 # Undo check out
 # ---------------------------------------------------------------------------
 
-@_timed("undo checkout")
+@diagnostics.timed("undo checkout")
 def _undo_batch(repo, pns):
     """Throw away your changes to several parts and release their locks, with one lock list and one restore."""
     validate_repo(repo)
@@ -1074,7 +992,7 @@ def _undo_batch(repo, pns):
     return batch
 
 
-@_converts_errors
+@converts_errors
 def undo_checkout(repo, pn):
     """Throw away your changes to a part and release its locks.
 
@@ -1085,7 +1003,7 @@ def undo_checkout(repo, pn):
     return _single(_undo_batch(repo, [pn]), pn)
 
 
-@_converts_errors
+@converts_errors
 def undo_checkout_many(repo, pns):
     """undo_checkout() for several parts at once. Returns (done, failed): done is [(pn, never-uploaded files)]."""
     pns = _unique_pns(pns)
@@ -1124,7 +1042,7 @@ class _Context:
             try:
                 run(["git", "fetch"], self.repo, quiet=True)
             except LitterboxError as e:
-                LOG(f"WARNING: could not check the vault for newer changes. {e}")
+                diagnostics.LOG(f"WARNING: could not check the vault for newer changes. {e}")
 
     def locks(self):
         if self._locks is None:
@@ -1182,7 +1100,7 @@ def _blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, r
     return cad, problems
 
 
-@_converts_errors
+@converts_errors
 def release_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     """Work out what a release would freeze and whether anything blocks it.
 
@@ -1207,7 +1125,7 @@ def release_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     return ReleasePlan(pn, record.name, cad, problems, warnings)
 
 
-@_converts_errors
+@converts_errors
 def make_cots_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     """Work out whether a part can be turned into a COTS part. Same checks as a release:
     nobody has it checked out, nothing is modified, and your copy is up to date."""
@@ -1234,7 +1152,7 @@ def _batch_message(messages):
     return subject, "\n".join(messages)
 
 
-@_timed("record change")
+@diagnostics.timed("record change")
 def _edit_records(repo, items, atomic=False):
     """Change several records with ONE download and ONE upload.
 
@@ -1313,7 +1231,7 @@ def _edit_records(repo, items, atomic=False):
                 run(["git", "reset", "--soft", f"HEAD~{committed}"], repo)       # take back our unpushed commits
             _run_chunked(["git", "restore", "--staged", "--worktree"], paths, repo)
         except LitterboxError as e:
-            LOG(f"WARNING: could not fully undo the change to {', '.join(paths)}: {e}")
+            diagnostics.LOG(f"WARNING: could not fully undo the change to {', '.join(paths)}: {e}")
         _force_unlock_quietly(repo, paths)
         raise
 
@@ -1349,7 +1267,7 @@ def _refuse_if_workflow(repo, action):
                              "to ask for them; it happens when everyone required has signed.")
 
 
-@_converts_errors
+@converts_errors
 def release(repo, pn):
     """Freeze a part and its drawing. Call release_plan() first and get the user to confirm.
 
@@ -1368,7 +1286,7 @@ def release(repo, pn):
     return plan.files
 
 
-@_converts_errors
+@converts_errors
 def make_cots(repo, pn):
     """Record an existing part as COTS (purchased): it can no longer be checked out.
     Call make_cots_plan() first and get the user to confirm. Returns the files it covers."""
@@ -1385,7 +1303,7 @@ def make_cots(repo, pn):
     return plan.files
 
 
-@_converts_errors
+@converts_errors
 def reopen(repo, pn, reason):
     """Make a released part editable again. A reason is required."""
     pn = _as_pn(pn)
@@ -1397,7 +1315,7 @@ def reopen(repo, pn, reason):
     )
 
 
-@_converts_errors
+@converts_errors
 def void(repo, pn, reason):
     """Abandon a part. Its number is never reused. A reason is required."""
     pn = _as_pn(pn)
@@ -1450,7 +1368,7 @@ def _plan_batch(repo, plans, action, verb, change, message):
     return _as_lists(batch, [plan.pn for plan in plans])
 
 
-@_converts_errors
+@converts_errors
 def release_many(repo, pns):
     """release() for several parts with one download and one upload. Call release_plans() first and get the user
     to confirm. Returns (done, failed): done is [(pn, released files)]."""
@@ -1460,7 +1378,7 @@ def release_many(repo, pns):
                        lambda record, user, plan: registry.mark_released(record, user, plan.files), "{pn}: Released")
 
 
-@_converts_errors
+@converts_errors
 def make_cots_many(repo, pns):
     """make_cots() for several parts with one download and one upload."""
     pns = _unique_pns(pns)
@@ -1476,7 +1394,7 @@ def _reason_batch(repo, pns, action, change, message):
     return _as_lists(batch, pns)
 
 
-@_converts_errors
+@converts_errors
 def reopen_many(repo, pns, reason):
     """reopen() (Unrelease) for several parts with one download and one upload; one reason for all of them."""
     pns = _unique_pns(pns)
@@ -1485,7 +1403,7 @@ def reopen_many(repo, pns, reason):
                          lambda pn: f"{pn}: Unreleased - {_one_line(reason)}")
 
 
-@_converts_errors
+@converts_errors
 def void_many(repo, pns, reason):
     """void() for several parts with one download and one upload; one reason for all of them."""
     pns = _unique_pns(pns)

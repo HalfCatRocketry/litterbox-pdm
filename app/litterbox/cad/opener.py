@@ -18,7 +18,8 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from litterbox.parts.engine import LitterboxError
+from litterbox.errors import LitterboxError
+
 
 MODEL_EXTENSIONS = (".sldasm", ".sldprt")     # opened first: the part or assembly itself
 DRAWING_EXTENSIONS = (".slddrw",)

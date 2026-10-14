@@ -44,13 +44,15 @@ from litterbox.records import registry
 from dataclasses import dataclass
 
 from litterbox.core.pn import PN, PNError, check_base, check_new_base, check_org, check_variant, format_base, format_variant
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 MAX_NAME = 100
 MAX_DESCRIPTION = 500
 ATTEMPTS = 5            # how many times to pick a number again if someone else got there first
 
 
-class CreateError(eng.LitterboxError):
+class CreateError(LitterboxError):
     """A part number could not be created. The message is safe to show to a user."""
 
 
@@ -120,15 +122,15 @@ def _undo_creation(repo, record_path, committed):
         if committed:
             eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
         eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", record_path], repo)
-    except eng.LitterboxError as e:
-        eng.LOG(f"WARNING: could not fully undo the creation of {record_path}: {e}")
+    except LitterboxError as e:
+        diagnostics.LOG(f"WARNING: could not fully undo the creation of {record_path}: {e}")
     path = Path(repo) / record_path
     try:
         if path.exists():
             os.chmod(path, 0o644)
             path.unlink()
     except OSError as e:
-        eng.LOG(f"WARNING: could not delete {record_path}: {e}")
+        diagnostics.LOG(f"WARNING: could not delete {record_path}: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +150,7 @@ def _create(repo, name, description, org, choose):
     eng._check_permission(repo, user, "create")
     try:
         _sync(repo)
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         raise CreateError(f"Could not get the latest records from the vault, so nothing was created. "
                            f"Are you online?\n\n{e}") from e
     org = _org(repo, org)
@@ -168,15 +170,15 @@ def _create(repo, name, description, org, choose):
             eng.run(["git", "commit", "-m", f"{pn}: Created - {name}", "--", record_path], repo)
             committed = True
             eng.run(["git", "push"], repo)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             _undo_creation(repo, record_path, committed)
             if not committed:
                 raise
             last_error = e
-            eng.LOG(f"{pn} could not be pushed (someone else may have just used it). Checking again...")
+            diagnostics.LOG(f"{pn} could not be pushed (someone else may have just used it). Checking again...")
             try:
                 _sync(repo)
-            except eng.LitterboxError as sync_error:
+            except LitterboxError as sync_error:
                 raise CreateError(
                     f"{pn} could not be created, and the vault can't be reached right now. "
                     f"Nothing was changed. Are you online?\n\n{sync_error}") from e
@@ -278,8 +280,8 @@ def _undo_batch(repo, record_paths, committed, pathspec):
         if committed:
             eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
         eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
-    except eng.LitterboxError as e:
-        eng.LOG(f"WARNING: could not fully undo the batch: {e}")
+    except LitterboxError as e:
+        diagnostics.LOG(f"WARNING: could not fully undo the batch: {e}")
     for record_path in record_paths:
         path = Path(repo) / record_path
         try:
@@ -287,7 +289,7 @@ def _undo_batch(repo, record_paths, committed, pathspec):
                 os.chmod(path, 0o644)
                 path.unlink()
         except OSError as e:
-            eng.LOG(f"WARNING: could not delete {record_path}: {e}")
+            diagnostics.LOG(f"WARNING: could not delete {record_path}: {e}")
 
 
 def clean_specs(specs):
@@ -313,7 +315,7 @@ def sync_latest(repo):
     eng.validate_repo(repo)
     try:
         _sync(repo)
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         raise CreateError(f"Could not get the latest records from the vault, so nothing was created. "
                           f"Are you online?\n\n{e}") from e
 
@@ -363,13 +365,13 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
         except NumbersTaken:
             _undo_batch(repo, written, committed, pathspec)
             raise
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             _undo_batch(repo, written, committed, pathspec)
             if not committed:
                 raise
             try:
                 _sync(repo)
-            except eng.LitterboxError as sync_error:
+            except LitterboxError as sync_error:
                 raise CreateError("The parts could not be created, and the vault can't be reached right now. "
                                   f"Nothing was changed. Are you online?\n\n{sync_error}") from e
             raise NumbersTaken(f"The numbers could not be pushed (someone else may have just used one):\n\n{e}") from e
@@ -404,7 +406,7 @@ def create_many(repo, specs, org=None, message=None):
     eng._check_permission(repo, user, "create")
     try:
         _sync(repo)
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         raise CreateError(f"Could not get the latest records from the vault, so nothing was created. "
                           f"Are you online?\n\n{e}") from e
     org = _org(repo, org)
@@ -430,15 +432,15 @@ def create_many(repo, specs, org=None, message=None):
             eng.run(["git", "commit", "-m", text, f"--pathspec-from-file={pathspec}"], repo)
             committed = True
             eng.run(["git", "push"], repo)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             _undo_batch(repo, written, committed, pathspec)
             if not committed:
                 raise
             last_error = e
-            eng.LOG("The batch could not be pushed (someone else may have just used a number). Checking again...")
+            diagnostics.LOG("The batch could not be pushed (someone else may have just used a number). Checking again...")
             try:
                 _sync(repo)
-            except eng.LitterboxError as sync_error:
+            except LitterboxError as sync_error:
                 raise CreateError("The parts could not be created, and the vault can't be reached right now. "
                                   f"Nothing was changed. Are you online?\n\n{sync_error}") from e
             continue
@@ -608,7 +610,7 @@ def main(argv=None):
                 print(f"Next free variant: {format_variant(suggest_variant_number(args.repo, args.base))}")
         else:
             print(f"Next free part number: {format_base(suggest_part_number(args.repo))}")
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         print(f"\nERROR: {e}")
         return 1
     return 0

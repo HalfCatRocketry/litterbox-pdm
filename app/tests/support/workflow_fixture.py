@@ -9,6 +9,7 @@ from litterbox.team import people
 from litterbox.records import registry
 from litterbox.workflows import workflow as wf
 from litterbox.core.pn import PN
+from litterbox import diagnostics
 
 
 ENGINEER, QUALITY, MANAGER, CHIEF = "Responsible Engineer", "Quality", "Manager", "Chief"
@@ -20,7 +21,7 @@ PRT2 = "cad/HCR-00002-001_A.SLDPRT"
 class Fixture(TwoUserVault):
     def setUp(self):
         super().setUp()
-        quiet = mock.patch.object(eng, "LOG", lambda *_: None)
+        quiet = mock.patch.object(diagnostics, "LOG", lambda *_: None)
         quiet.start()
         self.addCleanup(quiet.stop)
         with self.user("Alex"):

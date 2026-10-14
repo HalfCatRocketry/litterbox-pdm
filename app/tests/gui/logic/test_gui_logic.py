@@ -7,7 +7,8 @@ from pathlib import Path
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.records import registry
 from litterbox.user import settings
-from litterbox.parts.engine import ChangeReport, LitterboxError, PartStatus
+from litterbox.parts.engine import ChangeReport, PartStatus
+from litterbox.errors import LitterboxError
 from litterbox.core.pn import PN
 
 

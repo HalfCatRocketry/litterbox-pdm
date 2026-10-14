@@ -18,6 +18,7 @@ from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, Tw
 from litterbox.parts import engine as eng
 from litterbox.records import registry
 from litterbox.parts import revise
+from litterbox.errors import LitterboxError
 
 PRT_B = PRT.replace("_A.", "_B.")
 DRW_B = DRW.replace("_A.", "_B.")
@@ -111,7 +112,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
             self.assertEqual((row.kind, row.locked_by, row.revision), ("theirs", "Alex", "B"))
             self.assertEqual(row.files, [DRW_B, PRT_B])
             self.assertEqual(sorted(row.revisions), ["A", "B"])
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkout(self.b, PART)
 
     def test_the_revision_can_be_worked_on_and_released_like_any_other(self):
@@ -126,7 +127,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
         self.assertEqual((self.a / PRT_B).read_text(), "model B\n")
 
     def test_a_reason_is_required(self):
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.revise(reason="   ")
         self.assert_untouched(self.a)
 
@@ -136,7 +137,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
             plan = revise.revise_plan(self.a, PART)
         self.assertFalse(plan.ok)
         self.assertTrue(any("released" in p for p in plan.problems), plan.problems)
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.revise()
 
     def test_cots_parts_are_never_revised(self):
@@ -171,13 +172,13 @@ class TestRevise(ReviseFixture, unittest.TestCase):
 
     def test_a_refused_repoint_leaves_the_vault_as_it_was(self):
         self.fake.refuse_repoint = True
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.revise()
         self.assert_untouched(self.a)
 
     def test_a_failed_push_takes_back_the_commit_and_the_files(self):
-        with mock.patch.object(eng, "_push_with_retry", side_effect=eng.LitterboxError("network down")):
-            with self.assertRaises(eng.LitterboxError):
+        with mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("network down")):
+            with self.assertRaises(LitterboxError):
                 self.revise()
         self.assert_untouched(self.a)
 
@@ -194,7 +195,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
 
     def test_losing_the_race_to_someone_else_leaves_nothing(self):
         self.revise(repo=self.b, user="Bea")                    # Bea got there first
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.revise()                                       # Alex has not pulled yet
         self.assertIn("Bea", str(ctx.exception))
         self.assertFalse((self.a / PRT_B).exists())
@@ -220,7 +221,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
     def test_a_note_that_points_outside_the_vault_is_refused(self):
         revise._write_journal(self.a, {"op": "revise", "token": "tok3", "record": REC,
                                        "added": ["../elsewhere/file"], "removed": [], "locked": []})
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             revise.recover(self.a, log=lambda *_: None)
 
 
@@ -279,7 +280,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
             plan = revise.cancel_revision_plan(self.b, PART)
             self.assertFalse(plan.ok)
             self.assertTrue(any("Alex" in p for p in plan.problems), plan.problems)
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 revise.cancel_revision(self.b, PART, "No", backend=self.fake, log=lambda *_: None)
         self.assertTrue((self.a / PRT_B).exists())
         self.assertEqual(registry.load(self.a, PART).revision, "B")
@@ -293,7 +294,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
 
     def test_a_reason_is_required(self):
         self.revise()
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.cancel(reason=" ")
         self.assertTrue((self.a / PRT_B).exists())
 
@@ -301,8 +302,8 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.revise()
         with self.user("Alex"):
             (self.a / PRT_B).write_text("my edits\n", encoding="utf-8")
-        with mock.patch.object(eng, "_push_with_retry", side_effect=eng.LitterboxError("network down")):
-            with self.assertRaises(eng.LitterboxError):
+        with mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("network down")):
+            with self.assertRaises(LitterboxError):
                 self.cancel()
         record = registry.load(self.a, PART)
         self.assertEqual((record.revision, record.status), ("B", "in_work"))
@@ -328,7 +329,7 @@ class TestRulesAroundRevisions(ReviseFixture, unittest.TestCase):
         self.revise()
         with self.user("Alex"):
             eng.checkin(self.a, PART, "Save", allow_unchanged=True)
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 eng.void(self.a, PART, "No longer needed")
             self.assertIn("Cancel Revision", str(ctx.exception))
             plan = eng.make_cots_plan(self.a, PART)

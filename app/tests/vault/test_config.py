@@ -10,6 +10,7 @@ from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError
 
 
 class TestConfig(unittest.TestCase):
@@ -140,7 +141,7 @@ class TestConfig(unittest.TestCase):
         eng.validate_repo(self.repo)
         self.assertEqual((pn_module.BASE_DIGITS, pn_module.VARIANT_DIGITS), (5, 3))
         self.write_config("org: HCR\npn_base_digits: 0\n")
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             eng.validate_repo(self.repo)
 
 

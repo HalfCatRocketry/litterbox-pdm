@@ -15,6 +15,8 @@ from litterbox.team import people
 from litterbox.records import registry
 from litterbox.workflows import workflow as wf
 from tests.support.workflow_fixture import CHIEF, ENGINEER, MANAGER, PART2, PRT2, QUALITY, Fixture
+from litterbox.errors import LitterboxError
+
 
 class TestTemplates(Fixture, unittest.TestCase):
     def test_no_file_means_no_workflows(self):
@@ -53,9 +55,9 @@ class TestTemplates(Fixture, unittest.TestCase):
 
     def test_a_failed_save_leaves_things_alone(self):
         real = eng._push_with_retry
-        eng._push_with_retry = lambda repo, attempts=3: (_ for _ in ()).throw(eng.LitterboxError("offline"))
+        eng._push_with_retry = lambda repo, attempts=3: (_ for _ in ()).throw(LitterboxError("offline"))
         self.addCleanup(setattr, eng, "_push_with_retry", real)
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             with self.user("Alex"):
                 wf.edit_templates(self.a, lambda t, d: wf.set_template(t, wf.RELEASE, "T", [[QUALITY]]), "x")
         eng._push_with_retry = real
@@ -64,7 +66,7 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertEqual(eng.get_locks(self.a), {})
 
     def test_a_member_cannot_change_workflows(self):
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             with self.user("Bea"):
                 wf.edit_templates(self.b, lambda t, d: wf.set_template(t, wf.RELEASE, "T", [[QUALITY]]), "x")
         self.assertIn("Only an Admin", str(ctx.exception))
@@ -78,7 +80,7 @@ class TestTemplates(Fixture, unittest.TestCase):
                (lambda t: wf.set_template(t, "revise", "T", [[QUALITY]]), "can't have a workflow"))
         for change, text in bad:
             with self.subTest(text=text):
-                with self.assertRaises(eng.LitterboxError) as ctx:
+                with self.assertRaises(LitterboxError) as ctx:
                     with self.user("Alex"):
                         wf.edit_templates(self.a, lambda t, d, c=change: c(t), "x")
                 self.assertIn(text.split()[0], str(ctx.exception))
@@ -87,7 +89,7 @@ class TestTemplates(Fixture, unittest.TestCase):
 
     def test_duplicate_names_are_refused(self):
         self.set_template()
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             with self.user("Alex"):
                 wf.edit_templates(self.a, lambda t, d: wf.set_template(t, wf.RELEASE, "t", [[QUALITY]]), "x")
         self.assertIn("already a Release workflow", str(ctx.exception))
@@ -121,7 +123,7 @@ class TestTemplates(Fixture, unittest.TestCase):
     def test_the_old_format_gets_a_clear_message(self):
         (self.a / ".litterbox").mkdir(exist_ok=True)
         (self.a / wf.WORKFLOWS_FILE).write_text("workflows:\n  release:\n    signoffs:\n    - role: Quality\n")
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             wf.load(self.a)
         self.assertIn("Litterbox 0.2", str(ctx.exception))
 
@@ -145,7 +147,7 @@ class TestTemplates(Fixture, unittest.TestCase):
 
     def test_a_vault_without_a_team_cannot_have_workflows(self):
         with mock.patch.object(people, "require", return_value=people.Identity(people.LEGACY)):
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 wf.edit_templates(self.a, lambda t, d: None, "x")
         self.assertIn("Set up the team", str(ctx.exception))
 
@@ -162,13 +164,13 @@ class TestWithoutAWorkflowThingsWorkAsBefore(Fixture, unittest.TestCase):
                              (wf.REOPEN, lambda r: eng.reopen(r, PART, "no"))):
             with self.subTest(action=action):
                 self.set_template(action)
-                with self.assertRaises(eng.LitterboxError) as ctx:
+                with self.assertRaises(LitterboxError) as ctx:
                     self.do("Alex", call)
                 self.assertIn("needs sign-offs", str(ctx.exception))
         self.assertEqual(self.record().status, registry.STATUS_IN_WORK)
 
     def test_requesting_without_a_template_says_so(self):
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART], wf.RELEASE, "T", ["bea", "alex"])
         self.assertIn("no Release workflow called 'T'", str(ctx.exception))
 
@@ -204,7 +206,7 @@ class TestRequesting(Fixture, unittest.TestCase):
         self.set_template()
         with self.user("Bea"):
             eng.checkout(self.b, PART2)
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART, PART2], wf.RELEASE, "T", ["bea", "alex"])
         self.assertIn(str(PART2), str(ctx.exception))
         self.assertIn("checked out by", str(ctx.exception))
@@ -224,14 +226,14 @@ class TestRequesting(Fixture, unittest.TestCase):
                  (["bea", "nobody"], "Choose a person"))
         for assign, text in cases:
             with self.subTest(assign=assign):
-                with self.assertRaises(eng.LitterboxError) as ctx:
+                with self.assertRaises(LitterboxError) as ctx:
                     self.do("Alex", wf.request, [PART], wf.RELEASE, "T", assign)
                 self.assertIn(text, str(ctx.exception))
         self.assertEqual(self.record().pending, {})
 
     def test_one_person_cannot_fill_two_rows_unless_allowed(self):
         self.set_template(rows=((ENGINEER,), (ENGINEER,)))
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART], wf.RELEASE, "T", ["alex", "alex"])
         self.assertIn("doesn't let one person", str(ctx.exception))
 
@@ -242,7 +244,7 @@ class TestRequesting(Fixture, unittest.TestCase):
 
     def test_the_requester_may_be_barred_from_signing(self):
         self.set_template(requester=False)
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART], wf.RELEASE, "T", ["bea", "alex"])
         self.assertIn("sign your own request", str(ctx.exception))
 
@@ -251,7 +253,7 @@ class TestRequesting(Fixture, unittest.TestCase):
         self.do("Alex", wf.request, [PART], wf.RELEASE, "T", ["bea", "alex"], extras=[(MANAGER, "cy")])
         slots = self.record().pending["slots"]
         self.assertEqual((len(slots), slots[2]["id"], slots[2].get("extra")), (3, "cy", True))
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.do("Alex", wf.request, [PART], wf.RELEASE, "T", ["bea", "alex"], extras=[("Wizard", "cy")])
 
     def test_or_rows_accept_anyone_with_any_of_the_roles(self):
@@ -263,7 +265,7 @@ class TestRequesting(Fixture, unittest.TestCase):
     def test_reopen_and_void_need_a_reason(self):
         self.do("Alex", eng.release, PART)
         self.set_template(wf.REOPEN, rows=((MANAGER,),))
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART], wf.REOPEN, "T", ["cy"])
         self.assertIn("reason is required", str(ctx.exception))
         self.do("Alex", wf.request, [PART], wf.REOPEN, "T", ["cy"], reason="Fix a drawing error")
@@ -271,7 +273,7 @@ class TestRequesting(Fixture, unittest.TestCase):
 
     def test_actions_that_cannot_happen_are_refused_up_front(self):
         self.set_template(wf.REOPEN, rows=((MANAGER,),))
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART], wf.REOPEN, "T", ["cy"], reason="x")
         self.assertIn("status is", str(ctx.exception))
 
@@ -281,13 +283,13 @@ class TestRequesting(Fixture, unittest.TestCase):
         for user, func in (("Alex", lambda r: eng.checkout(r, PART)), ("Bea", lambda r: eng.checkout(r, PART)),
                            ("Alex", lambda r: wf.request(r, [PART], wf.RELEASE, "T", ["bea", "alex"]))):
             with self.subTest(user=user):
-                with self.user(user), self.assertRaises(eng.LitterboxError):
+                with self.user(user), self.assertRaises(LitterboxError):
                     func(self.repo_of(user))
 
     def test_someone_not_on_the_team_cannot_ask(self):
         self.set_template()
         with self.user("Zed"):
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 wf.request(self.b, [PART], wf.RELEASE, "T", ["bea", "alex"])
 
     def test_the_record_round_trips(self):
@@ -357,10 +359,10 @@ class TestSigning(Fixture, unittest.TestCase):
     def test_signing_again_or_when_not_named_does_nothing(self):
         self.request()
         self.do("Alex", wf.sign_off, [PART])
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.sign_off, [PART])
         self.assertIn("nothing for you to sign", str(ctx.exception))
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.do("Cy", wf.sign_off, [PART])
 
     def test_one_person_named_twice_signs_both_at_once(self):
@@ -374,7 +376,7 @@ class TestSigning(Fixture, unittest.TestCase):
         self.do("Alex", wf.sign_off, [PART])
         self.get_latest("Bea")
         real = wf._finish_many
-        wf._finish_many = lambda repo, pns, **k: (_ for _ in ()).throw(eng.LitterboxError("offline"))
+        wf._finish_many = lambda repo, pns, **k: (_ for _ in ()).throw(LitterboxError("offline"))
         try:
             r = self.do("Bea", wf.sign_off, [PART])
         finally:
@@ -389,7 +391,7 @@ class TestSigning(Fixture, unittest.TestCase):
     def test_completing_before_everyone_signed_is_refused(self):
         self.request()
         self.do("Alex", wf.sign_off, [PART])
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.complete, PART)
         self.assertIn("Quality (Bea Jones)", str(ctx.exception))
 
@@ -398,7 +400,7 @@ class TestSigning(Fixture, unittest.TestCase):
         self.get_latest("Bea")
         (self.b / PRT).chmod(0o644)
         (self.b / PRT).write_bytes(b"someone sneaked a change in")
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Bea", wf.sign_off, [PART])
         self.assertIn("different from the file", str(ctx.exception))
         git(self.b, "checkout", "--", str(PRT))
@@ -449,12 +451,12 @@ class TestRejectingWithdrawingReassigning(Fixture, unittest.TestCase):
 
     def test_a_reason_is_required_to_reject(self):
         self.request()
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.do("Alex", wf.reject, [PART], "  ")
 
     def test_only_named_signers_or_admins_reject(self):
         self.request()
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Cy", wf.reject, [PART], "no")
         self.assertIn("named to sign", str(ctx.exception))
         self.assertTrue(self.record().pending)
@@ -462,7 +464,7 @@ class TestRejectingWithdrawingReassigning(Fixture, unittest.TestCase):
     def test_the_requester_can_withdraw_but_other_members_cannot(self):
         self.request()
         self.get_latest("Bea")
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Bea", wf.withdraw, [PART])
         self.assertIn("person who asked", str(ctx.exception))
         self.do("Alex", wf.withdraw, [PART], "Changed my mind")
@@ -486,14 +488,14 @@ class TestRejectingWithdrawingReassigning(Fixture, unittest.TestCase):
     def test_reassigning_respects_the_rules(self):
         self.request()
         self.get_latest("Bea")
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.reassign, [PART], 0, "cy")                # Cy has no Quality role
         self.assertIn("not active with the role", str(ctx.exception))
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Bea", wf.reassign, [PART], 0, "bea")
         self.assertIn("person who asked", str(ctx.exception))
         self.do("Alex", wf.sign_off, [PART])
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.reassign, [PART], 1, "alex")
         self.assertIn("already been given", str(ctx.exception))
 
@@ -502,13 +504,13 @@ class TestOverride(Fixture, unittest.TestCase):
     def test_a_member_cannot_override(self):
         self.request()
         self.get_latest("Bea")
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.do("Bea", wf.override, [PART], "urgent")
         self.assertIn("Only an Admin", str(ctx.exception))
 
     def test_a_reason_is_required(self):
         self.request()
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             self.do("Alex", wf.override, [PART], " ")
 
     def test_an_admin_releases_a_batch_without_the_sign_offs(self):

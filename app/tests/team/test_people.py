@@ -16,6 +16,7 @@ from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.records import registry
 from tests.support.team_fixture import TeamFixture
+from litterbox.errors import LitterboxError
 
 
 def directory(*extra, roles=("Quality", "Manufacturing")):
@@ -174,7 +175,7 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         self.assertEqual((who.state, who.host_name), (people.NOT_LISTED, "Bea"))
         with self.user("Bea"):
             self.assertEqual(len(eng.get_status(self.b)), 1)                      # looking is fine
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 eng.checkout(self.b, PART)
         self.assertIn("not on this vault's team list", str(ctx.exception))
         self.assertEqual(self.locks_of(self.b, "Bea"), {})
@@ -185,7 +186,7 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
             for action in (lambda: eng.checkout(self.b, PART), lambda: eng.undo_checkout(self.b, PART),
                            lambda: eng.edit_details(self.b, PART, "x", ""), lambda: eng.release(self.b, PART),
                            lambda: create.new_part(self.b, "Nope")):
-                with self.assertRaises(eng.LitterboxError):
+                with self.assertRaises(LitterboxError):
                     action()
         self.assertEqual(len([p for p in registry.list_pns(self.b)]), 1)
 
@@ -201,7 +202,7 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
     def test_a_member_cannot_manage_people(self):
         self.add_bea()
         with self.user("Bea"):
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 people.edit_directory(self.b, lambda d, who: people.add_person(d, who, "cy", "Cy"), "x")
         self.assertIn("Only an Admin", str(ctx.exception))
 
@@ -221,13 +222,13 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         with self.user("Bea"):
             eng.get_latest(self.b)
         self.assertEqual(self.who(self.b, "Bea").state, people.INACTIVE)
-        with self.user("Bea"), self.assertRaises(eng.LitterboxError):
+        with self.user("Bea"), self.assertRaises(LitterboxError):
             eng.checkout(self.b, PART)
 
     def test_a_change_that_fails_is_rolled_back(self):
         before = (self.a / people.PEOPLE_FILE).read_text()
-        with self.user("Alex"), mock.patch.object(eng, "_push_with_retry", side_effect=eng.LitterboxError("offline")):
-            with self.assertRaises(eng.LitterboxError):
+        with self.user("Alex"), mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("offline")):
+            with self.assertRaises(LitterboxError):
                 people.edit_directory(self.a, lambda d, who: people.add_person(d, who, "cy", "Cy"), "Team: add Cy")
         self.assertEqual((self.a / people.PEOPLE_FILE).read_text(), before)
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
@@ -294,23 +295,23 @@ class TestIdentityCache(TeamFixture, unittest.TestCase):
             people.current(self.b, refresh=True)
         old = time.time() - people.IDENTITY_MAX_AGE - 10
         people._cache_path(self.b).write_text(f'{{"host_name": "Bea", "checked_at": {old}}}')
-        with self.user("Bea"), mock.patch.object(people, "probe_host_name", side_effect=eng.LitterboxError("offline")) as probe:
+        with self.user("Bea"), mock.patch.object(people, "probe_host_name", side_effect=LitterboxError("offline")) as probe:
             self.assertEqual(people.current(self.b).state, people.OK)               # offline: the remembered name is used
         probe.assert_called_once()
 
     def test_never_verified_and_offline_is_read_only(self):
         people.forget_identity(self.b)
-        with self.user("Bea"), mock.patch.object(people, "probe_host_name", side_effect=eng.LitterboxError("offline")):
+        with self.user("Bea"), mock.patch.object(people, "probe_host_name", side_effect=LitterboxError("offline")):
             who = people.current(self.b)
             self.assertEqual(who.state, people.UNVERIFIED)
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 eng.checkout(self.b, PART)
         self.assertIn("could not find out", str(ctx.exception))
 
     def test_refresh_that_fails_does_not_keep_a_stale_name(self):
         with self.user("Bea"):
             people.current(self.b, refresh=True)
-        with self.user("Bea"), mock.patch.object(people, "probe_host_name", side_effect=eng.LitterboxError("offline")):
+        with self.user("Bea"), mock.patch.object(people, "probe_host_name", side_effect=LitterboxError("offline")):
             self.assertEqual(people.current(self.b, refresh=True).state, people.UNVERIFIED)
 
     def test_changing_account_is_noticed_by_who_am_i(self):
@@ -333,7 +334,7 @@ class TestCheckBeforePush(TeamFixture, unittest.TestCase):
         with self.user("Alex"):
             people.edit_directory(self.a, lambda d, who: people.set_active(d, who, "bea", False), "Team: Bea off")
         with self.user("Bea"):
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 eng.checkin(self.b, PART, "My work")
         self.assertIn("Nothing was uploaded", str(ctx.exception))
         self.assertIn("switched off", str(ctx.exception))

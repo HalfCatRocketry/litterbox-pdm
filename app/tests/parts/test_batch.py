@@ -16,6 +16,8 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git
 from litterbox.parts import engine as eng
 from litterbox.records import registry
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 COUNT = 5
 
@@ -98,8 +100,8 @@ class BatchActions(TwoUserVault, unittest.TestCase):
 
     def test_a_failed_download_gives_back_every_lock(self):
         with self.user("Alex"):
-            with mock.patch.object(eng, "_pull", side_effect=eng.LitterboxError("offline")):
-                with self.assertRaises(eng.LitterboxError):
+            with mock.patch.object(eng, "_pull", side_effect=LitterboxError("offline")):
+                with self.assertRaises(LitterboxError):
                     eng.checkout_many(self.a, self.pns)
             self.assertEqual(self.locks(self.a), {})
 
@@ -230,8 +232,8 @@ class BatchActions(TwoUserVault, unittest.TestCase):
     def test_a_failed_upload_puts_everything_back(self):
         before = git(self.a, "rev-parse", "HEAD")
         with self.user("Alex"):
-            with mock.patch.object(eng, "_push_with_retry", side_effect=eng.LitterboxError("offline")):
-                with self.assertRaises(eng.LitterboxError):
+            with mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("offline")):
+                with self.assertRaises(LitterboxError):
                     eng.void_many(self.a, self.pns, "Not needed")
             self.assertEqual(git(self.a, "rev-parse", "HEAD"), before)               # the commits were taken back
             self.assertEqual(git(self.a, "status", "--porcelain"), "")
@@ -348,7 +350,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
 
     def test_debug_mode_logs_where_the_time_went(self):
         lines = []
-        with mock.patch.object(eng, "DEBUG", True), mock.patch.object(eng, "LOG", lines.append):
+        with mock.patch.object(diagnostics, "DEBUG", True), mock.patch.object(diagnostics, "LOG", lines.append):
             with self.user("Alex"):
                 eng.checkout_many(self.a, self.pns[:2])
                 self.change(self.pns[:2])
@@ -360,7 +362,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
 
     def test_nothing_is_logged_about_timing_when_debug_is_off(self):
         lines = []
-        with mock.patch.object(eng, "DEBUG", False), mock.patch.object(eng, "LOG", lines.append):
+        with mock.patch.object(diagnostics, "DEBUG", False), mock.patch.object(diagnostics, "LOG", lines.append):
             with self.user("Alex"):
                 eng.checkout_many(self.a, self.pns[:2])
         self.assertFalse([line for line in lines if line.startswith("Timing:")])

@@ -56,6 +56,9 @@ from litterbox.vault import config
 from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.records import registry
+from litterbox.errors import LitterboxError
+from litterbox.records.error_conversion import converts_errors
+from litterbox import diagnostics
 
 WORKFLOWS_FILE = ".litterbox/workflows.yaml"
 RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
@@ -77,7 +80,7 @@ STANDARD_WORKFLOWS = {
 }
 
 
-class WorkflowError(eng.LitterboxError):
+class WorkflowError(LitterboxError):
     """A workflow file or step is wrong, or something isn't allowed. The message is safe to show."""
 
 
@@ -253,7 +256,7 @@ def role_warnings(template, directory):
                         "person may not fill more than one.")
     return warnings
 
-@eng._converts_errors
+@converts_errors
 def edit_templates(repo, change, message):
     """Change the workflow file for everyone: lock it, get the latest, `change(templates, directory)`, check,
     commit, push, unlock. If anything fails the file is put back. Admins only. Returns what change() returns."""
@@ -309,15 +312,15 @@ def edit_templates(repo, change, message):
                     (Path(repo) / rel).unlink()
                 except OSError:
                     pass
-        except eng.LitterboxError as e:
-            eng.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
+        except LitterboxError as e:
+            diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
         if existed:
             eng._force_unlock_quietly(repo, [rel])
         raise
     if existed:
         failed = eng._unlock_mine(repo, [rel])
         if failed:
-            raise eng.LitterboxError(eng._unlock_failure_message(failed))
+            raise LitterboxError(eng._unlock_failure_message(failed))
     return result
 
 
@@ -551,7 +554,7 @@ def _slot(directory, roles, person_id, where, extra):
     return {"roles": list(roles), "id": person.id, "name": person.name, **({"extra": True} if extra else {})}
 
 
-@eng._converts_errors
+@converts_errors
 def request(repo, pns, action, template_name, assignments, extras=(), reason=""):
     """Start a workflow on one or more parts: check every part first (nothing happens if any can't go ahead),
     then record the request in each. Returns the new request's id."""
@@ -602,10 +605,10 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
         items.append((pn, action, edit, f"{pn}: {label_of(action)} requested"))
     try:
         batch = eng._edit_records(repo, items, atomic=True)      # all or nothing: one download, one upload
-    except (eng.LitterboxError, registry.RegistryError) as e:
+    except (LitterboxError, registry.RegistryError) as e:
         raise WorkflowError(f"Could not start the workflow, so nothing was changed:\n\n{e}")
     if batch.notice:
-        eng.LOG(batch.notice)
+        diagnostics.LOG(batch.notice)
     return batch_id
 
 
@@ -617,7 +620,7 @@ class SignResult:
     summary: str = ""
 
 
-@eng._converts_errors
+@converts_errors
 def sign_off(repo, pns, comment=""):
     """Approve, as the person named, every sign-off waiting for you on these parts. When a part then has all its
     sign-offs, release / reopen / void happens straight away; if that fails the sign-off is still saved.
@@ -656,7 +659,7 @@ def sign_off(repo, pns, comment=""):
         result.signed = list(batch.results)
         result.errors.update({pn: str(e) for pn, e in batch.errors.items()})
         if batch.notice:
-            eng.LOG(batch.notice)
+            diagnostics.LOG(batch.notice)
 
     finishing = []
     for pn in result.signed:
@@ -670,7 +673,7 @@ def sign_off(repo, pns, comment=""):
     if finishing:
         try:
             done, failed, _files = _finish_many(repo, finishing)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             failed, done = {pn: e for pn in finishing}, []
         result.completed = done
         result.errors.update({pn: str(e) for pn, e in failed.items()})
@@ -749,8 +752,8 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
                 plan = eng.make_cots_plan(repo, pn, allow_pending=True, ctx=ctx)
             if plan is not None and not plan.ok:
                 what = "released" if action == RELEASE else "made COTS"
-                raise eng.LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
-        except (eng.LitterboxError, registry.RegistryError) as e:
+                raise LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
+        except (LitterboxError, registry.RegistryError) as e:
             failed[pn] = e
             continue
         message = f"{pn}: {label_of(action)} done" + (" (Admin override)" if override_reason is not None
@@ -763,7 +766,7 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
         done = list(batch.results)
         failed.update(batch.errors)
         if batch.notice:
-            eng.LOG(batch.notice)
+            diagnostics.LOG(batch.notice)
     return done, failed, files
 
 
@@ -774,7 +777,7 @@ def _report(done, failed):
     return done
 
 
-@eng._converts_errors
+@converts_errors
 def complete(repo, pn):
     """Do the action for a part whose request has every sign-off."""
     _me(repo, "signoff")
@@ -784,7 +787,7 @@ def complete(repo, pn):
     return files[done[0]]
 
 
-@eng._converts_errors
+@converts_errors
 def complete_many(repo, pns):
     """Do the action for each part whose request has every sign-off, with one download and one upload. Carries on
     past a failure and reports every one at the end."""
@@ -793,7 +796,7 @@ def complete_many(repo, pns):
     return _report(done, {pn: str(e) for pn, e in failed.items()})
 
 
-@eng._converts_errors
+@converts_errors
 def override(repo, pns, reason, action=None):
     """Admins only: do the action without the sign-offs. A reason is required and is recorded as an override.
     `action` is needed only for a part that has no request."""
@@ -813,7 +816,7 @@ def _each(repo, pns, edit_for, action_name, message):
     for pn in _as_pns(pns):
         try:
             record = registry.load(repo, pn)
-        except (eng.LitterboxError, registry.RegistryError) as e:
+        except (LitterboxError, registry.RegistryError) as e:
             failed[pn] = str(e)
             continue
         if record.pending:
@@ -824,11 +827,11 @@ def _each(repo, pns, edit_for, action_name, message):
         done = list(batch.results)
         failed.update({pn: str(e) for pn, e in batch.errors.items()})
         if batch.notice:
-            eng.LOG(batch.notice)
+            diagnostics.LOG(batch.notice)
     return _report(done, failed)
 
 
-@eng._converts_errors
+@converts_errors
 def reject(repo, pns, comment):
     """Send a pending batch back. A person named to sign (or an Admin) may; a comment is required. The parts are
     free to check out again."""
@@ -851,7 +854,7 @@ def reject(repo, pns, comment):
     return _each(repo, pns, edit_for, "signoff", "{pn}: request rejected - " + comment)
 
 
-@eng._converts_errors
+@converts_errors
 def withdraw(repo, pns, reason=""):
     """Cancel a pending batch. The person who asked, or an Admin, may."""
     me = _me(repo, "signoff")
@@ -870,7 +873,7 @@ def withdraw(repo, pns, reason=""):
     return _each(repo, pns, edit_for, "signoff", "{pn}: request withdrawn")
 
 
-@eng._converts_errors
+@converts_errors
 def reassign(repo, pns, slot, person_id):
     """Name a different person for a sign-off that hasn't been given. The person who asked, or an Admin, may."""
     me = _me(repo, "signoff")

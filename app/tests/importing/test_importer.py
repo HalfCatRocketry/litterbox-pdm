@@ -25,6 +25,7 @@ from litterbox.importing import manifest
 from litterbox.records import registry
 from litterbox.core.pn import PN
 from tests.support.import_fixture import ImportFixture
+from litterbox.errors import LitterboxError
 
 
 @SKIP_ON_WINDOWS
@@ -180,12 +181,12 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
             with mock.patch.object(eng, "run", broken):
-                with self.assertRaises(eng.LitterboxError):
+                with self.assertRaises(LitterboxError):
                     self.run_import()
             self.assert_nothing_left()
             self.assertEqual(len(self.run_import().pns), 4)
@@ -196,7 +197,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
         def offline(command, repo, quiet=False):
             if command[:2] == ["git", "pull"]:
-                raise eng.LitterboxError("simulated: no connection")
+                raise LitterboxError("simulated: no connection")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.jobs import job_queue as jobs
-from litterbox.parts import engine as eng
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError, NothingToSaveError
 
 
 class Collector:
@@ -61,13 +61,13 @@ class Queue(unittest.TestCase):
         c = Collector()
 
         def broken():
-            raise eng.LitterboxError("push failed")
+            raise LitterboxError("push failed")
 
         def surprise():
             raise ValueError("boom")
 
         def nothing():
-            raise eng.NothingToSaveError("same")
+            raise NothingToSaveError("same")
 
         c.queue.submit(jobs.Job("a", lambda: 42))
         c.queue.submit(jobs.Job("b", broken))
@@ -78,7 +78,7 @@ class Queue(unittest.TestCase):
         self.assertEqual((a.result, a.error), (42, None))
         self.assertEqual(b.error, "push failed")
         self.assertIn("Unexpected error", cc.error)
-        self.assertIsInstance(d.error, eng.NothingToSaveError)
+        self.assertIsInstance(d.error, NothingToSaveError)
 
     def test_a_part_stays_busy_until_the_window_has_shown_the_result(self):
         c = Collector()

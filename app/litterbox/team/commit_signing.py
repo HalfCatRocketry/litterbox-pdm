@@ -25,13 +25,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.parts import engine as eng
+from litterbox.errors import LitterboxError
 
 KEY_NAME = "litterbox_signing_ed25519"
 # Git's one-letter signature results (%G?)
 GOOD, BAD, UNKNOWN_VALIDITY, EXPIRED, EXPIRED_KEY, REVOKED, MISSING_KEY, NONE = "G", "B", "U", "X", "Y", "R", "E", "N"
 
 
-class SigningError(eng.LitterboxError):
+class SigningError(LitterboxError):
     """Signing could not be set up or checked."""
 
 
@@ -59,7 +60,7 @@ class SigningStatus:
 def _git_config(repo, key):
     try:
         return eng.run(["git", "config", "--get", key], repo, quiet=True).strip()
-    except eng.LitterboxError:
+    except LitterboxError:
         return ""
 
 
@@ -154,7 +155,7 @@ def untrusted_unpushed(repo):
     """Unpushed commits not signed by a key on the vault's (latest) team list: [CommitSignature]."""
     try:
         text = eng.run(["git", "show", f"@{{u}}:{'.litterbox/allowed_signers'}"], repo, quiet=True)
-    except eng.LitterboxError:
+    except LitterboxError:
         text = ""                                   # nobody has a key yet
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "allowed_signers"

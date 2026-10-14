@@ -18,11 +18,14 @@ from pathlib import Path
 from litterbox.vault import config
 from litterbox.parts import engine as eng
 from litterbox.team import people
+from litterbox.errors import LitterboxError
+from litterbox.records.error_conversion import converts_errors
+from litterbox import diagnostics
 
 CONFIG_REL = f"{config.CONFIG_DIR}/{config.CONFIG_FILE}"
 
 
-@eng._converts_errors
+@converts_errors
 def edit(repo, **values):
     """Change the settings given (see config.set_values), commit and upload the change. If anything fails the file
     is put back. Returns True if something changed, False if the vault already had those values."""
@@ -40,7 +43,7 @@ def edit(repo, **values):
         try:
             config.set_values(repo, **values)
         except config.ConfigError as e:
-            raise eng.LitterboxError(str(e)) from None
+            raise LitterboxError(str(e)) from None
         after = path.read_bytes() if path.is_file() else None
         if after == before:
             changed = False
@@ -63,13 +66,13 @@ def edit(repo, **values):
                     path.unlink(missing_ok=True)
                 else:
                     path.write_bytes(before)
-        except (eng.LitterboxError, OSError) as e:
-            eng.LOG(f"WARNING: could not fully undo the change to {CONFIG_REL}: {e}")
+        except (LitterboxError, OSError) as e:
+            diagnostics.LOG(f"WARNING: could not fully undo the change to {CONFIG_REL}: {e}")
         if tracked:
             eng._force_unlock_quietly(repo, [CONFIG_REL])
         raise
     if tracked:
         failed = eng._unlock_mine(repo, [CONFIG_REL])
         if failed:
-            raise eng.LitterboxError(eng._unlock_failure_message(failed))
+            raise LitterboxError(eng._unlock_failure_message(failed))
     return changed

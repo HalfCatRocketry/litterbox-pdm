@@ -24,6 +24,7 @@ from litterbox.importing import session as import_session
 from litterbox.importing import importer
 from litterbox.records import registry
 from litterbox.user import settings
+from litterbox.errors import NothingToSaveError
 
 
 REAL_SESSION = import_session.ImportSession
@@ -857,7 +858,7 @@ class TickAndSaveWiring(unittest.TestCase):
         app._log = lambda text: None
         app.note = "x"
         job = self.gui.jobs.Job("Checking in", lambda: None, token=("", None, False, False))
-        app._finish(self.gui.jobs.Outcome(job, error=self.gui.engine.NothingToSaveError("Nothing was different.")))
+        app._finish(self.gui.jobs.Outcome(job, error=NothingToSaveError("Nothing was different.")))
         self.assertEqual(shown, [("info", "TEAM")])
         self.assertEqual(app.jobs.errors(), [])
 
@@ -913,7 +914,7 @@ class UpdateWiring(unittest.TestCase):
         self.assertIn("Fixes things.", question)
 
     def test_a_download_problem_becomes_a_plain_error(self):
-        from litterbox.parts.engine import LitterboxError
+        from litterbox.errors import LitterboxError
         self.app.install_update(self.update)
         work, _ = self.tasks[0]
         original = self.updater.download

@@ -20,9 +20,9 @@ A change function must capture ids and plain values, never the people objects of
 
 import copy
 
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.workflows import workflow
+from litterbox.errors import LitterboxError, NothingToSaveError
 
 
 class TeamDraft:
@@ -92,7 +92,7 @@ class TeamDraft:
                 people.edit_directory(repo, change, "Team: " + _short("; ".join(label for label, _ in ops)),
                                       action="transfer_owner" if self.needs_owner else "manage_people")
                 changed = True
-            except eng.NothingToSaveError:              # the changes cancelled each other out
+            except NothingToSaveError:              # the changes cancelled each other out
                 pass
             saved += [label for label, _ in ops]
             self.people_ops, self.needs_owner = [], False
@@ -108,17 +108,17 @@ class TeamDraft:
                 workflow.edit_templates(repo, change_templates, "Workflow: " + _short("; ".join(
                     label for label, _ in ops)))
                 changed = True
-            except eng.NothingToSaveError:
+            except NothingToSaveError:
                 pass
-            except eng.LitterboxError as e:
+            except LitterboxError as e:
                 if saved:
-                    raise eng.LitterboxError(f"The team changes were saved, but the workflow change was not:\n\n{e}")
+                    raise LitterboxError(f"The team changes were saved, but the workflow change was not:\n\n{e}")
                 raise
             saved += [label for label, _ in ops]
             self.workflow_ops = []
         self.templates = workflow.load(repo)
         if not changed:
-            raise eng.NothingToSaveError("Nothing was different from what is already saved in the vault, so "
+            raise NothingToSaveError("Nothing was different from what is already saved in the vault, so "
                                          "there was nothing to save.")
         return saved
 

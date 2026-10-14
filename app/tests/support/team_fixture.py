@@ -6,13 +6,14 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault
 
 from litterbox.parts import engine as eng
 from litterbox.team import people
+from litterbox import diagnostics
 
 
 @SKIP_ON_WINDOWS
 class TeamFixture(TwoUserVault):
     def setUp(self):
         super().setUp()
-        self.quiet = mock.patch.object(eng, "LOG", lambda *_: None)
+        self.quiet = mock.patch.object(diagnostics, "LOG", lambda *_: None)
         self.quiet.start()
         self.addCleanup(self.quiet.stop)
 

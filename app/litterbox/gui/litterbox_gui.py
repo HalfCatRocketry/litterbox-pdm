@@ -45,6 +45,8 @@ from litterbox.team.draft import TeamDraft
 from litterbox.core import pn as pnmod
 from litterbox.core.pn import PNError, check_org
 from litterbox.core.pn import parse as parse_pn
+from litterbox.errors import LitterboxError, NothingToSaveError
+from litterbox import diagnostics
 
 # Set to True to download the latest changes every time the app opens.
 # (Off by default: a download can replace files that are open in SolidWorks.)
@@ -997,7 +999,7 @@ class NewPartDialog(ctk.CTkToplevel):
         if first_time or from_base:
             try:
                 suggested_base, suggested_variant = create.suggest_numbers(self.repo, base, self.org)
-            except engine.LitterboxError as e:
+            except LitterboxError as e:
                 self._say(str(e), ERROR)
                 return
             if first_time:
@@ -1015,7 +1017,7 @@ class NewPartDialog(ctk.CTkToplevel):
         else:
             try:
                 check = create.check_numbers(self.repo, base, variant, self.org)
-            except engine.LitterboxError as e:
+            except LitterboxError as e:
                 self._say(str(e), ERROR)
                 return
             if check.taken:
@@ -1039,7 +1041,7 @@ class NewPartDialog(ctk.CTkToplevel):
             return
         try:
             check = create.check_numbers(self.repo, base, variant, self.org)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self._warn(str(e))
             return
         if check.taken:
@@ -1372,7 +1374,7 @@ class ImportWindow(ctk.CTkToplevel):
 
     @staticmethod
     def _error_text(error):
-        known = (engine.LitterboxError, scan_module.ScanError, manifest_module.ManifestError)
+        known = (LitterboxError, scan_module.ScanError, manifest_module.ManifestError)
         return str(error) if isinstance(error, known) else f"Unexpected error: {error!r}"
 
     # ------------------------------------------------------------------
@@ -1416,7 +1418,7 @@ class ImportWindow(ctk.CTkToplevel):
         try:
             self.session.start(self._after(self._prepared), self._progress, manifest_root=settings.ROOT,
                                cots=self.cots, **source)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self._say(str(e), "warn")
             return
         self._begin(text)
@@ -1458,7 +1460,7 @@ class ImportWindow(ctk.CTkToplevel):
                 then(error is None)
         try:
             self.session.check_duplicates(self._after(done))
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self._say(str(e), "warn")
             return
         self._begin("Checking for parts the vault already has...")
@@ -1559,7 +1561,7 @@ class ImportWindow(ctk.CTkToplevel):
         self.running = True
         try:
             start(done)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self.running = False
             self._say(str(e), "warn")
 
@@ -1602,7 +1604,7 @@ class ImportWindow(ctk.CTkToplevel):
         self.running = True
         try:
             self.session.set_family(base, done)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self.running = False
             self.family_var.set(self.family_applied is not None)
             self._say(str(e), "warn")
@@ -1693,7 +1695,7 @@ class ImportWindow(ctk.CTkToplevel):
 
         try:
             self.session.refresh(self._after(done))
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self._say(str(e), "warn")
             return
         self._begin("Checking the part numbers against the newest records...")
@@ -1711,7 +1713,7 @@ class ImportWindow(ctk.CTkToplevel):
             return
         try:
             self.session.finish(self._after(self._finished), self._progress)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             self._say(str(e), "warn")
             return
         self._begin("Checking the part numbers...", finishing=True)
@@ -2242,7 +2244,7 @@ class SigningDialog(ctk.CTkToplevel):
     def _on(self):
         try:
             signing.enable(self.repo)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             messagebox.showerror("Signing", str(e))
         self._show()
 
@@ -3173,7 +3175,7 @@ class TeamWindow(ctk.CTkToplevel):
             return None
         try:
             templates = workflow.load(self.app.repo())
-        except engine.LitterboxError:
+        except LitterboxError:
             templates = {}
         return TeamDraft(identity.directory, templates, identity.person.id if identity.person else "")
 
@@ -3204,7 +3206,7 @@ class TeamWindow(ctk.CTkToplevel):
         elif directory is None:
             try:
                 directory = people.load(self.app.repo())
-            except engine.LitterboxError:
+            except LitterboxError:
                 directory = None
         self.save_button = None
         if directory is None:
@@ -3256,7 +3258,7 @@ class App(ctk.CTk):
         # never sees it half-ready or with the wrong icon. (CustomTkinter supports
         # calling withdraw() right after creating the window.)
         self.settings = settings.load()
-        settings.DEBUG = engine.DEBUG = settings.is_debug(self.settings)
+        settings.DEBUG = diagnostics.DEBUG = settings.is_debug(self.settings)
         if logic.migrate_settings(self.settings, self._detect_org):
             settings.save(self.settings)
         self.org = logic.current_org(self.settings)
@@ -3281,7 +3283,7 @@ class App(ctk.CTk):
         self.note = ""                  # what just happened, kept in the status line after a refresh
 
         # Everything the engine logs ("> git lfs lock ...") shows up in the log box.
-        engine.LOG = lambda message: self.queue.put(("log", message))
+        diagnostics.LOG = lambda message: self.queue.put(("log", message))
 
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -3333,7 +3335,7 @@ class App(ctk.CTk):
             try:
                 return updater.find_update()
             except updater.UpdateError as e:
-                raise engine.LitterboxError(str(e))
+                raise LitterboxError(str(e))
 
         def show(update):
             if update is None:
@@ -3357,7 +3359,7 @@ class App(ctk.CTk):
             try:
                 return updater.download(update)
             except updater.UpdateError as e:
-                raise engine.LitterboxError(str(e))
+                raise LitterboxError(str(e))
 
         self.run_task(work, "Downloaded the update", on_success=self._run_installer, refresh=False)
 
@@ -3621,13 +3623,13 @@ class App(ctk.CTk):
                 if org:
                     return target                              # cloned already (an earlier try): just use it
                 if any(target.iterdir()):
-                    raise engine.LitterboxError(f"{target} already exists and isn't a vault. Rename or remove it, "
+                    raise LitterboxError(f"{target} already exists and isn't a vault. Rename or remove it, "
                                                 "then try again.")
             vault_clone.clone(url.strip(), target)
             try:
                 engine.enforce_read_only(target)
-            except engine.LitterboxError as e:
-                engine.LOG(f"WARNING: could not set the files read-only: {e}")
+            except LitterboxError as e:
+                diagnostics.LOG(f"WARNING: could not set the files read-only: {e}")
             return target
 
         def cloned(folder):
@@ -3938,7 +3940,7 @@ class App(ctk.CTk):
             self._sync_busy()
 
     def _show_outcome(self, job, result, error, done_text, on_success, refresh, is_refresh):
-        if isinstance(error, engine.NothingToSaveError):
+        if isinstance(error, NothingToSaveError):
             self.note = ""
             self._say("Nothing to save: nothing was different.")
             messagebox.showinfo("Nothing to save", str(error), parent=self._popup_parent())
@@ -3966,7 +3968,7 @@ class App(ctk.CTk):
             def find_out_who():
                 try:
                     return people.current(repo)
-                except engine.LitterboxError as e:           # a damaged team file must not hide the parts
+                except LitterboxError as e:           # a damaged team file must not hide the parts
                     return people.Identity(people.UNVERIFIED, detail=str(e).splitlines()[0])
 
             started = time.monotonic()
@@ -3974,8 +3976,8 @@ class App(ctk.CTk):
                 who_job = pool.submit(find_out_who)
                 rows = engine.get_status(repo)
                 who = who_job.result()
-            if engine.DEBUG:
-                engine.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
+            if diagnostics.DEBUG:
+                diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
             return rows, who
 
         def show(result):
@@ -4055,7 +4057,7 @@ class App(ctk.CTk):
                                  base=request["base"], variant=request["variant"], org=org)
             try:
                 engine.checkout(repo, pn)            # a new part starts out checked out to its creator
-            except engine.LitterboxError as e:
+            except LitterboxError as e:
                 return pn, str(e)
             return pn, ""
 
@@ -4208,7 +4210,7 @@ class App(ctk.CTk):
         repo = self.repo()
         try:
             templates = workflow.templates_for(repo, action)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             messagebox.showerror("Litterbox", logic.shorten(str(e)))
             return True
         pending = [pn for pn in plan.targets if self.rows_by_pn[pn].kind == "pending"]
@@ -4304,7 +4306,7 @@ class App(ctk.CTk):
             return "The team isn't set up yet."
         try:
             draft.stage_people(label, change, needs_owner)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             return logic.shorten(str(e))
         window.reload()
         return ""
@@ -4419,7 +4421,7 @@ class App(ctk.CTk):
 
             try:
                 draft.stage_workflow(logic.ops_label(ops), change)
-            except engine.LitterboxError as e:
+            except LitterboxError as e:
                 return logic.shorten(str(e))
             window.reload()
             return ""
@@ -4604,7 +4606,7 @@ class App(ctk.CTk):
             return False
         try:
             stale = [u for u in references.uses(self.repo(), pn, rev) if u.replaceable]
-        except engine.LitterboxError:
+        except LitterboxError:
             return False
         if not stale:
             return False
@@ -4694,7 +4696,7 @@ class App(ctk.CTk):
             return
         try:
             opener.open_path(Path(self.repo()) / path, self.settings.get("open_with"))
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             messagebox.showwarning("Can't open", str(e))
             return
         self._say(f"Opening {PurePosixPath(path).name}...")

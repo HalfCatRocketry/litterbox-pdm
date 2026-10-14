@@ -15,6 +15,7 @@ from litterbox.team import people
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from tests.support.vault_fixture import SHIM, SKIP_ON_WINDOWS, git
+from litterbox.errors import LitterboxError
 
 
 class EmptyRepo(unittest.TestCase):
@@ -148,7 +149,7 @@ class WhenSomethingFails(EmptyRepo):
     def test_a_failed_upload_leaves_nothing_behind(self):
         (self.vault / ".gitignore").write_text("build/\n")
         git(self.vault, "remote", "set-url", "origin", str(self.root / "nowhere.git"))
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             iv.create(self.vault, "HCR", set_up_team=False)
         self.assertEqual(sorted(p.name for p in self.vault.iterdir()), [".git", ".gitignore"])
         self.assertEqual((self.vault / ".gitignore").read_text(), "build/\n")
@@ -163,7 +164,7 @@ class WhenSomethingFails(EmptyRepo):
         git(self.vault, "commit", "-m", "Initial")
         before = git(self.vault, "rev-parse", "HEAD")
         git(self.vault, "remote", "set-url", "origin", str(self.root / "nowhere.git"))
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             iv.create(self.vault, "HCR", set_up_team=False)
         self.assertEqual(git(self.vault, "rev-parse", "HEAD"), before)
         self.assertEqual(git(self.vault, "status", "--porcelain"), "")

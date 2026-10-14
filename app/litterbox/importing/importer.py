@@ -57,6 +57,8 @@ from litterbox.importing import manifest as manifest_module
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 JOURNAL_NAME = "litterbox-import.json"
 JOURNAL_VERSION = 1
@@ -65,7 +67,7 @@ MODEL_EXTENSIONS = {".sldprt", ".sldasm"}
 DRAWING_EXTENSION = ".slddrw"
 
 
-class ImportFailed(eng.LitterboxError):
+class ImportFailed(LitterboxError):
     """The import could not be done. The message is safe to show to a user. Nothing was left behind."""
 
 
@@ -219,7 +221,7 @@ def _clear_journal(repo):
 def _git_out(repo, *args):
     try:
         return eng.run(["git", *args], repo, quiet=True)
-    except eng.LitterboxError:
+    except LitterboxError:
         return ""
 
 
@@ -272,7 +274,7 @@ def recover(repo, log=print):
         pathspec = create._write_pathspec(ours)
         try:
             eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             log(f"WARNING: could not fully clean git's index: {e}")
         finally:
             try:
@@ -397,9 +399,9 @@ class SolidWorksBackend:
         import gc
         gc.collect()                                      # let go of any COM objects still pointing at it
         if pid:
-            wait_for_exit(pid, log=lambda message: eng.LOG(message))
+            wait_for_exit(pid, log=lambda message: diagnostics.LOG(message))
         else:
-            eng.LOG("Could not tell which SolidWorks process Litterbox started, so could not check it had exited.")
+            diagnostics.LOG("Could not tell which SolidWorks process Litterbox started, so could not check it had exited.")
 
 
 def solidworks_pids():
@@ -1199,7 +1201,7 @@ def main(argv=None):
             parser.error("the manifest file is required")
         result = run(args.repo, args.manifest, dry_run=args.dry_run, allow_external=args.allow_external, gap=args.gap, cots=args.cots,
                      progress=lambda done, total, text: print(f"[{done}/{total}] {text}"))
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         print(f"\nERROR: {e}")
         return 1
     if result.dry_run:

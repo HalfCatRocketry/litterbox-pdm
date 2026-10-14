@@ -11,6 +11,8 @@ from pathlib import Path
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.parts import engine as eng
 from litterbox.vault import clone as vault_clone
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 
 def git(cwd, *args):
@@ -77,8 +79,8 @@ class Cloning(unittest.TestCase):
         git(work, "push", "origin", "HEAD:main")
         self.url = self.remote.as_uri()
         self.lines = []
-        old = eng.LOG
-        eng.LOG = self.lines.append
+        old = diagnostics.LOG
+        diagnostics.LOG = self.lines.append
         self.addCleanup(setattr, eng, "LOG", old)
 
     def test_a_clone_lands_in_the_target_and_is_a_vault(self):
@@ -88,7 +90,7 @@ class Cloning(unittest.TestCase):
         self.assertTrue(any("git clone" in line for line in self.lines))
 
     def test_a_failed_clone_says_why(self):
-        with self.assertRaises(eng.LitterboxError) as caught:
+        with self.assertRaises(LitterboxError) as caught:
             vault_clone.clone((self.root / "nothing-here.git").as_uri(), self.root / "x")
         self.assertIn("Could not clone", str(caught.exception))
 

@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from litterbox.parts.engine import LitterboxError
+from litterbox.errors import LitterboxError
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.workflows import workflow

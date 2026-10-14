@@ -5,10 +5,11 @@ from unittest import mock
 
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git
 
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.workflows import workflow as wf
 from litterbox.team.draft import TeamDraft
+from litterbox.errors import LitterboxError, NothingToSaveError
+from litterbox import diagnostics
 
 ENGINEER, QUALITY = "Responsible Engineer", "Quality"
 
@@ -17,7 +18,7 @@ ENGINEER, QUALITY = "Responsible Engineer", "Quality"
 class DraftFixture(TwoUserVault):
     def setUp(self):
         super().setUp()
-        quiet = mock.patch.object(eng, "LOG", lambda *_: None)
+        quiet = mock.patch.object(diagnostics, "LOG", lambda *_: None)
         quiet.start()
         self.addCleanup(quiet.stop)
         with self.user("Alex"):
@@ -49,7 +50,7 @@ class TestStaging(DraftFixture, unittest.TestCase):
 
     def test_a_mistake_is_reported_at_once_and_not_kept(self):
         d = self.draft()
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             d.stage_people("Bad", lambda dr, who: people.add_person(dr, who, "alex", "Again"))
         self.assertFalse(d.dirty)
         self.assertEqual(len(d.directory.people), 1)
@@ -82,7 +83,7 @@ class TestStaging(DraftFixture, unittest.TestCase):
 
     def test_a_workflow_cannot_use_a_role_that_is_not_there(self):
         d = self.draft()
-        with self.assertRaises(eng.LitterboxError):
+        with self.assertRaises(LitterboxError):
             d.stage_workflow("Bad", lambda t, dr: wf.set_template(t, wf.RELEASE, "T1", [["Nobody"]]))
         self.assertFalse(d.dirty)
 
@@ -100,7 +101,7 @@ class TestStaging(DraftFixture, unittest.TestCase):
         d = self.draft()
         d.stage_people("Rename", lambda dr, who: people.update_person(dr, who, "alex", name="Zed"))
         d.stage_people("Rename back", lambda dr, who: people.update_person(dr, who, "alex", name="Alex Smith"))
-        with self.user("Alex"), self.assertRaises(eng.NothingToSaveError):
+        with self.user("Alex"), self.assertRaises(NothingToSaveError):
             d.save(self.a)
         self.assertFalse(d.dirty)
 

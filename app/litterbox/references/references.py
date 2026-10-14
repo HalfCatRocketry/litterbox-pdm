@@ -29,6 +29,7 @@ from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError
 
 MODEL_EXTENSIONS = (".sldprt", ".sldasm")
 ASSEMBLY_EXTENSIONS = (".sldasm",)
@@ -54,7 +55,7 @@ STATE_TEXT = {
 RULE_WARN, RULE_BLOCK, RULE_OFF = "warn", "block", "off"
 
 
-class ReferencesError(eng.LitterboxError):
+class ReferencesError(LitterboxError):
     """Something went wrong reading or changing references."""
 
 
@@ -457,7 +458,7 @@ def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
     jobs = {}
     try:
         locks = eng.get_locks(repo, strict=True)
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         for parent in by_parent:
             results[parent] = ReplaceResult(parent, "failed", str(e))
         return
@@ -561,7 +562,7 @@ def rescan(repo, pns=None, backend=None, log=print):
                 if backend is None:
                     backend = _new_backend()
                 outcome = _rescan_one(repo, pn, revisions, backend)
-            except eng.LitterboxError as e:
+            except LitterboxError as e:
                 outcome = f"skipped: {e}"
             except Exception as e:
                 outcome = f"skipped: {e}"
@@ -575,7 +576,7 @@ def rescan(repo, pns=None, backend=None, log=print):
                 batch = eng._edit_records(repo, [(pn, "checkin", edit, f"{pn}: Updated list of parts used")
                                                  for pn, edit in edits.items()])
                 errors, notice = batch.errors, batch.notice
-            except eng.LitterboxError as e:
+            except LitterboxError as e:
                 errors, notice = {pn: e for pn in edits}, ""
             if notice:
                 log(notice)

@@ -18,6 +18,7 @@ from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, Tw
 
 from litterbox.parts import engine as eng
 from litterbox.records import registry
+from litterbox.errors import LitterboxError, NoChangesError
 
 
 @SKIP_ON_WINDOWS
@@ -48,7 +49,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             eng.get_latest(self.b)
             row = self.status_of(self.b)
             self.assertEqual((row.kind, row.locked_by), ("theirs", "Alex"))
-            with self.assertRaises(eng.LitterboxError) as ctx:
+            with self.assertRaises(LitterboxError) as ctx:
                 eng.checkout(self.b, PART)
             self.assertIn("already checked out by Alex", str(ctx.exception))
             self.assertFalse(is_writable(self.b / PRT))
@@ -71,11 +72,11 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
 
             def failing(command, repo, quiet=False):
                 if command[:3] == ["git", "lfs", "lock"] and command[3] == DRW:
-                    raise eng.LitterboxError("simulated failure")
+                    raise LitterboxError("simulated failure")
                 return real_run(command, repo, quiet)
 
             with mock.patch.object(eng, "run", failing):
-                with self.assertRaises(eng.LitterboxError):
+                with self.assertRaises(LitterboxError):
                     eng.checkout(self.a, PART)
             self.assertEqual(self.locks(self.a), {})
             self.assertEqual(registry.load(self.a, PART).history[-1]["event"], "created")
@@ -115,7 +116,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
         commits_before = len(self.remote_log())
         with self.user("Alex"):
             eng.checkout(self.a, PART)
-            with self.assertRaises(eng.NoChangesError) as ctx:
+            with self.assertRaises(NoChangesError) as ctx:
                 eng.checkin(self.a, PART, "nothing")
             self.assertEqual(ctx.exception.files, [DRW, PRT])
             self.assertEqual(ctx.exception.pn, PART)
@@ -150,7 +151,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             report = eng.change_report(self.a, PART)
             self.assertFalse(report.has_changes)
             self.assertEqual(report.unchanged_files, [DRW, PRT])
-            with self.assertRaises(eng.NoChangesError):
+            with self.assertRaises(NoChangesError):
                 eng.checkin(self.a, PART, "Finished")
             self.assertEqual(len(self.locks(self.a)), 3)
             self.assertEqual((self.a / PRT).read_bytes(), b"version 2")           # saved work is intact
@@ -188,11 +189,11 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
 
     def test_checkin_requires_the_checkout(self):
         with self.user("Alex"):
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkin(self.a, PART, "oops")
             eng.checkout(self.a, PART)
         with self.user("Bea"):
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkin(self.b, PART, "not mine")
 
     def test_new_files_are_added_at_checkin(self):
@@ -225,19 +226,19 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
         def flaky(command, repo, quiet=False):
             if command[:2] == ["git", "push"] and failures["left"] > 0:
                 failures["left"] -= 1
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
             eng.checkout(self.a, PART)
             (self.a / PRT).write_bytes(b"version 2")
             with mock.patch.object(eng, "run", flaky):
-                with self.assertRaises(eng.LitterboxError):
+                with self.assertRaises(LitterboxError):
                     eng.checkin(self.a, PART, "Big change")
             self.assertEqual(len(self.locks(self.a)), 3)                 # still checked out
             self.assertNotIn("HCR-00001-001: Big change", self.remote_log())
 
-            with self.assertRaises(eng.LitterboxError) as ctx:           # undo must not strand the commit
+            with self.assertRaises(LitterboxError) as ctx:           # undo must not strand the commit
                 eng.undo_checkout(self.a, PART)
             self.assertIn("not uploaded", str(ctx.exception))
             self.assertEqual(len(self.locks(self.a)), 3)
@@ -253,18 +254,18 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
 
         def flaky(command, repo, quiet=False):
             if command[:3] == ["git", "lfs", "unlock"] and broken["on"]:
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
             eng.checkout(self.a, PART)
             (self.a / PRT).write_bytes(b"version 2")
             with mock.patch.object(eng, "run", flaky):
-                with self.assertRaises(eng.LitterboxError) as ctx:
+                with self.assertRaises(LitterboxError) as ctx:
                     eng.checkin(self.a, PART, "Saved")
             self.assertIn("could not be unlocked", str(ctx.exception))
             self.assertIn("HCR-00001-001: Saved", self.remote_log())     # upload did happen
-            with self.assertRaises(eng.NoChangesError):                 # nothing new, so it asks first
+            with self.assertRaises(NoChangesError):                 # nothing new, so it asks first
                 eng.checkin(self.a, PART, "retry")
             eng.checkin(self.a, PART, "retry", allow_unchanged=True)    # continue: just records it and unlocks
             self.assertEqual(self.locks(self.a), {})
@@ -302,7 +303,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             eng.checkout(self.a, PART)
             path = self.a / REC
             path.write_text("just: [broken\n", encoding="utf-8")
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkin(self.a, PART, "oops")
             self.assertEqual(path.read_text(encoding="utf-8"), "just: [broken\n")   # still there
             self.assertEqual(len(self.locks(self.a)), 3)                            # still checked out
@@ -360,13 +361,13 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertIn("HCR-00001-001: Released", self.remote_log())
             self.assertFalse(is_writable(self.a / REC))
             self.assertEqual(self.status_of(self.a).kind, "released")
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkout(self.a, PART)                   # released parts can't be checked out
             self.assertEqual(self.locks(self.a), {})
         with self.user("Bea"):
             eng.get_latest(self.b)
             self.assertEqual(self.status_of(self.b).kind, "released")
-            with self.assertRaises(eng.LitterboxError):      # reason is required, and nothing is left behind
+            with self.assertRaises(LitterboxError):      # reason is required, and nothing is left behind
                 eng.reopen(self.b, PART, "  ")
             self.assertEqual(self.locks(self.b), {})
             eng.reopen(self.b, PART, "Bore diameter wrong")
@@ -385,7 +386,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             plan = eng.release_plan(self.b, PART)
             self.assertFalse(plan.ok)
             self.assertTrue(any("checked out by Alex" in p for p in plan.problems), plan.problems)
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.release(self.b, PART)
         with self.user("Alex"):
             plan = eng.release_plan(self.a, PART)
@@ -413,7 +414,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertIn("HCR-00001-001: Made COTS", self.remote_log())
             row = self.status_of(self.a)
             self.assertEqual((row.kind, row.cots), ("cots", True))
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkout(self.a, PART)                   # a COTS part can't be checked out
             self.assertEqual(self.locks(self.a), {})
             self.assertFalse(eng.make_cots_plan(self.a, PART).ok)     # and can't be made COTS twice
@@ -430,7 +431,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             eng.get_latest(self.b)
             plan = eng.make_cots_plan(self.b, PART)
             self.assertTrue(any("checked out by Alex" in p for p in plan.problems), plan.problems)
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.make_cots(self.b, PART)
             self.assertFalse(registry.load(self.b, PART).cots)
         with self.user("Alex"):
@@ -452,7 +453,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             eng.make_cots(self.a, PART)
         with self.user("Bea"):
             eng.get_latest(self.b)
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.reopen(self.b, PART, " ")
             eng.reopen(self.b, PART, "Not a purchased part")
             self.assertFalse(registry.load(self.b, PART).cots)
@@ -517,7 +518,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
 
     def test_edit_details_needs_checkout_and_uploads_with_checkin(self):
         with self.user("Alex"):
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.edit_details(self.a, PART, "New name", "")           # not checked out
             eng.checkout(self.a, PART)
             self.assertFalse(eng.edit_details(self.a, PART, registry.load(self.a, PART).name,
@@ -533,7 +534,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             record = registry.load(self.b, PART)
             self.assertEqual((record.name, record.description), ("Renamed part", "A description"))
             self.assertIn("edited", [e["event"] for e in record.history])
-            with self.assertRaises(eng.LitterboxError):                       # Alex no longer holds it
+            with self.assertRaises(LitterboxError):                       # Alex no longer holds it
                 eng.edit_details(self.b, PART, "Bea's name", "")
 
     def test_undo_checkout_throws_away_edited_details(self):
@@ -562,7 +563,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             eng.void(self.a, pn, "Never needed")
             self.assertEqual(self.status_of(self.a, pn).kind, "void")
             self.assertIn(2, registry.used_bases(self.a))
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.checkout(self.a, pn)
             self.assertEqual(self.locks(self.a), {})
 
@@ -571,12 +572,12 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
 
         def failing(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
             with mock.patch.object(eng, "run", failing):
-                with self.assertRaises(eng.LitterboxError):
+                with self.assertRaises(LitterboxError):
                     eng.release(self.a, PART)
             record = registry.load(self.a, PART)
             self.assertEqual(record.status, "in_work")
@@ -589,7 +590,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             git(self.a, "config", "user.name", "")
             with mock.patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}):
-                with self.assertRaises(eng.LitterboxError) as ctx:
+                with self.assertRaises(LitterboxError) as ctx:
                     eng.checkout(self.a, PART)
             self.assertIn("user.name", str(ctx.exception))
 

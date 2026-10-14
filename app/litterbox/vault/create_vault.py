@@ -40,6 +40,8 @@ from litterbox.team import people
 from litterbox.core import pn as pn_module
 from litterbox import version
 from litterbox.core.pn import PNError, check_org
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 GITATTRIBUTES = ".gitattributes"
 GITIGNORE = ".gitignore"
@@ -78,7 +80,7 @@ Please don't rename, move or delete files here by hand.
 EXISTING_VAULT_FOLDERS = ("cad", "PN-logs", ".litterbox")
 
 
-class InitError(eng.LitterboxError):
+class InitError(LitterboxError):
     """Setting up the vault failed. The message is safe to show to a user."""
 
 
@@ -131,7 +133,7 @@ def _has_commits(repo):
     try:
         _git(repo, "rev-parse", "--verify", "-q", "HEAD")
         return True
-    except eng.LitterboxError:
+    except LitterboxError:
         return False
 
 
@@ -161,7 +163,7 @@ def plan(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
         return result
     try:
         prefix = _git(folder, "rev-parse", "--show-prefix")
-    except eng.LitterboxError:
+    except LitterboxError:
         result.problems.append(
             f"{folder} isn't a Git repository. Create an empty repository on your Git host, clone it to this "
             "computer, and choose the cloned folder.")
@@ -173,14 +175,14 @@ def plan(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
 
     try:
         eng.run(["git", "lfs", "version"], folder, quiet=True)
-    except eng.LitterboxError:
+    except LitterboxError:
         result.problems.append("Git LFS isn't installed. It comes with Git for Windows: reinstall Git for "
                                "Windows, or install Git LFS from git-lfs.com.")
 
     for key, what in (("user.name", "name"), ("user.email", "email address")):
         try:
             value = _git(folder, "config", key)
-        except eng.LitterboxError:
+        except LitterboxError:
             value = ""
         if not value:
             result.problems.append(f"Git doesn't know your {what} yet. Run this once, then try again:\n"
@@ -269,8 +271,8 @@ class _Writer:
                     (repo / folder).rmdir()
                 except OSError:
                     pass
-        except eng.LitterboxError as e:
-            eng.LOG(f"WARNING: could not fully undo the vault set-up: {e}")
+        except LitterboxError as e:
+            diagnostics.LOG(f"WARNING: could not fully undo the vault set-up: {e}")
 
 
 def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
@@ -291,7 +293,7 @@ def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGIT
     try:
         try:                                                # makes sure the upload hooks are in this repository
             eng.run(["git", "lfs", "install", "--local"], repo, quiet=True)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             warnings.append(f"Could not switch on Git LFS for this repository ({e}). If uploads fail, run "
                             "'git lfs install' once.")
 
@@ -329,13 +331,13 @@ def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGIT
     if push:
         try:
             eng.run(["git", "lfs", "locks"], repo, quiet=True)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             warnings.append("The host did not answer a request about file locks. Check that Git LFS and file "
                             f"locking are available on this repository.\n{e}")
     if set_up_team and push:
         try:
             result.owner = people.setup_team(repo, name=name, email=email)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             result.team_error = str(e)
     return result
 
@@ -357,7 +359,7 @@ def main(argv=None):
     parser.add_argument("--email", help="your email for the team list (default: git's user.email)")
     parser.add_argument("--yes", action="store_true", help="go ahead even when there are warnings")
     args = parser.parse_args(argv)
-    eng.LOG = print
+    diagnostics.LOG = print
 
     checked = plan(args.folder, args.org, args.start, args.base_digits, args.variant_digits, not args.no_push)
     if not checked.ok:
@@ -374,7 +376,7 @@ def main(argv=None):
     try:
         result = create(args.folder, args.org, args.start, args.base_digits, args.variant_digits,
                         push=not args.no_push, set_up_team=not args.no_team, name=args.name, email=args.email)
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         print(f"Failed. Nothing was left behind.\n{e}")
         return 1
     print(f"\nThe {result.org} vault is set up" + (" and uploaded." if result.pushed else " (not uploaded)."))

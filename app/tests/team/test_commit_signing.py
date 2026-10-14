@@ -17,6 +17,7 @@ from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, git
 from litterbox.vault import config
 from litterbox.parts import engine as eng
 from litterbox.team import commit_signing as signing
+from litterbox.errors import LitterboxError
 
 
 @SKIP_ON_WINDOWS
@@ -80,7 +81,7 @@ class RequireSignatures(TeamFixture, unittest.TestCase):
             eng.checkin(self.b, PART, "Bea's work")
 
     def test_unsigned_commits_are_not_uploaded(self):
-        with self.assertRaises(eng.LitterboxError) as ctx:
+        with self.assertRaises(LitterboxError) as ctx:
             self.work()
         text = str(ctx.exception)
         self.assertIn("Nothing was uploaded", text)

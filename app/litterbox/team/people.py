@@ -43,6 +43,8 @@ import yaml
 
 from litterbox.vault import config
 from litterbox.parts import engine as eng
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 CONFIG_DIR = ".litterbox"
 PEOPLE_FILE = f"{CONFIG_DIR}/people.yaml"
@@ -68,7 +70,7 @@ LEGACY, OK, NOT_LISTED, INACTIVE, UNVERIFIED = "legacy", "ok", "not_listed", "in
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 
 
-class PeopleError(eng.LitterboxError):
+class PeopleError(LitterboxError):
     """The people file is wrong, or a change to it is not allowed."""
 
 
@@ -320,7 +322,7 @@ def probe_host_name(repo, attempts=5):
         try:
             eng.run(["git", "lfs", "lock", WHOAMI_FILE], repo, quiet=True)
             break
-        except eng.LitterboxError as e:             # someone else is probing at this moment: wait and retry
+        except LitterboxError as e:             # someone else is probing at this moment: wait and retry
             last = e
             time.sleep(0.5)
     else:
@@ -334,7 +336,7 @@ def probe_host_name(repo, attempts=5):
     finally:
         try:
             eng.run(["git", "lfs", "unlock", "--force", WHOAMI_FILE], repo, quiet=True)
-        except eng.LitterboxError:
+        except LitterboxError:
             pass
         try:
             os.chmod(Path(repo) / WHOAMI_FILE, 0o644)
@@ -372,7 +374,7 @@ def current(repo, refresh=False, probe=True):
         try:
             host_name = probe_host_name(repo)
             _write_cache(repo, host_name)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             error = str(e).splitlines()[0] if str(e) else "offline?"
             if refresh:
                 host_name = ""              # asked to check, and could not
@@ -387,7 +389,7 @@ def require(repo, action):
     identity = current(repo)
     allowed, why = identity.allows(action)
     if not allowed:
-        raise eng.LitterboxError(why)
+        raise LitterboxError(why)
     return identity
 
 
@@ -532,7 +534,7 @@ def _tracked(repo, rel):
     try:
         eng.run(["git", "ls-files", "--error-unmatch", "--", rel], repo, quiet=True)
         return True
-    except eng.LitterboxError:
+    except LitterboxError:
         return False
 
 
@@ -579,13 +581,13 @@ def edit_directory(repo, change, message, action="manage_people"):
                     (Path(repo) / ALLOWED_SIGNERS_FILE).unlink()
                 except OSError:
                     pass
-        except eng.LitterboxError as e:
-            eng.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
+        except LitterboxError as e:
+            diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
         eng._force_unlock_quietly(repo, [rel])
         raise
     failed = eng._unlock_mine(repo, [rel])
     if failed:
-        raise eng.LitterboxError(eng._unlock_failure_message(failed))
+        raise LitterboxError(eng._unlock_failure_message(failed))
     return result
 
 
@@ -603,7 +605,7 @@ def setup_team(repo, name=None, email=None, roles=None):
     if email is None:
         try:
             email = eng.run(["git", "config", "user.email"], repo, quiet=True)
-        except eng.LitterboxError:
+        except LitterboxError:
             email = ""
     eng._pull(repo)
     whoami = Path(repo) / WHOAMI_FILE
@@ -630,7 +632,7 @@ def setup_team(repo, name=None, email=None, roles=None):
             eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
             eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", PEOPLE_FILE], repo, quiet=True)
             (Path(repo) / PEOPLE_FILE).unlink()
-        except (eng.LitterboxError, OSError):
+        except (LitterboxError, OSError):
             pass
         raise
     _write_cache(repo, host_name)
@@ -652,7 +654,7 @@ def check_before_push(repo):
     try:
         eng.run(["git", "fetch"], repo, quiet=True)
         text = eng.run(["git", "show", f"@{{u}}:{PEOPLE_FILE}"], repo, quiet=True)
-    except eng.LitterboxError:
+    except LitterboxError:
         return                                  # offline, or the vault has no people file yet: git will say if the push fails
     try:
         upstream = from_dict(yaml.safe_load(text) or {})

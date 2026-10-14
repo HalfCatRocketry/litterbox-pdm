@@ -15,7 +15,8 @@ import subprocess
 import urllib.parse
 from pathlib import Path
 
-from litterbox.parts import engine as eng
+from litterbox.errors import LitterboxError
+from litterbox import diagnostics
 
 SCHEMES = ("https://", "http://", "ssh://", "git://", "file://")
 
@@ -50,7 +51,7 @@ def clone(url, target):
     sign-in the host needs comes from the Git credential manager's own window. Raises LitterboxError."""
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    eng.LOG(f"> git clone {url} {target}")
+    diagnostics.LOG(f"> git clone {url} {target}")
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
     try:
         result = subprocess.run(
@@ -58,7 +59,7 @@ def clone(url, target):
             encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, env=env,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except FileNotFoundError:
-        raise eng.LitterboxError("Could not run 'git'. Is Git installed?") from None
+        raise LitterboxError("Could not run 'git'. Is Git installed?") from None
     if result.returncode != 0:
-        raise eng.LitterboxError(f"Could not clone {url}\n\n{(result.stderr or result.stdout).strip()}")
+        raise LitterboxError(f"Could not clone {url}\n\n{(result.stderr or result.stdout).strip()}")
     return target

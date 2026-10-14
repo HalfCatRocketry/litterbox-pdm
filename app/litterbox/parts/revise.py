@@ -31,6 +31,9 @@ from litterbox.importing import importer
 from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
+from litterbox.errors import LitterboxError
+from litterbox.records.error_conversion import converts_errors
+from litterbox import diagnostics
 
 JOURNAL_NAME = "litterbox-revise.json"
 JOURNAL_VERSION = 1
@@ -39,7 +42,7 @@ DRAWING_EXTENSIONS = (".slddrw",)
 SOLIDWORKS_EXTENSIONS = MODEL_EXTENSIONS + DRAWING_EXTENSIONS
 
 
-class RevisionFailed(eng.LitterboxError):
+class RevisionFailed(LitterboxError):
     """Revise or Cancel Revision could not be completed. Nothing was changed."""
 
 
@@ -147,14 +150,14 @@ def _undo(repo, journal, log=print):
             eng.run(["git", "reset", "-q", "HEAD", "--"] + gone, repo)
             eng.run(["git", "checkout", "HEAD", "--"] + gone, repo)
         eng.run(["git", "restore", "--staged", "--worktree", "--", record], repo)
-    except eng.LitterboxError as e:
+    except LitterboxError as e:
         log(f"WARNING: could not fully restore the vault's files: {e}")
     # remove the new files, but only ones the vault does not own
     ours = [rel for rel in added if not importer._tracked(repo, rel)]
     if ours:
         try:
             eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--"] + ours, repo)
-        except eng.LitterboxError as e:
+        except LitterboxError as e:
             log(f"WARNING: could not fully clean git's index: {e}")
     problems = []
     for rel in ours:
@@ -232,7 +235,7 @@ def _copy_list(repo, record, files):
     return copies, kept, problems
 
 
-@eng._converts_errors
+@converts_errors
 def revise_plan(repo, pn, fetch=True):
     """What a revise would create, and anything that blocks it. Changes nothing."""
     eng.validate_repo(repo)
@@ -267,7 +270,7 @@ def _cancelled_name(rel):
     return f"{registry.CANCELLED_DIR_NAME}/{registry.CANCELLED_PREFIX}{_name(rel)}"
 
 
-@eng._converts_errors
+@converts_errors
 def cancel_revision_plan(repo, pn, fetch=True):
     """What Cancel Revision would move, and anything that blocks it. Changes nothing."""
     eng.validate_repo(repo)
@@ -281,8 +284,8 @@ def cancel_revision_plan(repo, pn, fetch=True):
     if fetch:
         try:
             eng.run(["git", "fetch"], repo, quiet=True)
-        except eng.LitterboxError as e:
-            eng.LOG(f"WARNING: could not check the vault for newer changes. {e}")
+        except LitterboxError as e:
+            diagnostics.LOG(f"WARNING: could not check the vault for newer changes. {e}")
     locks = eng.get_locks(repo, strict=True)
     group = files + [eng.record_relpath(pn)]
     others = sorted({locks[p.lower()][1] for p in group if p.lower() in locks and locks[p.lower()][0] != "you"})
@@ -349,7 +352,7 @@ def _commit_and_push(repo, message, add, remove, record_path):
     eng._push_with_retry(repo)
 
 
-@eng._converts_errors
+@converts_errors
 def revise(repo, pn, reason, backend=None, log=print):
     """Make the next revision of a released part. Call revise_plan() first and show it to the user.
 
@@ -431,7 +434,7 @@ def revise(repo, pn, reason, backend=None, log=print):
 # Cancel Revision
 # ---------------------------------------------------------------------------
 
-@eng._converts_errors
+@converts_errors
 def cancel_revision(repo, pn, reason, backend=None, log=print):
     """Throw away the working revision (keeping its files in cancelled-revs). Returns the kept files.
 

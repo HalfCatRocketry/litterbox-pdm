@@ -17,6 +17,7 @@ from litterbox.references import references as refs
 from litterbox.records import registry
 from litterbox.parts import revise
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError
 
 ASM = PN("HCR", 2, 1)
 ASM_FILE = "cad/HCR-00002-001_A.SLDASM"
@@ -212,7 +213,7 @@ class TestReleaseRule(RefsFixture, unittest.TestCase):
         with self.user("Alex"):
             plan = eng.release_plan(self.a, ASM)
             self.assertFalse(plan.ok)
-            with self.assertRaises(eng.LitterboxError):
+            with self.assertRaises(LitterboxError):
                 eng.release(self.a, ASM)
 
     def test_rule_off_and_bad_value(self):

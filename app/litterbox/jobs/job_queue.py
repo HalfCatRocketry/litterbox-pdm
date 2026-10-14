@@ -23,7 +23,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from litterbox.parts import engine
+from litterbox.errors import LitterboxError, NothingToSaveError
 
 READY, WORKING, ERROR = "ready", "working", "error"
 
@@ -112,9 +112,9 @@ class JobQueue:
     def _run(job):
         try:
             return Outcome(job, result=job.work())
-        except engine.NothingToSaveError as e:           # not a failure: nothing was different
+        except NothingToSaveError as e:           # not a failure: nothing was different
             return Outcome(job, error=e)
-        except engine.LitterboxError as e:
+        except LitterboxError as e:
             return Outcome(job, error=str(e))
         except Exception as e:                           # anything unexpected
             return Outcome(job, error=f"Unexpected error: {e!r}")

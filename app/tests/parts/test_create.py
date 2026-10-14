@@ -20,6 +20,7 @@ from litterbox.parts import engine as eng
 from litterbox.records import registry
 from litterbox.parts import create
 from litterbox.core.pn import PN
+from litterbox.errors import LitterboxError
 
 
 @SKIP_ON_WINDOWS
@@ -397,7 +398,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         commits = len(self.remote_log())
@@ -478,7 +479,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         commits = len(self.remote_log())
@@ -498,7 +499,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
         def offline(command, repo, quiet=False):
             if command[:2] == ["git", "pull"]:
-                raise eng.LitterboxError("simulated: could not resolve host")
+                raise LitterboxError("simulated: could not resolve host")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
@@ -517,9 +518,9 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             if command[:2] == ["git", "pull"]:
                 pulls["count"] += 1
                 if pulls["count"] > 1:                      # the first pull works, then the network drops
-                    raise eng.LitterboxError("simulated: could not resolve host")
+                    raise LitterboxError("simulated: could not resolve host")
             if command[:2] == ["git", "push"]:
-                raise eng.LitterboxError("simulated: connection reset")
+                raise LitterboxError("simulated: connection reset")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
@@ -548,7 +549,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
-                raise eng.LitterboxError("simulated network failure")
+                raise LitterboxError("simulated network failure")
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):

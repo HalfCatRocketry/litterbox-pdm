@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 from litterbox.cad import opener
-from litterbox.parts.engine import LitterboxError
+from litterbox.errors import LitterboxError
 
 
 class OpenOrder(unittest.TestCase):
