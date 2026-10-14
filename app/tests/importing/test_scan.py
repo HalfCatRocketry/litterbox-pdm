@@ -9,6 +9,7 @@ from pathlib import Path
 
 from litterbox.importing import manifest as mf
 from litterbox.records import record_store
+from litterbox.cli import scan as cli_scan
 from litterbox.importing import scan
 from litterbox.core.part_number import PN
 
@@ -245,7 +246,7 @@ class TestCommandLine(ScanTestCase):
     def cli(self, *args):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = scan.main([str(a) for a in args])
+            code = cli_scan.main([str(a) for a in args])
         return code, out.getvalue()
 
     def test_writes_a_manifest_and_a_report(self):

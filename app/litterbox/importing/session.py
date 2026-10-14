@@ -33,7 +33,7 @@ from litterbox.importing import import_finish
 from litterbox.importing import import_numbering
 from litterbox.importing import import_prepare
 from litterbox.importing import manifest as manifest_module
-from litterbox.importing import scan as scan_module
+from litterbox.importing import scan
 from litterbox.parts import create_batch
 
 
@@ -128,7 +128,7 @@ class ImportSession:
                         raise import_errors.ImportCancelled("Cancelled. Nothing was changed.")
                     if progress:
                         progress(done, total, f"Scanning: {Path(name).name}")
-                found = scan_module.scan(folders, repo=self.repo, progress=scan_progress)
+                found = scan.scan(folders, repo=self.repo, progress=scan_progress)
                 path = str(default_manifest_path(manifest_root)) if manifest_root else str(manifest_path)
                 manifest_module.save(found, path)
                 self.log(f"Scan saved to {path}")

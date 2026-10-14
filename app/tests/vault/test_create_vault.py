@@ -9,7 +9,8 @@ from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.parts import create
-from litterbox.vault import create_vault as iv
+from litterbox.cli import init_vault as cli_init_vault
+from litterbox.vault import create_vault
 from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.core import part_number
@@ -58,7 +59,7 @@ class EmptyRepo(unittest.TestCase):
 class CreatingAVault(EmptyRepo):
     def make(self, **options):
         options.setdefault("set_up_team", False)
-        return iv.create(self.vault, "hcr", **options)
+        return create_vault.create(self.vault, "hcr", **options)
 
     def test_writes_commits_and_pushes_the_vault_files(self):
         result = self.make()
@@ -82,7 +83,7 @@ class CreatingAVault(EmptyRepo):
     def test_gitattributes_makes_cad_lockable_lfs_files(self):
         self.make()
         text = (self.vault / ".gitattributes").read_text()
-        for line in iv.ATTRIBUTE_LINES:
+        for line in create_vault.ATTRIBUTE_LINES:
             self.assertIn(line, text.splitlines())
         self.assertNotIn("\r", text)
         self.assertIn(".tmp-*", (self.vault / ".gitignore").read_text().splitlines())
@@ -151,12 +152,12 @@ class WhenSomethingFails(EmptyRepo):
         (self.vault / ".gitignore").write_text("build/\n")
         git(self.vault, "remote", "set-url", "origin", str(self.root / "nowhere.git"))
         with self.assertRaises(LitterboxError):
-            iv.create(self.vault, "HCR", set_up_team=False)
+            create_vault.create(self.vault, "HCR", set_up_team=False)
         self.assertEqual(sorted(p.name for p in self.vault.iterdir()), [".git", ".gitignore"])
         self.assertEqual((self.vault / ".gitignore").read_text(), "build/\n")
         self.assertFalse(_has_head(self.vault))
         git(self.vault, "remote", "set-url", "origin", str(self.remote))      # and trying again works
-        iv.create(self.vault, "HCR", set_up_team=False)
+        create_vault.create(self.vault, "HCR", set_up_team=False)
         self.assertIn(".litterbox/config.yaml", self.remote_files())
 
     def test_a_failed_upload_after_earlier_commits_undoes_only_ours(self):
@@ -166,15 +167,15 @@ class WhenSomethingFails(EmptyRepo):
         before = git(self.vault, "rev-parse", "HEAD")
         git(self.vault, "remote", "set-url", "origin", str(self.root / "nowhere.git"))
         with self.assertRaises(LitterboxError):
-            iv.create(self.vault, "HCR", set_up_team=False)
+            create_vault.create(self.vault, "HCR", set_up_team=False)
         self.assertEqual(git(self.vault, "rev-parse", "HEAD"), before)
         self.assertEqual(git(self.vault, "status", "--porcelain"), "")
         self.assertFalse((self.vault / ".litterbox").exists())
 
     def test_refuses_an_existing_vault(self):
-        iv.create(self.vault, "HCR", set_up_team=False)
-        with self.assertRaises(iv.InitError) as caught:
-            iv.create(self.vault, "HCR", set_up_team=False)
+        create_vault.create(self.vault, "HCR", set_up_team=False)
+        with self.assertRaises(create_vault.InitError) as caught:
+            create_vault.create(self.vault, "HCR", set_up_team=False)
         self.assertIn("already looks like a vault", str(caught.exception))
 
 
@@ -185,10 +186,10 @@ def _has_head(repo):
 @SKIP_ON_WINDOWS
 class Planning(EmptyRepo):
     def problems(self, *args, **kwargs):
-        return iv.plan(self.vault, *args, **kwargs).problems
+        return create_vault.plan(self.vault, *args, **kwargs).problems
 
     def test_a_good_setup_has_no_problems_and_changes_nothing(self):
-        checked = iv.plan(self.vault, "HCR")
+        checked = create_vault.plan(self.vault, "HCR")
         self.assertTrue(checked.ok)
         self.assertEqual(sorted(p.name for p in self.vault.iterdir()), [".git"])
 
@@ -206,60 +207,60 @@ class Planning(EmptyRepo):
         self.assertTrue(self.problems("HCR", start_number=True))
 
     def test_digit_warnings(self):
-        self.assertEqual(iv.plan(self.vault, "HCR").warnings, [])
-        self.assertTrue(any("only 999" in w for w in iv.plan(self.vault, "HCR", base_digits=3).warnings))
-        self.assertTrue(any("only 9 variants" in w for w in iv.plan(self.vault, "HCR", variant_digits=1).warnings))
-        self.assertTrue(any("long part numbers" in w for w in iv.plan(self.vault, "HCR", base_digits=8).warnings))
-        self.assertEqual(iv.plan(self.vault, "HCR", start_number=99500).warnings, [])     # numbers loop round, so a high start is fine
+        self.assertEqual(create_vault.plan(self.vault, "HCR").warnings, [])
+        self.assertTrue(any("only 999" in w for w in create_vault.plan(self.vault, "HCR", base_digits=3).warnings))
+        self.assertTrue(any("only 9 variants" in w for w in create_vault.plan(self.vault, "HCR", variant_digits=1).warnings))
+        self.assertTrue(any("long part numbers" in w for w in create_vault.plan(self.vault, "HCR", base_digits=8).warnings))
+        self.assertEqual(create_vault.plan(self.vault, "HCR", start_number=99500).warnings, [])     # numbers loop round, so a high start is fine
 
     def test_folder_that_is_not_a_repository(self):
         plain = self.root / "plain"
         plain.mkdir()
-        self.assertIn("isn't a Git repository", iv.plan(plain, "HCR").problems[0])
-        self.assertIn("doesn't exist", iv.plan(self.root / "missing", "HCR").problems[0])
+        self.assertIn("isn't a Git repository", create_vault.plan(plain, "HCR").problems[0])
+        self.assertIn("doesn't exist", create_vault.plan(self.root / "missing", "HCR").problems[0])
 
     def test_a_folder_inside_a_repository(self):
         inner = self.vault / "sub"
         inner.mkdir()
-        self.assertIn("not the top", iv.plan(inner, "HCR").problems[0])
+        self.assertIn("not the top", create_vault.plan(inner, "HCR").problems[0])
 
     def test_no_remote(self):
         git(self.vault, "remote", "remove", "origin")
-        self.assertTrue(any("no remote" in p for p in iv.plan(self.vault, "HCR").problems))
-        self.assertTrue(iv.plan(self.vault, "HCR", push=False).ok)
+        self.assertTrue(any("no remote" in p for p in create_vault.plan(self.vault, "HCR").problems))
+        self.assertTrue(create_vault.plan(self.vault, "HCR", push=False).ok)
 
     def test_git_without_your_name(self):
         git(self.vault, "config", "--unset", "user.email")
-        self.assertTrue(any("email" in p for p in iv.plan(self.vault, "HCR").problems))
+        self.assertTrue(any("email" in p for p in create_vault.plan(self.vault, "HCR").problems))
 
     def test_existing_vault_folders_block_it(self):
         (self.vault / "cad").mkdir()
-        self.assertTrue(any("cad" in p for p in iv.plan(self.vault, "HCR").problems))
+        self.assertTrue(any("cad" in p for p in create_vault.plan(self.vault, "HCR").problems))
 
     def test_create_refuses_when_there_are_problems_and_touches_nothing(self):
-        with self.assertRaises(iv.InitError):
-            iv.create(self.vault, "H")
+        with self.assertRaises(create_vault.InitError):
+            create_vault.create(self.vault, "H")
         self.assertEqual(sorted(p.name for p in self.vault.iterdir()), [".git"])
 
 
 class NumberingWarnings(unittest.TestCase):
     def test_nothing_to_say_about_the_defaults(self):
-        self.assertEqual(iv.numbering_warnings(1, 5, 3), [])
+        self.assertEqual(create_vault.numbering_warnings(1, 5, 3), [])
 
     def test_one_digit_wording(self):
-        self.assertIn("1 digit in the part number", iv.numbering_warnings(1, 1, 3)[0])
+        self.assertIn("1 digit in the part number", create_vault.numbering_warnings(1, 1, 3)[0])
 
 
 class CommandLine(EmptyRepo):
     @SKIP_ON_WINDOWS
     def test_creates_a_vault(self):
-        code = iv.main([str(self.vault), "--org", "HCR", "--start", "10001", "--no-team"])
+        code = cli_init_vault.main([str(self.vault), "--org", "HCR", "--start", "10001", "--no-team"])
         self.assertEqual(code, 0)
         self.assertEqual(config.get_start_number(self.vault), 10001)
 
     @SKIP_ON_WINDOWS
     def test_reports_problems_and_changes_nothing(self):
-        self.assertEqual(iv.main([str(self.vault), "--org", "X"]), 1)
+        self.assertEqual(cli_init_vault.main([str(self.vault), "--org", "X"]), 1)
         self.assertEqual(sorted(p.name for p in self.vault.iterdir()), [".git"])
 
     @SKIP_ON_WINDOWS
@@ -268,9 +269,9 @@ class CommandLine(EmptyRepo):
         real = builtins.input
         builtins.input = lambda prompt="": "n"
         self.addCleanup(setattr, builtins, "input", real)
-        self.assertEqual(iv.main([str(self.vault), "--org", "HCR", "--base-digits", "3", "--no-team"]), 1)
+        self.assertEqual(cli_init_vault.main([str(self.vault), "--org", "HCR", "--base-digits", "3", "--no-team"]), 1)
         self.assertEqual(sorted(p.name for p in self.vault.iterdir()), [".git"])
-        self.assertEqual(iv.main([str(self.vault), "--org", "HCR", "--base-digits", "3", "--no-team", "--yes"]), 0)
+        self.assertEqual(cli_init_vault.main([str(self.vault), "--org", "HCR", "--base-digits", "3", "--no-team", "--yes"]), 0)
 
 
 if __name__ == "__main__":

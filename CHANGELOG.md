@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- The command line is now one command, run from the `app` folder: `python -m litterbox <command>`, with the commands `status` (and the part actions: latest, checkout, checkin, save, undo, release, makecots, reopen, void), `new-part`, `scan`, `import` and `init-vault`. Their options are the same as before; `python -m litterbox <command> --help` lists them. The old `python litterbox_engine.py ...`, `python create.py ...`, `python scan.py ...`, `python importer.py ...` and `python init_vault.py ...` no longer work. To start the program from source, run `python app/main.py`.
+
 ## 0.3.2
 
 - Litterbox now works in the background. Actions no longer lock up the window: click an action, it joins a queue and runs in order, and you can keep browsing, ticking parts and queueing more. Opening the Import window and switching org still wait for the queue to finish.

@@ -342,7 +342,7 @@ class CreateVaultWiring(unittest.TestCase):
         self.dialog_result = ("HCR", "C:\\Litterbox\\hcr", 1, 5, 3)
         self.gui.OrgDialog = lambda *a, **k: SimpleNamespace(show=lambda: self.dialog_result)
         self.plan = SimpleNamespace(ok=True, problems=[], warnings=[], org="HCR")
-        replace(self, self.gui.init_vault, "plan", lambda *a, **k: self.plan)
+        replace(self, self.gui.create_vault, "plan", lambda *a, **k: self.plan)
         replace(self, self.gui.settings, "save", lambda data: None)
 
     def shown(self, name):
@@ -375,7 +375,7 @@ class CreateVaultWiring(unittest.TestCase):
     def test_creating_runs_in_the_background_and_then_opens_the_new_org(self):
         from types import SimpleNamespace
         calls = []
-        replace(self, self.gui.init_vault, "create", lambda *a, **k: calls.append(a) or "made")
+        replace(self, self.gui.create_vault, "create", lambda *a, **k: calls.append(a) or "made")
         self.app.create_vault()
         work, done, on_success = self.tasks[0]
         self.assertEqual(work(), "made")

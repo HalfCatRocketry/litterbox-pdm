@@ -37,7 +37,7 @@ def _print_status(repo):
         print(f"{row.pn}  {row.state:<38} {row.name}")
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Litterbox engine")
     parser.add_argument("repo", help="path to the repo folder")
     parser.add_argument("action", choices=["status", "latest", "checkout", "checkin", "save",
@@ -46,7 +46,7 @@ def main():
     parser.add_argument("-m", "--message", default="", help="comment or reason")
     parser.add_argument("--anyway", action="store_true",
                         help="check in even if no changes were detected")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         if args.action == "status":

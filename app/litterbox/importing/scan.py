@@ -5,7 +5,7 @@ The scan only READS. It never changes, moves, renames or opens-for-writing any
 of your files, and it creates nothing in your folders. It writes one file, the
 manifest, and refuses to put it inside a folder it is scanning.
 
-    python scan.py <folder> [<folder> ...] [--out import-manifest.yaml] [--repo <vault>] [--no-hash] [--force]
+    python -m litterbox.cli.scan <folder> [<folder> ...] [--out import-manifest.yaml] [--repo <vault>] [--no-hash] [--force]
 
 What it does
   * Finds the CAD files (.SLDPRT parts, .SLDASM assemblies, .SLDDRW drawings),
@@ -27,17 +27,15 @@ It never opens the files with SolidWorks, so it works with any SolidWorks versio
 Working out what each assembly REFERENCES needs SolidWorks and comes later.
 """
 
-import argparse
 import hashlib
 import os
 import re
-import sys
 from collections import defaultdict
-from pathlib import Path
 
 from litterbox.importing import manifest as mf
 from litterbox.records import record_model
 from litterbox.records import record_store
+
 
 # extension (lowercase) -> (kind, display type). Add other CAD programs here.
 FORMATS = {
@@ -46,25 +44,35 @@ FORMATS = {
     ".slddrw": ("drawing", "SLDDRW"),
 }
 
+
 IGNORED_FOLDERS = {".git", "$recycle.bin", "system volume information", "swxauto", "__pycache__"}
+
+
 JUNK_EXTENSIONS = {".bak", ".tmp", ".swp"}
+
+
 LONG_PATH = 240                 # Windows trips over paths much longer than this
+
+
 HASH_BLOCK = 1024 * 1024
+
+
 MAX_NAME_LENGTH = 100
+
 
 OLD_FOLDER_WORDS = {"old", "backup", "backups", "bak", "archive", "archived", "obsolete", "deprecated",
                     "unused", "trash", "temp", "tmp", "superseded", "discard", "discarded"}
+
+
 COPY_WORDS = {"old", "bak", "backup", "copy", "obsolete", "deprecated", "unused"}
+
+
 COPY_NUMBER = re.compile(r"\(\d+\)$")
 
 
 class ScanError(Exception):
     """The scan could not run. The message is safe to show to a user."""
 
-
-# ---------------------------------------------------------------------------
-# Small helpers
-# ---------------------------------------------------------------------------
 
 def _norm(path):
     return os.path.normcase(os.path.normpath(str(path)))
@@ -107,10 +115,6 @@ def is_junk(filename):
     return lower.startswith("~$") or os.path.splitext(lower)[1] in JUNK_EXTENSIONS
 
 
-# ---------------------------------------------------------------------------
-# Finding the files
-# ---------------------------------------------------------------------------
-
 def _walk(sources, skip_folders, stats, errors):
     """Yield (folder, filename) for every file, pruning folders we never want."""
     skip = [_norm(p) for p in skip_folders]
@@ -148,10 +152,6 @@ def _name_warnings(stem):
         warnings.append("The file name looks like a copy or a backup.")
     return warnings
 
-
-# ---------------------------------------------------------------------------
-# The scan
-# ---------------------------------------------------------------------------
 
 def scan(sources, repo=None, hash_files=True, progress=None):
     """Scan folders and return a Manifest. Reads only. `progress(done, total, path)` is called while hashing."""
@@ -221,14 +221,14 @@ def scan(sources, repo=None, hash_files=True, progress=None):
             progress(done, total, entry["path"])
 
     items = []
-    for number, (main, files, notes) in enumerate(raw_items, start=1):
+    for number, (main_file, files, notes) in enumerate(raw_items, start=1):
         warnings = list(notes)
-        name = propose_name(main["stem"])
+        name = propose_name(main_file["stem"])
         if len(name) > MAX_NAME_LENGTH:
             warnings.append(f"The name was shortened to {MAX_NAME_LENGTH} characters; the full file name is in the description.")
             name = name[:MAX_NAME_LENGTH].rstrip()
-        folder_warnings = _folder_warnings(main["folder"], resolved)
-        warnings += folder_warnings + _name_warnings(main["stem"])
+        folder_warnings = _folder_warnings(main_file["folder"], resolved)
+        warnings += folder_warnings + _name_warnings(main_file["stem"])
         include = True
         for entry in files:
             if entry["error"]:
@@ -241,7 +241,7 @@ def scan(sources, repo=None, hash_files=True, progress=None):
                                 "characters); Windows may have trouble with it.")
         items.append(mf.Item(
             id=number, name=name, include=include,
-            kind="drawing" if main["kind"] == "drawing" else main["kind"],
+            kind="drawing" if main_file["kind"] == "drawing" else main_file["kind"],
             description=", ".join(os.path.basename(f["path"]) for f in files),
             files=[mf.FileEntry(f["path"], f["type"], f["size"], f["sha256"]) for f in files],
             warnings=warnings))
@@ -317,10 +317,6 @@ def _stats(items, seen, errors, hashed):
     return result
 
 
-# ---------------------------------------------------------------------------
-# The report
-# ---------------------------------------------------------------------------
-
 def _size(n):
     for unit in ("bytes", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
@@ -356,45 +352,3 @@ def format_report(manifest):
         top = ", ".join(f"{ext} x{count:,}" for ext, count in list(s["other_files"].items())[:8])
         lines.append(f"Other files ignored: {top}")
     return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Command line
-# ---------------------------------------------------------------------------
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Litterbox: scan old CAD folders and write an import manifest (read-only)")
-    parser.add_argument("folders", nargs="+", help="the folders to scan")
-    parser.add_argument("--out", default="import-manifest.yaml", help="where to write the manifest")
-    parser.add_argument("--repo", help="your vault folder: files already imported from the same path are left out")
-    parser.add_argument("--no-hash", action="store_true", help="skip hashing (much faster, but no exact-copy report)")
-    parser.add_argument("--force", action="store_true", help="overwrite the manifest file if it already exists")
-    args = parser.parse_args(argv)
-
-    out = Path(args.out).resolve()
-    try:
-        for folder in args.folders:
-            if _inside(out, str(Path(folder).resolve())):         # resolved the same way as `out` (Windows short names)
-                raise ScanError(f"The manifest can't be written inside a folder being scanned ({folder}). "
-                                "Choose another place with --out.")
-        if out.exists() and not args.force:
-            raise ScanError(f"{out} already exists. It may hold edits you made. Use --force to replace it, "
-                            "or choose another name with --out.")
-
-        def show(done, total, path):
-            if done == total or done % 50 == 0:
-                print(f"\r  hashed {done:,} of {total:,} files", end="", flush=True)
-
-        result = scan(args.folders, repo=args.repo, hash_files=not args.no_hash, progress=show)
-        print()
-        mf.save(result, out)
-    except (ScanError, mf.ManifestError) as e:
-        print(f"\nERROR: {e}")
-        return 1
-    print(format_report(result))
-    print(f"\nManifest written to {out}\nNothing in your CAD folders was changed.")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

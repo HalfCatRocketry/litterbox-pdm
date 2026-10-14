@@ -41,12 +41,12 @@ from litterbox.parts import revise
 from litterbox.team import commit_signing as signing
 from litterbox.parts import create
 from litterbox.parts import number_suggestions
-from litterbox.vault import create_vault as init_vault
+from litterbox.vault import create_vault
 from litterbox.importing import session as import_session
 from litterbox.jobs import job_queue as jobs
 from litterbox.importing import import_errors
 from litterbox.importing import manifest as manifest_module
-from litterbox.importing import scan as scan_module
+from litterbox.importing import scan
 from litterbox.user import settings
 from litterbox.user import updater
 from litterbox.vault import clone as vault_clone
@@ -1403,7 +1403,7 @@ class ImportWindow(ctk.CTkToplevel):
 
     @staticmethod
     def _error_text(error):
-        known = (LitterboxError, scan_module.ScanError, manifest_module.ManifestError)
+        known = (LitterboxError, scan.ScanError, manifest_module.ManifestError)
         return str(error) if isinstance(error, known) else f"Unexpected error: {error!r}"
 
     # ------------------------------------------------------------------
@@ -3715,7 +3715,7 @@ class App(ctk.CTk):
         if not result:
             return
         org, folder, start, base_digits, variant_digits = result
-        checked = init_vault.plan(folder, org, start, base_digits, variant_digits)
+        checked = create_vault.plan(folder, org, start, base_digits, variant_digits)
         if not checked.ok:
             messagebox.showerror("Create new vault", "\n\n".join(checked.problems), parent=self)
             return
@@ -3730,7 +3730,7 @@ class App(ctk.CTk):
             self.switch_org(created.org)
             messagebox.showinfo("Create new vault", logic.vault_created_text(created), parent=self)
 
-        self.run_task(lambda: init_vault.create(folder, org, start, base_digits, variant_digits),
+        self.run_task(lambda: create_vault.create(folder, org, start, base_digits, variant_digits),
                       f"Created the {checked.org} vault", on_success=made, refresh=False)
 
     def _say(self, text, tone="normal"):
