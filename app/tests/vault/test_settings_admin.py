@@ -17,6 +17,7 @@ from litterbox.vault import settings_admin as vault_settings
 from litterbox.errors import LitterboxError
 from litterbox import layout
 from litterbox.git import remote
+from tests.support.gui_source import gui_source
 
 
 class ConfigValues(unittest.TestCase):
@@ -126,7 +127,7 @@ class DialogLogic(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_the_team_window_and_app_are_wired_to_the_dialog(self):
-        source = (Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = gui_source()
         self.assertIn('"Vault Settings..."', source)
         self.assertIn("def edit_vault_settings", source)
         self.assertIn("vault_settings.edit(repo, **changes)", source)

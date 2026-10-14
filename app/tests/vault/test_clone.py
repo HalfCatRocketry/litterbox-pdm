@@ -12,6 +12,7 @@ from litterbox.gui.logic import org_menu
 from litterbox.vault import clone as vault_clone
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
+from tests.support.gui_source import gui_source
 
 
 def git(cwd, *args):
@@ -104,7 +105,7 @@ class Cloning(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_add_org_asks_for_a_url_and_clones_in_the_background(self):
-        source = (Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = gui_source()
         for text in ("class CloneDialog", "CloneDialog(self, settings.ROOT).show()", "vault_clone.clone(url.strip(), target)",
                      'label="Cloning the vault', "self.add_org()"):
             self.assertIn(text, source)

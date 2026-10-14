@@ -3,6 +3,7 @@
 import unittest
 from pathlib import Path
 from litterbox.gui.logic import org_menu
+from tests.support.gui_source import gui_source
 
 
 class TestOrgs(unittest.TestCase):
@@ -105,7 +106,7 @@ class InspectVaultFolder(unittest.TestCase):
 
 class AddOrgWiring(unittest.TestCase):
     def test_add_org_no_longer_opens_the_org_setup_dialog(self):
-        source = (Path(__file__).resolve().parents[3] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = gui_source()
         self.assertIn("self.add_org()", source)
         self.assertNotIn("self._org_setup(None)", source)
         self.assertIn("part_number.NEW_VAULT_BASE_DIGITS", source)

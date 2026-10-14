@@ -1,5 +1,5 @@
 """
-Smoke test for the Import window in litterbox_gui.py, with the screen replaced by stand-ins.
+Smoke tests for the window (litterbox/gui), with the screen replaced by stand-ins.
 
 No real window is opened (so this runs anywhere, even without tkinter): customtkinter and tkinter
 are replaced by simple fakes, a fake table remembers its rows, and the test plays the user by calling
@@ -9,7 +9,7 @@ right session steps, errors reach the user - not how the window looks. Please al
 Run from the app folder with:  python -m unittest discover -s tests -t . -v
 """
 
-import importlib.util
+import importlib
 import queue
 import sys
 import types
@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests.support.import_fixture import ImportFixture
+from tests.support.gui_source import GUI_DIR, gui_source
 from tests.support.vault_fixture import SKIP_ON_WINDOWS
 
 from litterbox.importing import session as import_session
@@ -133,12 +134,31 @@ def load_gui_with_fakes(box):
     tk.filedialog, tk.messagebox, tk.ttk = dialogs, mbox, ttk
     fakes = {"customtkinter": ctk, "tkinter": tk, "tkinter.ttk": ttk, "tkinter.filedialog": dialogs,
              "tkinter.messagebox": mbox}
-    app = Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py"
     with mock.patch.dict(sys.modules, fakes):
-        spec = importlib.util.spec_from_file_location("litterbox_gui_under_test", app)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    return module
+        # Every window module is imported afresh, under the fakes (patch.dict puts sys.modules back afterwards).
+        for name in [n for n in sys.modules if n.startswith("litterbox.gui.")]:
+            if not n_is_logic(name):
+                del sys.modules[name]
+        modules = {}
+        for path in sorted(GUI_DIR.rglob("*.py")):
+            rel = path.relative_to(GUI_DIR.parents[1]).with_suffix("")
+            dotted = ".".join(rel.parts).removesuffix(".__init__")
+            if not n_is_logic(dotted):
+                modules[dotted] = importlib.import_module(dotted)
+    # self.gui.<module> is each window module, and every module those use (self.gui.lifecycle, .messagebox, ...)
+    gui = types.SimpleNamespace()
+    for module in modules.values():
+        for name, value in vars(module).items():
+            if isinstance(value, types.ModuleType) and not hasattr(gui, name):
+                setattr(gui, name, value)
+    for dotted, module in modules.items():
+        setattr(gui, dotted.rsplit(".", 1)[1], module)
+    return gui
+
+
+def n_is_logic(dotted):
+    """gui/logic has no window code: it is not reloaded."""
+    return dotted == "litterbox.gui.logic" or dotted.startswith("litterbox.gui.logic.")
 
 
 def replace(test, obj, name, value):
@@ -200,7 +220,7 @@ class TeamWiring(unittest.TestCase):
         self.pn = PN("HCR", 7, 1)
         row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=["cad/HCR-00007-001_A.SLDPRT"],
                          revisions={"A": ["cad/HCR-00007-001_A.SLDPRT"]})
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         app.rows_by_pn = {self.pn: row}
         app._selected_pns = lambda action=None: [self.pn]
         self.said = []
@@ -242,10 +262,10 @@ class ReleaseButtonTests(unittest.TestCase):
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
         self.clicks = []
-        base = self.gui.ReleaseButton.__mro__[1]
+        base = self.gui.release_button.ReleaseButton.__mro__[1]
         base._clicked = lambda button, event=None: self.clicks.append(event)
         self.addCleanup(lambda: delattr(base, "_clicked"))
-        button = self.gui.ReleaseButton()
+        button = self.gui.release_button.ReleaseButton()
         button._state = "normal"
         button.winfo_rootx = lambda: 100
         button.winfo_rooty = lambda: 50
@@ -277,7 +297,7 @@ class ReleaseButtonTests(unittest.TestCase):
 
     def test_a_missing_release_event_is_caught_by_the_mouse_check(self):
         state = {"down": True}
-        self.gui.left_button_down = lambda: state["down"]
+        self.gui.release_button.left_button_down = lambda: state["down"]
         self.button.winfo_pointerxy = lambda: (120, 65)
         self.button._clicked(self.at(110, 60))
         self.button._watch_mouse()                              # still held: nothing yet
@@ -290,7 +310,7 @@ class ReleaseButtonTests(unittest.TestCase):
         self.assertEqual(len(self.clicks), 1)
 
     def test_mouse_check_cancels_when_let_go_off_the_button(self):
-        self.gui.left_button_down = lambda: False
+        self.gui.release_button.left_button_down = lambda: False
         self.button.winfo_pointerxy = lambda: (500, 500)
         self.button._clicked(self.at(110, 60))
         self.button._watch_mouse()
@@ -298,13 +318,13 @@ class ReleaseButtonTests(unittest.TestCase):
 
     def test_windows_saying_the_pointer_is_over_the_button_counts_even_if_tk_disagrees(self):
         # The edge-click bug: Tk's coordinates were off, so only the middle of a button worked.
-        self.gui.pointer_inside = lambda widget: True
+        self.gui.release_button.pointer_inside = lambda widget: True
         self.button._clicked(self.at(110, 60))
         self.button._released(self.at(400, 400))
         self.assertEqual(len(self.clicks), 1)
 
     def test_a_click_at_the_very_edge_counts(self):
-        self.gui.pointer_inside = lambda widget: None            # this system can't say: Tk's numbers decide
+        self.gui.release_button.pointer_inside = lambda widget: None            # this system can't say: Tk's numbers decide
         for x, y in ((100, 50), (179, 79), (98, 49), (182, 82)):      # corners, and a few pixels of slack
             self.clicks.clear()
             self.button._clicked(self.at(x, y))
@@ -312,7 +332,7 @@ class ReleaseButtonTests(unittest.TestCase):
             self.assertEqual(len(self.clicks), 1, (x, y))
 
     def test_far_from_the_button_is_still_a_cancelled_click(self):
-        self.gui.pointer_inside = lambda widget: False
+        self.gui.release_button.pointer_inside = lambda widget: False
         self.button._clicked(self.at(110, 60))
         self.button._released(self.at(190, 60))                  # 10 px past the right edge
         self.assertEqual(self.clicks, [])
@@ -331,7 +351,7 @@ class CreateVaultWiring(unittest.TestCase):
         from types import SimpleNamespace
         self.box = FakeBox()
         self.gui = load_gui_with_fakes(self.box)
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         self.tasks, self.switched = [], []
         app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
             (work, done, on_success))
@@ -340,7 +360,7 @@ class CreateVaultWiring(unittest.TestCase):
         app.settings = {}
         self.app = app
         self.dialog_result = ("HCR", "C:\\Litterbox\\hcr", 1, 5, 3)
-        self.gui.OrgDialog = lambda *a, **k: SimpleNamespace(show=lambda: self.dialog_result)
+        self.gui.org_dialog.OrgDialog = lambda *a, **k: SimpleNamespace(show=lambda: self.dialog_result)
         self.plan = SimpleNamespace(ok=True, problems=[], warnings=[], org="HCR")
         replace(self, self.gui.create_vault, "plan", lambda *a, **k: self.plan)
         replace(self, self.gui.settings, "save", lambda data: None)
@@ -394,7 +414,7 @@ class WorkflowWiring(unittest.TestCase):
         self.SimpleNamespace = SimpleNamespace
         self.box = FakeBox()
         self.gui = load_gui_with_fakes(self.box)
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         self.tasks, self.said = [], []
         app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
             (work, done, on_success))
@@ -448,7 +468,7 @@ class WorkflowWiring(unittest.TestCase):
             def show(inner):
                 return {"template": "T1", "assignments": ["bea"], "extras": [("Quality", "bea")], "reason": ""}
 
-        self.gui.WorkflowRequestDialog = Dialog
+        self.gui.request_dialog.WorkflowRequestDialog = Dialog
         calls = []
         replace(self, self.gui.workflow_request, "request", lambda *a: calls.append(a) or "id")
         self.app.release()
@@ -463,7 +483,7 @@ class WorkflowWiring(unittest.TestCase):
     def test_cancelling_the_workflow_window_does_nothing(self):
         self.targets("HCR-00001-001")
         self.app.rows_by_pn = {"HCR-00001-001": self.row("ok")}
-        self.gui.WorkflowRequestDialog = lambda *a: self.SimpleNamespace(show=lambda: None)
+        self.gui.request_dialog.WorkflowRequestDialog = lambda *a: self.SimpleNamespace(show=lambda: None)
         self.app.release()
         self.assertEqual(self.tasks, [])
 
@@ -473,7 +493,7 @@ class WorkflowWiring(unittest.TestCase):
                 self.targets("HCR-00001-001")
                 self.app.rows_by_pn = {"HCR-00001-001": self.row("ok")}
                 opened = []
-                self.gui.WorkflowRequestDialog = lambda parent, act, *a: opened.append(act) or self.SimpleNamespace(
+                self.gui.request_dialog.WorkflowRequestDialog = lambda parent, act, *a: opened.append(act) or self.SimpleNamespace(
                     show=lambda: None)
                 getattr(self.app, method)()
                 self.assertEqual(opened, [action])
@@ -623,13 +643,13 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual(seen, [(["HCR-00001-001"], "Quality is away", "release")])
 
     def test_changing_a_signer(self):
-        self.gui.ReassignDialog = lambda parent, task, directory: self.SimpleNamespace(show=lambda: (0, "alex"))
+        self.gui.reassign_dialog.ReassignDialog = lambda parent, task, directory: self.SimpleNamespace(show=lambda: (0, "alex"))
         seen = []
         replace(self, self.gui.workflow_responses, "reassign", lambda repo, pns, slot, person: seen.append((pns, slot, person)))
         self.app.task_reassign(self.task())
         self.tasks.pop()[0]()
         self.assertEqual(seen, [(["HCR-00001-001"], 0, "alex")])
-        self.gui.ReassignDialog = lambda *a: self.SimpleNamespace(show=lambda: None)
+        self.gui.reassign_dialog.ReassignDialog = lambda *a: self.SimpleNamespace(show=lambda: None)
         self.app.task_reassign(self.task())
         self.assertEqual(self.tasks, [])
 
@@ -649,7 +669,7 @@ class WorkflowWiring(unittest.TestCase):
     def _draft_window(self, roles, templates=None):
         directory = self.gui.team_model.Directory(
             [self.gui.team_model.Person("bea", "Bea", "", ["Bea"], "owner", list(roles))], list(roles))
-        draft = self.gui.TeamDraft(directory, templates or {}, "bea")
+        draft = self.gui.team_window.TeamDraft(directory, templates or {}, "bea")
         reloaded = []
         window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: reloaded.append(1), draft=draft)
         self.app._may = lambda action: True
@@ -668,7 +688,7 @@ class WorkflowWiring(unittest.TestCase):
                          "requester": op["requester"]})
             return self.SimpleNamespace(show=lambda: out.append(apply(result, editor)))
 
-        self.gui.WorkflowsDialog = dialog
+        self.gui.workflows_dialog.WorkflowsDialog = dialog
         return out
 
     def test_the_workflows_window_result_is_staged_not_saved(self):
@@ -706,7 +726,7 @@ class TickAndSaveWiring(unittest.TestCase):
         self.gui = load_gui_with_fakes(FakeBox())
         from litterbox.core.part_number import PN
         self.PN = PN
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         app.ticked = set()
         app.tree = SortableFakeTree(["tick", "pn"])
         for pn in ("HCR-00001-001", "HCR-00002-001", "HCR-00003-001"):
@@ -823,7 +843,7 @@ class TickAndSaveWiring(unittest.TestCase):
 
     def test_shift_click_in_the_references_window(self):
         from types import SimpleNamespace
-        window = self.gui.ReferencesWindow.__new__(self.gui.ReferencesWindow)
+        window = self.gui.references_window.ReferencesWindow.__new__(self.gui.references_window.ReferencesWindow)
         window.busy, window.last_click = False, {}
         tree = SortableFakeTree(["tick", "pn"])
         for n, mark in enumerate(("\u2610", "\u2610", "", "\u2610"), 1):         # row 3 can't be changed
@@ -886,7 +906,7 @@ class UpdateWiring(unittest.TestCase):
         self.gui = load_gui_with_fakes(self.box)
         self.updater = self.gui.updater             # the copy the window itself uses
         self.update = self.updater.Update("0.2.0", "Fixes things.", "Litterbox-Setup-0.2.0.exe", "https://x", "a" * 64, 5)
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         self.said, self.tasks, self.scheduled = [], [], []
         app._say = lambda text, tone="normal": self.said.append(text)
         app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
@@ -977,7 +997,7 @@ class OpenWiring(unittest.TestCase):
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=list(self.B), revision="B",
                               released_revision="A", revisions={"A": self.A, "B": self.B})
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         app.rows_by_pn = {self.pn: self.row}
         app._selected_pns = lambda action=None: [self.pn]
         app.repo = lambda: "C:/vault"
@@ -1001,7 +1021,7 @@ class OpenWiring(unittest.TestCase):
             def show(self):
                 return FakePicker.answer
         self.picker = FakePicker
-        self.gui.RevisionPickerDialog = FakePicker
+        self.gui.revision_picker.RevisionPickerDialog = FakePicker
 
     def test_a_released_and_a_working_revision_ask_which_to_open(self):
         self.app.open_part()
@@ -1088,7 +1108,7 @@ class ListAndFilenameWiring(unittest.TestCase):
                               revisions={"B": ["cad/HCR-00007-001_B.SLDPRT"]})
 
     def test_the_list_shows_the_short_part_number_and_the_revision(self):
-        app = self.gui.App.__new__(self.gui.App)
+        app = self.gui.app.App.__new__(self.gui.app.App)
         app.jobs = fake_jobs()
         app.rows = [self.row]
         app.search = types.SimpleNamespace(get=lambda: "")
@@ -1096,7 +1116,7 @@ class ListAndFilenameWiring(unittest.TestCase):
         app.void_box = types.SimpleNamespace(get=lambda: 0)
         app.ticked = set()
         app.tree = SortableFakeTree(["tick", "pn", "name", "description", "cots", "rev", "state", "files"])
-        app.sorter = self.gui.TableSorter(app.tree, [])
+        app.sorter = self.gui.table_sorting.TableSorter(app.tree, [])
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
                          ["\u2610", "00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
@@ -1105,7 +1125,7 @@ class ListAndFilenameWiring(unittest.TestCase):
         from litterbox.parts.part_status import PartStatus
         voided = PartStatus(self.pn, "Bracket", "void", "Void", "void")
         for shown, expected in ((0, set()), (1, {"HCR-00007-001"})):
-            app = self.gui.App.__new__(self.gui.App)
+            app = self.gui.app.App.__new__(self.gui.app.App)
             app.jobs = fake_jobs()
             app.rows = [voided]
             app.search = types.SimpleNamespace(get=lambda: "")
@@ -1113,7 +1133,7 @@ class ListAndFilenameWiring(unittest.TestCase):
             app.void_box = types.SimpleNamespace(get=lambda shown=shown: shown)
             app.ticked = {"HCR-00007-001"}
             app.tree = SortableFakeTree(["tick", "pn", "name", "description", "cots", "rev", "state", "files"])
-            app.sorter = self.gui.TableSorter(app.tree, [])
+            app.sorter = self.gui.table_sorting.TableSorter(app.tree, [])
             app._render()
             self.assertEqual(app.ticked, expected)
 
@@ -1122,7 +1142,7 @@ class ListAndFilenameWiring(unittest.TestCase):
             self.assertEqual(len(self.gui.list_view.filter_rows([self.row], text)), 1)
 
     def test_new_part_shows_the_filename_to_save_as_and_copies_it(self):
-        dialog = self.gui.FilenameDialog(FakeParent(), self.pn)
+        dialog = self.gui.filename_dialog.FilenameDialog(FakeParent(), self.pn)
         self.assertEqual(dialog.stem, "HCR-00007-001_A")
         copied = []
         dialog.clipboard_clear = lambda: copied.append("cleared")
@@ -1154,7 +1174,7 @@ class TableSorting(unittest.TestCase):
         self.tree = SortableFakeTree(["pn", "files"])
         for iid, files in (("A", "PRT"), ("B", "ASM, DRW"), ("C", ""), ("D", "ASM")):
             self.tree.insert("", "end", iid=iid, values=[iid, files])
-        self.sorter = self.gui.TableSorter(self.tree, [("pn", "Part number"), ("files", "Files")])
+        self.sorter = self.gui.table_sorting.TableSorter(self.tree, [("pn", "Part number"), ("files", "Files")])
 
     def test_clicking_a_heading_sorts_then_reverses_with_an_arrow(self):
         self.tree.commands["files"]()
@@ -1183,7 +1203,7 @@ class WindowEffects(unittest.TestCase):
 
     def test_a_window_starts_invisible_fades_in_and_fades_out_before_closing(self):
         window = FakeWindow()
-        self.gui.set_window_icon(window)
+        self.gui.window_chrome.set_window_icon(window)
         self.assertEqual(window.alpha, 0.0)                    # hidden while the icon is applied
         window.run_timers()                                    # the 0.4 s safety net reveals it
         rising = window.alphas[1:]
@@ -1202,21 +1222,21 @@ class WindowEffects(unittest.TestCase):
     def test_the_icon_is_put_back_after_customtkinter_resets_it(self):
         replace(self, self.gui.icon_files, "find_icon", lambda *a, **k: Path("litterbox.ico"))
         window = FakeWindow()
-        self.gui.set_window_icon(window)
+        self.gui.window_chrome.set_window_icon(window)
         window.run_timers()
         # once at creation, once when revealed, and again at 250, 500 and 900 ms
         self.assertGreaterEqual(window.icon_calls, 5)
 
     def test_the_main_windows_close_button_goes_through_the_fade(self):
         main, other = FakeWindow(), FakeWindow()
-        self.gui.set_window_icon(main, main_window=True)
-        self.gui.set_window_icon(other)
+        self.gui.window_chrome.set_window_icon(main, main_window=True)
+        self.gui.window_chrome.set_window_icon(other)
         self.assertIs(main.protocols["WM_DELETE_WINDOW"], main.destroy)
         self.assertFalse(hasattr(other, "protocols"))
 
     def test_closing_before_it_was_ever_shown_just_closes(self):
         window = FakeWindow()
-        self.gui.set_window_icon(window)
+        self.gui.window_chrome.set_window_icon(window)
         window.destroy()
         self.assertTrue(window.destroyed)
 
@@ -1235,7 +1255,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
 
     def open_window(self, cots=False):
         with mock.patch.object(import_session, "ImportSession", lambda *a, **k: self.make_session(*a, **k)):
-            return self.gui.ImportWindow(FakeParent(), str(self.a), "HCR", self.imported.append, cots=cots)
+            return self.gui.import_window.ImportWindow(FakeParent(), str(self.a), "HCR", self.imported.append, cots=cots)
 
     def make_session(self, repo, post, log=None, org=None):
         self.session = REAL_SESSION(repo, post, backend_factory=lambda: self.fake, log=log or (lambda t: None),
@@ -1391,7 +1411,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
         self.window.editor = (editor, iid, "pn")
         self.window._commit_edit()
         self.assertIn("exactly 5 digits", self.window.status.options["text"])
-        self.assertEqual(self.window.status.options["text_color"], self.gui.WARN)
+        self.assertEqual(self.window.status.options["text_color"], self.gui.theme.WARN)
 
     def test_finish_imports_closes_and_tells_the_main_window(self):
         self.scan()
@@ -1597,7 +1617,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
         self.assertIn("available", self.window.status.options["text"])
 
     def test_the_main_window_has_an_import_button(self):
-        source = (Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = gui_source()
         self.assertIn('("Import...", self.import_cad', source)
 
 

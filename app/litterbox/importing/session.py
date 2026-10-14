@@ -1,7 +1,7 @@
 """
 import_session.py - runs an import for the window, with no window code in it.
 
-The Import window (litterbox_gui.py) talks only to an ImportSession. All the slow work (scanning,
+The Import window (gui/windows/import_window) talks only to an ImportSession. All the slow work (scanning,
 reading references, copying, committing) happens on ONE background thread that lives as long
 as the session. One thread matters: SolidWorks is reached through COM, and COM objects must
 stay on the thread that made them.

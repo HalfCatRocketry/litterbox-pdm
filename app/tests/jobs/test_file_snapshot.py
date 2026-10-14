@@ -9,6 +9,7 @@ from pathlib import Path
 
 
 from litterbox.util import file_snapshot as fs
+from tests.support.gui_source import gui_source
 
 PART = "HCR-00002-001"
 FILES = ["cad/HCR-00002-001_A.SLDPRT", "cad/HCR-00002-001_A.SLDDRW"]
@@ -106,7 +107,7 @@ class Snapshots(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_the_window_takes_the_snapshot_when_check_in_is_queued(self):
-        source = (Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = gui_source()
         self.assertIn("snapshot = self._watch_files(plan.targets)", source)
         self.assertIn("snapshot=snapshot))", source)
         self.assertIn("checkin.watch_files(", source)

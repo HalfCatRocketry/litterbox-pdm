@@ -15,6 +15,7 @@ from litterbox.gui.logic import job_text
 from litterbox.jobs import job_queue as jobs
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError, NothingToSaveError
+from tests.support.gui_source import gui_source
 
 
 class Collector:
@@ -211,11 +212,11 @@ class Wiring(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.source = (Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
+        cls.source = gui_source()
 
     def test_the_banner_and_its_buttons_exist(self):
         for text in ("self.banner_title", 'text="Details..."', 'text="Dismiss"', "class ErrorDetailsWindow",
-                     "jobs.READY: GREEN", "jobs.WORKING: BANNER_YELLOW", "jobs.ERROR: RED"):
+                     "jobs.READY: theme.GREEN", "jobs.WORKING: theme.BANNER_YELLOW", "jobs.ERROR: theme.RED"):
             self.assertIn(text, self.source)
 
     def test_closing_with_work_in_the_queue_asks_first(self):

@@ -9,7 +9,7 @@ This is also what PyInstaller builds into Litterbox.exe (see packaging/litterbox
 litterbox package next to this file; docs/ARCHITECTURE.md describes how it is laid out.
 """
 
-from litterbox.gui.litterbox_gui import main
+from litterbox.gui.start import main
 
 if __name__ == "__main__":
     main()

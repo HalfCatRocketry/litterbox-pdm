@@ -3,7 +3,7 @@ job_queue.py - the queue that runs Litterbox's work in the background, one job a
 
 Git can only change one thing in a vault at once, so the jobs run in order on a single worker thread. The window
 stays usable: you click, the job joins the queue, and the status banner shows what is running and what is waiting.
-This file has no window code, so it can be tested on its own. The window (litterbox_gui.py) gives it a `deliver`
+This file has no window code, so it can be tested on its own. The window (gui/main_window) gives it a `deliver`
 function that hands each finished job back to the window's own thread.
 
 A job goes through four states:
