@@ -13,7 +13,9 @@ from unittest import mock
 
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git
 
-from litterbox.records import registry
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
@@ -44,7 +46,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
         super().setUp()
         self.pns = [PN("HCR", n, 1) for n in range(2, 2 + COUNT)]          # five more parts, each with two files
         for pn in self.pns:
-            registry.create_record(self.a, pn, f"Part {pn.base}", "Alex")
+            record_store.create_record(self.a, pn, f"Part {pn.base}", "Alex")
             (self.a / cad(pn)).write_bytes(b"v1 " + str(pn).encode())
             (self.a / cad(pn, "SLDDRW")).write_bytes(b"d1 " + str(pn).encode())
         git(self.a, "add", ".")
@@ -84,7 +86,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             self.assertEqual(len(self.locks(self.a)), COUNT * 3)                   # record + two files each
         for pn, result in done:
             self.assertEqual(result.files, [cad(pn, "SLDDRW"), cad(pn)])
-            self.assertEqual(registry.load(self.a, pn).history[-1]["event"], "checked_out")
+            self.assertEqual(record_store.load(self.a, pn).history[-1]["event"], "checked_out")
 
     def test_a_part_somebody_else_has_is_reported_and_the_rest_carry_on(self):
         with self.user("Bea"):
@@ -213,7 +215,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
         message = git(self.a, "log", "-1", "--format=%B")
         self.assertTrue(message.startswith(f"{COUNT} parts: Voided - Not needed"))
         for pn in self.pns:
-            self.assertEqual(registry.load(self.a, pn).status, registry.STATUS_VOID)
+            self.assertEqual(record_store.load(self.a, pn).status, record_model.STATUS_VOID)
             self.assertIn(f"{pn}: Voided - Not needed", message)                 # every part is named in it
             self.assertIn(f"PN-logs/{pn}.yaml", git(self.a, "show", "--name-only", "--format=", "HEAD"))
 
@@ -230,7 +232,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             (done, failed), _ = self.commands(lifecycle.void_many, self.a, self.pns, "Not needed")
             self.assertEqual(len(done), COUNT - 1)
             self.assertEqual([pn for pn, _why in failed], [self.pns[1]])
-            self.assertEqual(registry.load(self.a, self.pns[1]).status, registry.STATUS_IN_WORK)
+            self.assertEqual(record_store.load(self.a, self.pns[1]).status, record_model.STATUS_IN_WORK)
 
     def test_a_refused_edit_leaves_that_record_alone_and_the_rest_are_changed(self):
         with self.user("Alex"):
@@ -251,7 +253,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             self.assertEqual(git(self.a, "status", "--porcelain"), "")
             self.assertEqual(self.locks(self.a), {})
             for pn in self.pns:
-                self.assertEqual(registry.load(self.a, pn).status, registry.STATUS_IN_WORK)
+                self.assertEqual(record_store.load(self.a, pn).status, record_model.STATUS_IN_WORK)
 
     def test_unreleasing_and_releasing_many_parts(self):
         with self.user("Alex"):
@@ -280,25 +282,25 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             (done, failed), commands = self.commands(lifecycle.make_cots_many, self.a, self.pns)
             self.assertEqual((len(done), failed), (COUNT, []))
             self.assertEqual(self.count(commands, "git push"), 1)
-            self.assertTrue(all(registry.load(self.a, pn).cots for pn in self.pns))
+            self.assertTrue(all(record_store.load(self.a, pn).cots for pn in self.pns))
 
     # -- the building blocks ---------------------------------------------------------
     def test_one_failing_edit_with_atomic_changes_nothing(self):
         def good(record, user):
-            registry.mark_void(record, user, "x")
+            record_lifecycle.mark_void(record, user, "x")
 
         def bad(record, user):
-            raise registry.RegistryError("not allowed")
+            raise record_model.RegistryError("not allowed")
 
         before = git(self.a, "rev-parse", "HEAD")
         with self.user("Alex"):
-            with self.assertRaises(registry.RegistryError):
+            with self.assertRaises(record_model.RegistryError):
                 batch_core.edit_records(self.a, [(self.pns[0], "void", good, "m1"), (self.pns[1], "void", bad, "m2")],
                                   atomic=True)
             self.assertEqual(git(self.a, "rev-parse", "HEAD"), before)
             self.assertEqual(git(self.a, "status", "--porcelain"), "")
             self.assertEqual(self.locks(self.a), {})
-            self.assertEqual(registry.load(self.a, self.pns[0]).status, registry.STATUS_IN_WORK)
+            self.assertEqual(record_store.load(self.a, self.pns[0]).status, record_model.STATUS_IN_WORK)
 
     def test_locks_are_taken_several_at_a_time_and_a_refusal_names_its_file(self):
         with self.user("Bea"):
@@ -391,7 +393,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             self.change(self.pns)
             snap = self.snapshot(self.pns)
             (self.a / cad(self.pns[1])).write_bytes(b"saved again, after the click")
-            record_before = (self.a / registry.record_relpath(self.pns[1])).read_bytes()
+            record_before = (self.a / record_store.record_relpath(self.pns[1])).read_bytes()
             (done, failed), _ = self.commands(checkin.checkin_many, self.a, self.pns, "Tweaks", snapshot=snap)
             self.assertEqual([pn for pn, _r in done], [p for p in self.pns if p != self.pns[1]])
             self.assertEqual([pn for pn, _why in failed], [self.pns[1]])
@@ -400,7 +402,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             mine = {path for path, (who, _n) in self.locks(self.a).items() if who == "you"}
             self.assertIn(cad(self.pns[1]).lower(), mine)               # its locks are kept
             self.assertEqual(len(mine), 3)                              # and nobody else's were
-            self.assertEqual((self.a / registry.record_relpath(self.pns[1])).read_bytes(), record_before)
+            self.assertEqual((self.a / record_store.record_relpath(self.pns[1])).read_bytes(), record_before)
         self.assertEqual(file_snapshot._ACTIVE, [])                     # released
 
     def test_the_part_can_be_checked_in_again_afterwards(self):
@@ -465,13 +467,13 @@ class BatchActions(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             checkout.checkout_many(self.a, self.pns[:3])
             self.change(self.pns[:3])
-            record_before = (self.a / registry.record_relpath(victim)).read_bytes()
+            record_before = (self.a / record_store.record_relpath(victim)).read_bytes()
             with mock.patch.object(runner, "run", self.saving_during_add(victim)):
                 done, failed = checkin.checkin_many(self.a, self.pns[:3], "Tweaks")
             self.assertEqual([pn for pn, _r in done], [self.pns[0], self.pns[2]])
             self.assertEqual([pn for pn, _why in failed], [victim])
             self.assertIn("was saved while Litterbox was reading it", failed[0][1])
-            self.assertEqual((self.a / registry.record_relpath(victim)).read_bytes(), record_before)
+            self.assertEqual((self.a / record_store.record_relpath(victim)).read_bytes(), record_before)
             self.assertEqual(git(self.a, "diff", "--cached", "--name-only"), "")        # nothing left staged
             self.assertIn(cad(victim).lower(), self.locks(self.a))                       # still checked out
         log = self.remote_log()

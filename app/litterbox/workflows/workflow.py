@@ -54,7 +54,9 @@ import yaml
 
 from litterbox.vault import config
 from litterbox.team import people
-from litterbox.records import registry
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
@@ -513,16 +515,16 @@ def _problems(repo, pn, action, reason, fetch, ctx=None):
     if action == MAKE_COTS:
         plan = planning.make_cots_plan(repo, pn, fetch=fetch, ctx=ctx)
         return list(plan.problems), list(plan.files)
-    record = registry.load(repo, pn)
+    record = record_store.load(repo, pn)
     if record.pending:
         return ["It is already waiting for sign-offs."], []
     trial = copy.deepcopy(record)
     try:
         if action == REOPEN:
-            registry.mark_reopened(trial, "check", reason or "check")
+            record_lifecycle.mark_reopened(trial, "check", reason or "check")
         else:
-            registry.mark_void(trial, "check", reason or "check")
-    except registry.RegistryError as e:
+            record_lifecycle.mark_void(trial, "check", reason or "check")
+    except record_model.RegistryError as e:
         return [str(e)], []
     return [], []
 
@@ -595,23 +597,23 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
     for pn in pns:
         def edit(record, user, pn=pn):
             if record.pending:
-                raise registry.RegistryError(f"{record.pn} already has a request waiting for sign-offs.")
-            if action == RELEASE and (record.status != registry.STATUS_IN_WORK or record.cots):
-                raise registry.RegistryError(f"Cannot release {record.pn}: its status is '{record.status}'.")
+                raise record_model.RegistryError(f"{record.pn} already has a request waiting for sign-offs.")
+            if action == RELEASE and (record.status != record_model.STATUS_IN_WORK or record.cots):
+                raise record_model.RegistryError(f"Cannot release {record.pn}: its status is '{record.status}'.")
             record.pending = {
                 "id": batch_id, "action": action, "revision": record.revision, "requested_by": user,
-                "requested_by_id": me.id, "requested_at": registry.now_utc(), "template_name": template.name,
+                "requested_by_id": me.id, "requested_at": record_model.now_utc(), "template_name": template.name,
                 "template": template.to_dict(), "parts": [str(p) for p in pns], "slots": copy.deepcopy(slots),
                 "files": dict(hashes[pn]), "signoffs": [],
                 **({"reason": reason} if reason else {}),
             }
-            registry.add_event(record, registry.EVENT_RELEASE_REQUESTED, user, action=action,
+            record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REQUESTED, user, action=action,
                                waiting_on=waiting_on(record.pending), files=list(files[pn]) or None,
                                reason=reason or None)
         items.append((pn, action, edit, f"{pn}: {label_of(action)} requested"))
     try:
         batch = batch_core.edit_records(repo, items, atomic=True)      # all or nothing: one download, one upload
-    except (LitterboxError, registry.RegistryError) as e:
+    except (LitterboxError, record_model.RegistryError) as e:
         raise WorkflowError(f"Could not start the workflow, so nothing was changed:\n\n{e}")
     if batch.notice:
         diagnostics.LOG(batch.notice)
@@ -638,8 +640,8 @@ def sign_off(repo, pns, comment=""):
     items = []
     for pn in pns:
         try:
-            record = registry.load(repo, pn)
-        except registry.RegistryError as e:
+            record = record_store.load(repo, pn)
+        except record_model.RegistryError as e:
             result.errors[pn] = str(e)
             continue
         if not record.pending or not open_slots(record.pending, me.id):
@@ -649,13 +651,13 @@ def sign_off(repo, pns, comment=""):
             pending = _pending_of(record, batch_id)
             mine = open_slots(pending, me.id)
             if not mine:
-                raise registry.RegistryError(f"You have nothing left to sign on {record.pn}.")
+                raise record_model.RegistryError(f"You have nothing left to sign on {record.pn}.")
             _check_files_unchanged(repo, pending)
             for index in mine:
                 pending["signoffs"].append({"slot": index, "by": user, "id": me.id, "roles": pending["slots"][index]
-                                            ["roles"], "at": registry.now_utc(),
+                                            ["roles"], "at": record_model.now_utc(),
                                             **({"comment": comment} if comment else {})})
-            registry.add_event(record, registry.EVENT_RELEASE_SIGNED, user, action=pending["action"],
+            record_lifecycle.add_event(record, record_model.EVENT_RELEASE_SIGNED, user, action=pending["action"],
                                roles=[" or ".join(pending["slots"][i]["roles"]) for i in mine],
                                comment=comment or None, waiting_on=waiting_on(pending) or None)
 
@@ -670,8 +672,8 @@ def sign_off(repo, pns, comment=""):
     finishing = []
     for pn in result.signed:
         try:
-            record = registry.load(repo, pn)
-        except registry.RegistryError as e:
+            record = record_store.load(repo, pn)
+        except record_model.RegistryError as e:
             result.errors[pn] = str(e)
             continue
         if record.pending and is_complete(record.pending) and record.pending["action"] in AUTO_COMPLETE:
@@ -703,7 +705,7 @@ def _approval_entry(pending, completed_by, override=None, files=None, action=Non
     if reason:
         entry["reason"] = reason
     entry["completed_by"] = completed_by
-    entry["completed_at"] = registry.now_utc()
+    entry["completed_at"] = record_model.now_utc()
     if override:
         entry["override"] = override
     return {k: v for k, v in entry.items() if v is not None}
@@ -716,7 +718,7 @@ def _finish_edit(repo, action, plan, override_reason):
         if override_reason is None:
             pending = _pending_of(record)
             if not is_complete(pending):
-                raise registry.RegistryError("Still waiting for: " + ", ".join(waiting_on(pending)) + ".")
+                raise record_model.RegistryError("Still waiting for: " + ", ".join(waiting_on(pending)) + ".")
             _check_files_unchanged(repo, pending)
         act = pending["action"] if pending else action
         reason = (pending or {}).get("reason") or override_reason
@@ -730,13 +732,13 @@ def _finish_edit(repo, action, plan, override_reason):
         approval = _approval_entry(pending, user, override, files, act, reason)
         record.pending = {}                                    # the checks in mark_* refuse a pending part
         if act == RELEASE:
-            registry.mark_released(record, user, plan.files, **details)
+            record_lifecycle.mark_released(record, user, plan.files, **details)
         elif act == MAKE_COTS:
-            registry.mark_cots(record, user, plan.files)
+            record_lifecycle.mark_cots(record, user, plan.files)
         elif act == REOPEN:
-            registry.mark_reopened(record, user, reason)
+            record_lifecycle.mark_reopened(record, user, reason)
         else:
-            registry.mark_void(record, user, reason)
+            record_lifecycle.mark_void(record, user, reason)
         record.approvals.append(approval)
     return edit
 
@@ -747,7 +749,7 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
     ctx, failed, items, files = planning.PlanContext(repo), {}, [], {}
     for pn in _as_pns(pns):
         try:
-            record0 = registry.load(repo, pn)
+            record0 = record_store.load(repo, pn)
             action = record0.pending.get("action") if record0.pending else override_action
             if action not in ACTIONS:
                 raise WorkflowError(f"{pn} has no request to complete.")
@@ -759,7 +761,7 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
             if plan is not None and not plan.ok:
                 what = "released" if action == RELEASE else "made COTS"
                 raise LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
-        except (LitterboxError, registry.RegistryError) as e:
+        except (LitterboxError, record_model.RegistryError) as e:
             failed[pn] = e
             continue
         message = f"{pn}: {label_of(action)} done" + (" (Admin override)" if override_reason is not None
@@ -821,8 +823,8 @@ def _each(repo, pns, edit_for, action_name, message):
     failed, items = {}, []
     for pn in _as_pns(pns):
         try:
-            record = registry.load(repo, pn)
-        except (LitterboxError, registry.RegistryError) as e:
+            record = record_store.load(repo, pn)
+        except (LitterboxError, record_model.RegistryError) as e:
             failed[pn] = str(e)
             continue
         if record.pending:
@@ -850,8 +852,8 @@ def reject(repo, pns, comment):
         def edit(record, user):
             pending = _pending_of(record, batch_id)
             if not (_is_signer(pending, me) or _is_admin(me)):
-                raise registry.RegistryError("Only a person named to sign this (or an Admin) can reject it.")
-            registry.add_event(record, registry.EVENT_RELEASE_REJECTED, user, action=pending["action"],
+                raise record_model.RegistryError("Only a person named to sign this (or an Admin) can reject it.")
+            record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REJECTED, user, action=pending["action"],
                                reason=comment, requested_by=pending.get("requested_by"),
                                signed=[e.get("by") for e in pending["signoffs"]] or None)
             record.pending = {}
@@ -870,8 +872,8 @@ def withdraw(repo, pns, reason=""):
         def edit(record, user):
             pending = _pending_of(record, batch_id)
             if not (pending.get("requested_by_id") == me.id or _is_admin(me)):
-                raise registry.RegistryError("Only the person who asked, or an Admin, can withdraw the request.")
-            registry.add_event(record, registry.EVENT_RELEASE_WITHDRAWN, user, action=pending["action"],
+                raise record_model.RegistryError("Only the person who asked, or an Admin, can withdraw the request.")
+            record_lifecycle.add_event(record, record_model.EVENT_RELEASE_WITHDRAWN, user, action=pending["action"],
                                reason=reason or None, requested_by=pending.get("requested_by"))
             record.pending = {}
         return edit
@@ -889,22 +891,22 @@ def reassign(repo, pns, slot, person_id):
         def edit(record, user):
             pending = _pending_of(record, batch_id)
             if not (pending.get("requested_by_id") == me.id or _is_admin(me)):
-                raise registry.RegistryError("Only the person who asked, or an Admin, can change who signs.")
+                raise record_model.RegistryError("Only the person who asked, or an Admin, can change who signs.")
             if not 0 <= slot < len(pending["slots"]):
-                raise registry.RegistryError("That sign-off isn't in the request. Run Get Latest.")
+                raise record_model.RegistryError("That sign-off isn't in the request. Run Get Latest.")
             if slot_done(pending, slot):
-                raise registry.RegistryError("That sign-off has already been given.")
+                raise record_model.RegistryError("That sign-off has already been given.")
             old = pending["slots"][slot]
             new = _slot(directory, old["roles"], person_id, f"the {' or '.join(old['roles'])} sign-off",
                         bool(old.get("extra")))
             template = pending["template"]
             ids = [s["id"] for i, s in enumerate(pending["slots"]) if i != slot] + [new["id"]]
             if not template.get("allow_same_person", False) and len(set(ids)) != len(ids):
-                raise registry.RegistryError(f"This workflow doesn't let one person fill more than one sign-off.")
+                raise record_model.RegistryError(f"This workflow doesn't let one person fill more than one sign-off.")
             if not template.get("requester_may_sign", True) and new["id"] == pending.get("requested_by_id"):
-                raise registry.RegistryError("This workflow doesn't let the person who asked sign.")
+                raise record_model.RegistryError("This workflow doesn't let the person who asked sign.")
             pending["slots"][slot] = new
-            registry.add_event(record, registry.EVENT_REASSIGNED, user, action=pending["action"],
+            record_lifecycle.add_event(record, record_model.EVENT_REASSIGNED, user, action=pending["action"],
                                roles=[" or ".join(new["roles"])], reason=f"{old['name']} replaced by {new['name']}")
         return edit
 

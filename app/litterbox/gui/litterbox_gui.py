@@ -23,7 +23,8 @@ import customtkinter as ctk
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.cad import opener
 from litterbox.vault import config
-from litterbox.records import registry
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.team import people
 from litterbox.references import references
 from litterbox.parts import revise
@@ -4866,8 +4867,8 @@ class App(ctk.CTk):
             self._say("Click one part to see its history.", "warn")
             return
         try:
-            record = registry.load(self.repo(), chosen[0])
-        except registry.RegistryError as e:
+            record = record_store.load(self.repo(), chosen[0])
+        except record_model.RegistryError as e:
             messagebox.showerror("Litterbox", str(e))
             return
         row = self.rows_by_pn.get(chosen[0])

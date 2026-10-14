@@ -36,7 +36,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from litterbox.importing import manifest as mf
-from litterbox.records import registry
+from litterbox.records import record_model
+from litterbox.records import record_store
 
 # extension (lowercase) -> (kind, display type). Add other CAD programs here.
 FORMATS = {
@@ -268,10 +269,10 @@ def _mark_identical(items):
 def _mark_already_imported(items, repo):
     """Items whose main file was already imported (the vault remembers the old path) are left out by default."""
     known = {}
-    for pn in registry.list_pns(repo):
+    for pn in record_store.list_pns(repo):
         try:
-            record = registry.load(repo, pn)
-        except registry.RegistryError:
+            record = record_store.load(repo, pn)
+        except record_model.RegistryError:
             continue
         if record.import_path:
             known[_norm(record.import_path)] = str(pn)

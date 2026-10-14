@@ -16,7 +16,7 @@ from unittest import mock
 
 from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable
 
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.parts import create
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
@@ -43,7 +43,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             pn = create.new_part(self.a, "  Rear   upright\n")
             self.assertEqual(pn, PN("HCR", 2, 1))
-            record = registry.load(self.a, pn)
+            record = record_store.load(self.a, pn)
             self.assertEqual((record.name, record.description, record.created_by, record.status),
                              ("Rear upright", "", "Alex", "in_work"))
             self.assertEqual(record.history[0]["event"], "created")
@@ -53,7 +53,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assert_clean(self.a)
         with self.user("Bea"):
             get_latest.get_latest(self.b)
-            self.assertEqual(registry.load(self.b, pn).created_by, "Alex")
+            self.assertEqual(record_store.load(self.b, pn).created_by, "Alex")
 
     def test_gaps_are_filled_and_manual_numbers_are_skipped(self):
         with self.user("Alex"):
@@ -71,7 +71,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     def test_a_vault_with_no_numbers_left_says_so_plainly(self):
         with self.user("Alex"):
-            with mock.patch.object(registry, "used_bases", return_value=set(range(1, 100000))):
+            with mock.patch.object(record_store, "used_bases", return_value=set(range(1, 100000))):
                 with self.assertRaises(create.CreateError) as caught:
                     create.new_part(self.a, "One too many")
                 self.assertIn("no part numbers left", str(caught.exception))
@@ -199,10 +199,10 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             with self.assertRaises(create.CreateError):
                 create.new_part(self.a, "Fine", description="x" * 501)
             pn = create.new_part(self.a, "Gusset", description="  for the  rear\nframe ")
-            self.assertEqual((registry.load(self.a, pn).name, registry.load(self.a, pn).description),
+            self.assertEqual((record_store.load(self.a, pn).name, record_store.load(self.a, pn).description),
                              ("Gusset", "for the rear frame"))
             pn = create.new_variant(self.a, 1, "Gusset, mirrored")
-            self.assertEqual(registry.load(self.a, pn).description, "")
+            self.assertEqual(record_store.load(self.a, pn).description, "")
             self.assert_clean(self.a)
 
     def test_new_variant_needs_no_existing_base(self):
@@ -270,8 +270,8 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(pn, PN("HCR", 3, 1))                    # Alex quietly moved on to 3
             self.assertEqual(self.record_names(self.a),
                              ["HCR-00001-001.yaml", "HCR-00002-001.yaml", "HCR-00003-001.yaml"])
-            self.assertEqual(registry.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")
-            self.assertEqual(registry.load(self.a, pn).created_by, "Alex")
+            self.assertEqual(record_store.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")
+            self.assertEqual(record_store.load(self.a, pn).created_by, "Alex")
             self.assert_clean(self.a)
         log = self.remote_log()
         self.assertIn("HCR-00002-001: Created - Bea's part", log)
@@ -288,7 +288,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertIn("00007", str(ctx.exception))
             self.assertIn("already in use", str(ctx.exception))
             self.assertIn("Bea's seven", str(ctx.exception))
-            self.assertEqual(registry.load(self.a, PN("HCR", 7, 1)).created_by, "Bea")
+            self.assertEqual(record_store.load(self.a, PN("HCR", 7, 1)).created_by, "Bea")
             self.assert_clean(self.a)
         self.assertEqual(sum(1 for line in self.remote_log() if "Created" in line), 1)
 
@@ -323,7 +323,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
                      create.PartSpec("Hand made")]
             pns = create.create_many(self.a, specs)
             self.assertEqual(pns, [PN("HCR", 2, 1), PN("HCR", 3, 1), PN("HCR", 4, 1)])
-            valve, bolt, hand = (registry.load(self.a, pn) for pn in pns)
+            valve, bolt, hand = (record_store.load(self.a, pn) for pn in pns)
             self.assertEqual((valve.name, valve.description, valve.imported, valve.import_path, valve.cots),
                              ("Valve body", "valve_body.SLDPRT", True, "D:/Old/valve_body.SLDPRT", False))
             self.assertEqual((bolt.cots, bolt.imported), (True, True))
@@ -336,7 +336,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         self.assertIn("Created 3 parts: HCR-00002-001 to HCR-00004-001", self.remote_log()[0])
         with self.user("Bea"):
             get_latest.get_latest(self.b)
-            self.assertEqual(len(registry.list_pns(self.b)), 4)
+            self.assertEqual(len(record_store.list_pns(self.b)), 4)
 
     def test_create_many_numbers_from_the_start_number_and_respects_requested_numbers(self):
         from litterbox.vault import config
@@ -382,7 +382,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
                 pns = create.create_many(self.a, self.specs(3))
             self.assertEqual(results["bea"], PN("HCR", 2, 1))
             self.assertEqual(pns, [PN("HCR", 3, 1), PN("HCR", 4, 1), PN("HCR", 5, 1)])
-            self.assertEqual(registry.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")
+            self.assertEqual(record_store.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")
             self.assert_clean(self.a)
         self.assertEqual(sum(1 for line in self.remote_log() if "Created" in line), 2)
 
@@ -429,7 +429,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             pns = create.create_many(self.a, self.specs(400))
             self.assertEqual(len(set(pns)), 400)
-            self.assertEqual(len(registry.list_pns(self.a)), 401)
+            self.assertEqual(len(record_store.list_pns(self.a)), 401)
             self.assert_clean(self.a)
         self.assertEqual(len(self.remote_log()), commits + 1)
 
@@ -461,7 +461,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             manifest.record_assignments(reviewed, items, pns)
             manifest.save(reviewed, path)
 
-            by_name = {registry.load(self.a, pn).name: registry.load(self.a, pn) for pn in pns}
+            by_name = {record_store.load(self.a, pn).name: record_store.load(self.a, pn) for pn in pns}
             bolt = by_name["91251A540 bolt"]
             self.assertEqual((bolt.cots, bolt.imported, bolt.description), (True, True, "91251A540_bolt.SLDPRT"))
             self.assertEqual(bolt.import_path, str(source / "McMaster" / "91251A540_bolt.SLDPRT"))

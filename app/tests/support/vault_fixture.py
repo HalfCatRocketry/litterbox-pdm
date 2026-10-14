@@ -23,7 +23,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from litterbox.git import lfs_locks
 from litterbox.parts import part_status
@@ -85,7 +85,7 @@ class TwoUserVault:
         (self.a / "cad").mkdir()
         (self.a / PRT).write_bytes(b"version 1")
         (self.a / DRW).write_bytes(b"drawing 1")
-        registry.create_record(self.a, PART, "Front upright", "Alex")
+        record_store.create_record(self.a, PART, "Front upright", "Alex")
         git(self.a, "add", ".")
         git(self.a, "commit", "-m", "Start vault")
         git(self.a, "push", "-u", "origin", "main")
@@ -129,7 +129,7 @@ class TwoUserVault:
     def add_created_part(self, base, description="Created"):
         """Alex creates a new PN (record only, no CAD files yet) and pushes it."""
         pn = PN("HCR", base, 1)
-        registry.create_record(self.a, pn, description, "Alex")
+        record_store.create_record(self.a, pn, description, "Alex")
         git(self.a, "add", ".")
         git(self.a, "commit", "-m", f"Create {pn}")
         git(self.a, "push")

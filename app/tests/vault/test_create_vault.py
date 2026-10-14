@@ -12,7 +12,7 @@ from litterbox.parts import create
 from litterbox.vault import create_vault as iv
 from litterbox.team import people
 from litterbox.core import part_number
-from litterbox.records import registry
+from litterbox.records import record_store
 from tests.support.vault_fixture import SHIM, SKIP_ON_WINDOWS, git
 from litterbox.errors import LitterboxError
 from litterbox.parts import part_status
@@ -90,7 +90,7 @@ class CreatingAVault(EmptyRepo):
         self.make(start_number=100)
         pn = create.new_part(str(self.vault), "Front upright")
         self.assertEqual(str(pn), "HCR-00100-001")
-        self.assertTrue(registry.list_pns(self.vault))
+        self.assertTrue(record_store.list_pns(self.vault))
         rows = part_status.get_status(str(self.vault))
         self.assertEqual([str(r.pn) for r in rows], ["HCR-00100-001"])
 

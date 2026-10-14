@@ -9,7 +9,7 @@ from functools import wraps
 
 from litterbox.core.part_number import PNError
 from litterbox.errors import LitterboxError
-from litterbox.records import registry
+from litterbox.records import record_model
 
 
 def converts_errors(func):
@@ -18,6 +18,6 @@ def converts_errors(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (registry.RegistryError, PNError) as e:
+        except (record_model.RegistryError, PNError) as e:
             raise LitterboxError(str(e)) from e
     return wrapper

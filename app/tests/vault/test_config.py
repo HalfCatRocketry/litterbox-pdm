@@ -7,7 +7,7 @@ from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.core import part_number
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.git import repository
@@ -25,7 +25,7 @@ class TestConfig(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
 
     def make(self, org, base=1):
-        registry.create_record(self.repo, PN(org, base, 1), "A part", "Alex")
+        record_store.create_record(self.repo, PN(org, base, 1), "A part", "Alex")
 
     def test_config_file_wins(self):
         self.make("HCR")

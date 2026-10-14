@@ -20,7 +20,8 @@ from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import permission_check
-from litterbox.records import registry
+from litterbox.records import record_model
+from litterbox.records import record_store
 
 
 def as_pn(value):
@@ -99,7 +100,7 @@ def edit_records(repo, items, atomic=False):
         if pn in seen:
             continue
         seen.add(pn)
-        path = registry.record_relpath(pn)
+        path = record_store.record_relpath(pn)
         if (Path(repo) / path).is_file():
             todo.append((pn, path, edit, message))
         else:
@@ -130,10 +131,10 @@ def edit_records(repo, items, atomic=False):
         remote.pull(repo)
         for pn, path, edit, message in locked:
             try:
-                record = registry.load(repo, pn)       # reload after the pull
+                record = record_store.load(repo, pn)       # reload after the pull
                 edit(record, user)                     # raises if the change isn't allowed
-                registry.save(repo, record)
-            except (LitterboxError, registry.RegistryError) as e:
+                record_store.save(repo, record)
+            except (LitterboxError, record_model.RegistryError) as e:
                 batch.errors[pn] = e
                 committing.discard_quietly(repo, [path])
                 continue

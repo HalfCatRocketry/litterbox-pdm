@@ -22,7 +22,7 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS
 
 from litterbox.importing import session as import_session
 from litterbox.importing import importer
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.user import settings
 from litterbox.errors import NothingToSaveError
 
@@ -1576,7 +1576,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
             window._finish()
             self.pump_until_idle()
         self.assertEqual(len(self.imported), 1)
-        records = [registry.load(self.a, pn) for pn in self.imported[0].pns]
+        records = [record_store.load(self.a, pn) for pn in self.imported[0].pns]
         self.assertEqual(len(records), 4)
         self.assertTrue(all(r.cots and r.imported for r in records))
 
@@ -1587,7 +1587,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
             self.window._finish()
             self.pump_until_idle()
         self.assertFalse(any(c[0] == "askyesno" for c in self.box.calls))
-        self.assertTrue(all(not registry.load(self.a, pn).cots for pn in self.imported[0].pns))
+        self.assertTrue(all(not record_store.load(self.a, pn).cots for pn in self.imported[0].pns))
 
     def test_refresh_numbers_reports_the_result(self):
         self.scan()

@@ -26,7 +26,11 @@ from pathlib import Path
 
 from litterbox.core import filenames
 from litterbox.core import revision_letters
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_revisions
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.cad import file_types
@@ -100,7 +104,7 @@ def read_assembly_references(repo, pn, revision, backend, files=None):
     Files that are not Litterbox files (a screw from a library, say) are ignored."""
     own = filenames.file_stem(pn, revision)
     found = set()
-    for rel in files if files is not None else registry.cad_files(repo, pn, revision):
+    for rel in files if files is not None else record_files.cad_files(repo, pn, revision):
         if file_types.extension(rel) not in file_types.ASSEMBLY_EXTENSIONS:
             continue
         for stored, located in backend.references(os.path.join(str(repo), rel)):
@@ -154,8 +158,8 @@ class LazyRecords:
     def get(self, pn, default=None):
         if pn not in self.cache:
             try:
-                self.cache[pn] = registry.load(self.repo, pn)
-            except registry.RegistryError:
+                self.cache[pn] = record_store.load(self.repo, pn)
+            except record_model.RegistryError:
                 self.cache[pn] = None
         return self.cache[pn] or default
 
@@ -163,10 +167,10 @@ class LazyRecords:
 def load_records(repo):
     """{PN: Record} for every readable record."""
     records = {}
-    for pn in registry.list_pns(repo):
+    for pn in record_store.list_pns(repo):
         try:
-            records[pn] = registry.load(repo, pn)
-        except registry.RegistryError:
+            records[pn] = record_store.load(repo, pn)
+        except record_model.RegistryError:
             continue
     return records
 
@@ -205,9 +209,9 @@ def classify(child_record, revision):
     if child_record is None:
         return MISSING, ""
     latest = child_record.released_revision
-    if child_record.status == registry.STATUS_VOID:
+    if child_record.status == record_model.STATUS_VOID:
         return VOID, latest
-    if revision in registry.cancelled_revisions(child_record):
+    if revision in record_revisions.cancelled_revisions(child_record):
         return CANCELLED, latest
     number = revision_letters.revision_number(revision)
     if latest and revision_letters.revision_number(latest) > number:
@@ -222,7 +226,7 @@ def classify(child_record, revision):
 def _parent_revision_status(record, revision):
     if revision == record.revision:
         return record.status
-    return registry.STATUS_RELEASED         # earlier revisions are always released
+    return record_model.STATUS_RELEASED         # earlier revisions are always released
 
 
 def _use(records, parent_record, revision, stem):
@@ -233,7 +237,7 @@ def _use(records, parent_record, revision, stem):
     child_record = records.get(child)
     state, latest = classify(child_record, child_revision)
     status = _parent_revision_status(parent_record, revision)
-    editable = (revision == parent_record.revision and status == registry.STATUS_IN_WORK
+    editable = (revision == parent_record.revision and status == record_model.STATUS_IN_WORK
                 and not parent_record.cots)
     return Use(parent_record.pn, revision, child, child_revision, state, latest,
                parent_record.name, child_record.name if child_record else "", status, editable)
@@ -276,7 +280,7 @@ def stale_everywhere(repo, records=None):
     records = records if records is not None else load_records(repo)
     found = []
     for record in records.values():
-        if record.status == registry.STATUS_IN_WORK and not record.cots:
+        if record.status == record_model.STATUS_IN_WORK and not record.cots:
             found.extend(u for u in uses(repo, record.pn, None, records) if u.replaceable)
     return found
 
@@ -287,16 +291,16 @@ def stale_everywhere(repo, records=None):
 
 def needs_update(repo, record):
     """Revisions of this part whose list of parts used is missing or out of date."""
-    return [rev for rev, files in registry.cad_index(repo).get(record.pn, {}).items()
-            if registry.references_need_update(record, rev, files)]
+    return [rev for rev, files in record_files.cad_index(repo).get(record.pn, {}).items()
+            if record_lifecycle.references_need_update(record, rev, files)]
 
 
 def outdated_parts(repo, records=None):
     """Every part in the vault whose list of parts used is missing or out of date."""
     records = records if records is not None else load_records(repo)
-    index = registry.cad_index(repo)
+    index = record_files.cad_index(repo)
     return sorted(pn for pn, record in records.items()
-                  if any(registry.references_need_update(record, rev, files)
+                  if any(record_lifecycle.references_need_update(record, rev, files)
                          for rev, files in index.get(pn, {}).items()))
 
 
@@ -349,7 +353,7 @@ def replacements_from(uses_list):
 
 
 def _model_file(repo, child, revision):
-    models = [f for f in registry.cad_files(repo, child, revision) if file_types.extension(f) in file_types.MODEL_EXTENSIONS]
+    models = [f for f in record_files.cad_files(repo, child, revision) if file_types.extension(f) in file_types.MODEL_EXTENSIONS]
     return models[0] if models else None
 
 
@@ -406,16 +410,16 @@ def _plan_replacement(repo, parent, items, locks):
     """What to change in one assembly, worked out before anything is locked. Returns a ReplaceResult if there is
     nothing to do (or it can't be done), else (revision, edits, names, user_checked_out)."""
     try:
-        record = registry.load(repo, parent)
-        if record.status != registry.STATUS_IN_WORK or record.cots:
+        record = record_store.load(repo, parent)
+        if record.status != record_model.STATUS_IN_WORK or record.cots:
             return ReplaceResult(parent, "skipped", f"Rev {record.revision} is {record.status}, so it can't be changed.")
-        lock = locks.get(registry.record_relpath(parent).lower())
+        lock = locks.get(record_store.record_relpath(parent).lower())
         if lock and lock[0] != "you":
             return ReplaceResult(parent, "skipped", f"Checked out by {lock[1]}.")
 
         edits, names = [], []
         for item in items:
-            child_record = registry.load(repo, item.child)
+            child_record = record_store.load(repo, item.child)
             latest = child_record.released_revision
             if not latest or latest == item.old_revision:
                 continue
@@ -466,7 +470,7 @@ def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
     undo = []
     for parent, (revision, edits, names, user_checked_out) in list(jobs.items()):
         try:
-            files = [f for f in registry.cad_files(repo, parent, revision) if file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS]
+            files = [f for f in record_files.cad_files(repo, parent, revision) if file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS]
             if not files:
                 raise ReferencesError(f"{parent} has no assembly file in Rev {revision}.")
             changed = 0
@@ -527,14 +531,14 @@ def rescan(repo, pns=None, backend=None, log=print):
     owns = backend is None
     results, edits = {}, {}
     try:
-        index = registry.cad_index(repo)
+        index = record_files.cad_index(repo)
         locks = lfs_locks.get_locks(repo, strict=True)
-        for pn in (pns or registry.list_pns(repo)):
+        for pn in (pns or record_store.list_pns(repo)):
             pn = batch_core.as_pn(pn)
             revisions = index.get(pn, {})
             if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for fs in revisions.values() for f in fs):
                 continue
-            lock = locks.get(registry.record_relpath(pn).lower())
+            lock = locks.get(record_store.record_relpath(pn).lower())
             if lock:
                 results[pn] = f"skipped: checked out by {'you' if lock[0] == 'you' else lock[1]}. Check it in first."
                 log(f"{pn}: {results[pn]}")
@@ -580,7 +584,7 @@ def _rescan_one(repo, pn, revisions, backend):
                 if read_only.is_pointer(Path(repo) / f):
                     raise ReferencesError(f"{f} has not been downloaded. Run Get Latest.")
             found[revision] = read_assembly_references(repo, pn, revision, backend, files)
-    current = registry.load(repo, pn)
+    current = record_store.load(repo, pn)
     if all(current.references.get(rev) == sorted(set(stems), key=str.lower)
            and rev not in current.references_outdated for rev, stems in found.items()):
         return "unchanged"
@@ -588,9 +592,9 @@ def _rescan_one(repo, pn, revisions, backend):
 
     def edit(record, user):
         for revision, stems in found.items():
-            if registry.set_references(record, stems, revision):
+            if record_lifecycle.set_references(record, stems, revision):
                 changed.append(revision)
-        return registry.add_event(record, "references_updated", user,
+        return record_lifecycle.add_event(record, "references_updated", user,
                                   references={rev: record.references.get(rev, []) for rev in changed})
 
     return "edit", edit

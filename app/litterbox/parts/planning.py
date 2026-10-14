@@ -15,7 +15,9 @@ from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 from litterbox.vault import config
 
@@ -67,13 +69,13 @@ class PlanContext:
         return self._records
 
 
-def blockers(repo, pn, record, verb, fetch, required=registry.STATUS_IN_WORK, required_label="in-work",
+def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK, required_label="in-work",
               allow_pending=False, ctx=None):
     """Shared by release, Make COTS and Revise: the working revision's CAD files, and the reasons
     the part can't go ahead yet (checked out, modified, behind the vault...)."""
     ctx = ctx or PlanContext(repo)
-    record_path = registry.record_relpath(pn)
-    cad = registry.cad_files(repo, pn, record.revision)
+    record_path = record_store.record_relpath(pn)
+    cad = record_files.cad_files(repo, pn, record.revision)
     group = cad + [record_path]
     problems = []
 
@@ -114,7 +116,7 @@ def release_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     """
     repository.validate_repo(repo)
     pn = batch_core.as_pn(pn)
-    record = registry.load(repo, pn)
+    record = record_store.load(repo, pn)
     ctx = ctx or PlanContext(repo)
     cad, problems = blockers(repo, pn, record, "released", fetch, allow_pending=allow_pending, ctx=ctx)
     if record.cots:
@@ -137,7 +139,7 @@ def make_cots_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     nobody has it checked out, nothing is modified, and your copy is up to date."""
     repository.validate_repo(repo)
     pn = batch_core.as_pn(pn)
-    record = registry.load(repo, pn)
+    record = record_store.load(repo, pn)
     cad, problems = blockers(repo, pn, record, "made COTS", fetch, allow_pending=allow_pending,
                               ctx=ctx or PlanContext(repo))
     if record.cots:

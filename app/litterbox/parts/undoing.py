@@ -11,7 +11,9 @@ from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
 from litterbox.parts import permission_check
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 
 
@@ -25,12 +27,12 @@ def _undo_batch(repo, pns):
     batch = batch_core.Batch()
 
     locks = lfs_locks.get_locks(repo, strict=True)
-    index = registry.cad_index(repo)
+    index = record_files.cad_index(repo)
     groups = {}
     for pn in pns:
         try:
-            record_path = registry.record_relpath(pn)
-            group = index.get(pn, {}).get(registry.load(repo, pn).revision, []) + [record_path]
+            record_path = record_store.record_relpath(pn)
+            group = index.get(pn, {}).get(record_store.load(repo, pn).revision, []) + [record_path]
             if not any(lfs_locks.is_mine(locks, p) for p in group):
                 raise LitterboxError(f"You don't have {pn} checked out.")
             if (repository.count(repo, "@{u}..HEAD", group) or 0) > 0:
@@ -39,7 +41,7 @@ def _undo_batch(repo, pns):
                     "Use Check In to upload them. Undo would leave them stranded."
                 )
             groups[pn] = group
-        except (LitterboxError, registry.RegistryError) as e:
+        except (LitterboxError, record_model.RegistryError) as e:
             batch.errors[pn] = e
     if not groups:
         return batch

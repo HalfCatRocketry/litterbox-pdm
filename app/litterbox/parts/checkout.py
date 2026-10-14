@@ -18,7 +18,10 @@ from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.parts import batch_core
 from litterbox.parts import permission_check
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 
 
@@ -40,7 +43,7 @@ def _checkout_batch(repo, pns):
     batch = batch_core.Batch()
     wanted = []
     for pn in pns:
-        if (Path(repo) / registry.record_relpath(pn)).is_file():
+        if (Path(repo) / record_store.record_relpath(pn)).is_file():
             wanted.append(pn)
         else:
             batch.errors[pn] = LitterboxError(
@@ -48,12 +51,12 @@ def _checkout_batch(repo, pns):
     if not wanted:
         return batch
 
-    got = lfs_locks.lock_many(repo, [(registry.record_relpath(pn), str(pn)) for pn in wanted])        # whoever gets this lock gets the part
+    got = lfs_locks.lock_many(repo, [(record_store.record_relpath(pn), str(pn)) for pn in wanted])        # whoever gets this lock gets the part
     held = {}                                                                        # pn -> every path locked for it
     for pn in wanted:
-        error = got[registry.record_relpath(pn)]
+        error = got[record_store.record_relpath(pn)]
         if error is None:
-            held[pn] = [registry.record_relpath(pn)]
+            held[pn] = [record_store.record_relpath(pn)]
         else:
             batch.errors[pn] = error
     if not held:
@@ -61,18 +64,18 @@ def _checkout_batch(repo, pns):
 
     def give_up(pn, error):
         batch.errors[pn] = error
-        committing.discard_quietly(repo, [registry.record_relpath(pn)])
+        committing.discard_quietly(repo, [record_store.record_relpath(pn)])
         lfs_locks.force_unlock_quietly(repo, held.pop(pn, []))
 
     try:
         before = repository.head(repo)
         remote.pull(repo)                           # lock first, THEN pull: never edit a stale copy
-        index = registry.cad_index(repo)      # after the pull, so new files from others are included
+        index = record_files.cad_index(repo)      # after the pull, so new files from others are included
         plan = {}
         for pn in list(held):
             try:
-                record = registry.load(repo, pn)           # reload: it may have changed in the pull
-            except registry.RegistryError as e:
+                record = record_store.load(repo, pn)           # reload: it may have changed in the pull
+            except record_model.RegistryError as e:
                 give_up(pn, e)
                 continue
             plan[pn] = (record, index.get(pn, {}).get(record.revision, []))
@@ -88,14 +91,14 @@ def _checkout_batch(repo, pns):
         changed = set(repository.changed_between(repo, before, repository.head(repo)))
         for pn, (record, files) in list(plan.items()):
             try:
-                registry.record_checkout(record, user, files)       # refuses released / void parts
-                registry.save(repo, record)
-            except registry.RegistryError as e:
+                record_lifecycle.record_checkout(record, user, files)       # refuses released / void parts
+                record_store.save(repo, record)
+            except record_model.RegistryError as e:
                 give_up(pn, e)
                 continue
             batch.results[pn] = CheckoutResult(files, [p for p in files if p in changed])
     except BaseException:
-        committing.discard_quietly(repo, [registry.record_relpath(pn) for pn in held])
+        committing.discard_quietly(repo, [record_store.record_relpath(pn) for pn in held])
         lfs_locks.force_unlock_quietly(repo, [path for paths in held.values() for path in paths])
         raise
 

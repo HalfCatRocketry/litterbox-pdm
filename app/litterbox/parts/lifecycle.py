@@ -6,7 +6,7 @@ part or many. Each only edits the part's record, under a short lock.
 from litterbox.errors import LitterboxError
 from litterbox.parts import batch_core
 from litterbox.parts import planning
-from litterbox.records import registry
+from litterbox.records import record_lifecycle
 from litterbox.records.error_conversion import converts_errors
 
 
@@ -31,7 +31,7 @@ def release(repo, pn):
         raise LitterboxError(f"{pn} can't be released yet:\n- " + "\n- ".join(plan.problems))
     batch_core.edit_record(
         repo, pn, "release",
-        lambda record, user: registry.mark_released(record, user, plan.files),
+        lambda record, user: record_lifecycle.mark_released(record, user, plan.files),
         f"{pn}: Released",
     )
     return plan.files
@@ -48,7 +48,7 @@ def make_cots(repo, pn):
         raise LitterboxError(f"{pn} can't be made COTS yet:\n- " + "\n- ".join(plan.problems))
     batch_core.edit_record(
         repo, pn, "make_cots",
-        lambda record, user: registry.mark_cots(record, user, plan.files),
+        lambda record, user: record_lifecycle.mark_cots(record, user, plan.files),
         f"{pn}: Made COTS",
     )
     return plan.files
@@ -61,7 +61,7 @@ def reopen(repo, pn, reason):
     _refuse_if_workflow(repo, "reopen")
     batch_core.edit_record(
         repo, pn, "reopen",
-        lambda record, user: registry.mark_reopened(record, user, reason),
+        lambda record, user: record_lifecycle.mark_reopened(record, user, reason),
         f"{pn}: Unreleased - {batch_core.one_line(reason)}",
     )
 
@@ -73,7 +73,7 @@ def void(repo, pn, reason):
     _refuse_if_workflow(repo, "void")
     batch_core.edit_record(
         repo, pn, "void",
-        lambda record, user: registry.mark_void(record, user, reason),
+        lambda record, user: record_lifecycle.mark_void(record, user, reason),
         f"{pn}: Voided - {batch_core.one_line(reason)}",
     )
 
@@ -103,7 +103,7 @@ def release_many(repo, pns):
     pns = batch_core.unique_pns(pns)
     _refuse_if_workflow(repo, "release")
     return _plan_batch(repo, planning.release_plans(repo, pns), "release", "released",
-                       lambda record, user, plan: registry.mark_released(record, user, plan.files), "{pn}: Released")
+                       lambda record, user, plan: record_lifecycle.mark_released(record, user, plan.files), "{pn}: Released")
 
 
 @converts_errors
@@ -112,7 +112,7 @@ def make_cots_many(repo, pns):
     pns = batch_core.unique_pns(pns)
     _refuse_if_workflow(repo, "make_cots")
     return _plan_batch(repo, planning.make_cots_plans(repo, pns), "make_cots", "made COTS",
-                       lambda record, user, plan: registry.mark_cots(record, user, plan.files), "{pn}: Made COTS")
+                       lambda record, user, plan: record_lifecycle.mark_cots(record, user, plan.files), "{pn}: Made COTS")
 
 
 def _reason_batch(repo, pns, action, change, message):
@@ -127,7 +127,7 @@ def reopen_many(repo, pns, reason):
     """reopen() (Unrelease) for several parts with one download and one upload; one reason for all of them."""
     pns = batch_core.unique_pns(pns)
     _refuse_if_workflow(repo, "reopen")
-    return _reason_batch(repo, pns, "reopen", lambda record, user: registry.mark_reopened(record, user, reason),
+    return _reason_batch(repo, pns, "reopen", lambda record, user: record_lifecycle.mark_reopened(record, user, reason),
                          lambda pn: f"{pn}: Unreleased - {batch_core.one_line(reason)}")
 
 
@@ -136,5 +136,5 @@ def void_many(repo, pns, reason):
     """void() for several parts with one download and one upload; one reason for all of them."""
     pns = batch_core.unique_pns(pns)
     _refuse_if_workflow(repo, "void")
-    return _reason_batch(repo, pns, "void", lambda record, user: registry.mark_void(record, user, reason),
+    return _reason_batch(repo, pns, "void", lambda record, user: record_lifecycle.mark_void(record, user, reason),
                          lambda pn: f"{pn}: Voided - {batch_core.one_line(reason)}")

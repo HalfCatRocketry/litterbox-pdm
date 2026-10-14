@@ -15,7 +15,8 @@ from pathlib import Path, PurePosixPath
 from litterbox.errors import LitterboxError
 from litterbox.core import part_number
 from litterbox.core import revision_letters
-from litterbox.records import registry
+from litterbox.records import record_revisions
+from litterbox.records import record_store
 from litterbox.workflows import workflow
 
 # ---------------------------------------------------------------------------
@@ -207,7 +208,7 @@ def import_base_placeholder(repo, org):
     """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
     from litterbox.vault import config
     try:
-        return part_number.format_base(registry.next_free_base(repo, org, config.get_start_number(repo)))
+        return part_number.format_base(record_store.next_free_base(repo, org, config.get_start_number(repo)))
     except Exception:
         return ""
 
@@ -766,7 +767,7 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
     lowest free variant of that part number (as in New Part), an empty base keeps the row's current base.
     Typing the numbers the row already has changes nothing (the row stays automatic).
     """
-    from litterbox.records import registry
+    from litterbox.records import record_store
     item = next((i for i in prepared.candidates if i.id == item_id), None)
     entries = prepared.proposal.entries
     index = next((n for n, e in enumerate(entries) if item is not None and e.item is item), None)
@@ -787,7 +788,7 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
         base = entry.pn.base
     if variant is None:
         try:
-            variant = registry.next_free_variant(repo, base, org) if repo else 1
+            variant = record_store.next_free_variant(repo, base, org) if repo else 1
         except Exception:
             variant = 1
     chosen = part_number.PN(org, base, variant)
@@ -971,7 +972,7 @@ def revision_rows(record, revisions):
     for event in record.history:
         if event.get("event") == "released" and event.get("revision"):
             released[event["revision"]] = event
-    cancelled = set(registry.cancelled_revisions(record))
+    cancelled = set(record_revisions.cancelled_revisions(record))
     letters = set(revisions) | set(released) | {record.revision} | cancelled
     rows = []
     for rev in sorted(letters, key=revision_letters.revision_number, reverse=True):

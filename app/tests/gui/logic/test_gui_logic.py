@@ -5,7 +5,9 @@ import unittest
 from pathlib import Path
 
 from litterbox.gui.logic import gui_logic as logic
-from litterbox.records import registry
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.user import settings
 from litterbox.parts.part_changes import ChangeReport
 from litterbox.parts.part_status import PartStatus
@@ -214,7 +216,7 @@ class TestRevisions(unittest.TestCase):
         self.assertEqual(logic.filter_rows([part, plain], view="Released"), [part])
 
     def test_revision_rows_for_the_history_window(self):
-        record = registry.Record(pn=PN("HCR", 7, 1), name="Part", created_by="Alex", created_at="2026-10-01T10:00:00Z",
+        record = record_model.Record(pn=PN("HCR", 7, 1), name="Part", created_by="Alex", created_at="2026-10-01T10:00:00Z",
                                  revision="B", released_revision="A")
         record.history = [{"event": "released", "by": "Jo", "at": "2026-10-02T10:00:00Z", "revision": "A"}]
         rows = logic.revision_rows(record, {"A": self.A, "B": self.B})
@@ -348,12 +350,12 @@ class TestHistory(unittest.TestCase):
 
     def test_rows_are_newest_first_with_details(self):
         with tempfile.TemporaryDirectory() as tmp:
-            record = registry.create_record(tmp, PN("HCR", 1, 1), "Front upright", "Alex")
+            record = record_store.create_record(tmp, PN("HCR", 1, 1), "Front upright", "Alex")
             files = ["cad/HCR-00001-001_A.SLDPRT", "cad/HCR-00001-001_A.SLDDRW"]
-            registry.record_checkout(record, "Alex", files)
-            registry.record_checkin(record, "Alex", files[:1], "Added fillet")
-            registry.mark_released(record, "Jo", files)
-            registry.mark_reopened(record, "Jo", "Bore wrong")
+            record_lifecycle.record_checkout(record, "Alex", files)
+            record_lifecycle.record_checkin(record, "Alex", files[:1], "Added fillet")
+            record_lifecycle.mark_released(record, "Jo", files)
+            record_lifecycle.mark_reopened(record, "Jo", "Bore wrong")
         rows = logic.format_history(record, local=False)
         self.assertEqual([r[2] for r in rows], ["Unreleased", "Released", "Checked in", "Checked out", "Created"])
         self.assertEqual(rows[0][1:], ("Jo", "Unreleased", "Bore wrong"))
@@ -505,11 +507,11 @@ class TestNewNumberHelpers(unittest.TestCase):
                 logic.parse_optional_number(bad, "variant number", maximum=999)
 
     def test_variant_lines(self):
-        from litterbox.records import registry
+        from litterbox.records import record_store
         with tempfile.TemporaryDirectory() as tmp:
-            registry.create_record(tmp, PN("HCR", 5, 1), "Left", "Alex")
-            registry.create_record(tmp, PN("HCR", 5, 2), "Right", "Alex")
-            records = registry.load_variants(tmp, 5)
+            record_store.create_record(tmp, PN("HCR", 5, 1), "Left", "Alex")
+            record_store.create_record(tmp, PN("HCR", 5, 2), "Right", "Alex")
+            records = record_store.load_variants(tmp, 5)
         records[1].status = "void"
         self.assertEqual(logic.variant_lines(records), ["HCR-00005-001   Left", "HCR-00005-002  [void]   Right"])
         self.assertEqual(logic.variant_lines([]), [])
@@ -582,8 +584,8 @@ class TestReferenceText(unittest.TestCase):
         self.assertFalse(logic.replace_summary([ReplaceResult(PN("HCR", 2, 1), "done")])[1])
 
     def test_history_shows_references(self):
-        record = registry.Record(pn=PN("HCR", 2, 1), name="x", created_by="a", created_at="t")
-        registry.add_event(record, "checked_in", "Alex", files=["cad/a.SLDASM"], references=["HCR-00001-001_A"])
+        record = record_model.Record(pn=PN("HCR", 2, 1), name="x", created_by="a", created_at="t")
+        record_lifecycle.add_event(record, "checked_in", "Alex", files=["cad/a.SLDASM"], references=["HCR-00001-001_A"])
         self.assertIn("uses HCR-00001-001_A", logic.format_history(record)[0][3])
 
     def test_outdated_note_and_update_summary(self):
@@ -868,9 +870,9 @@ class TestWorkflowEditor(unittest.TestCase):
 
 class TestWorkflowHistory(unittest.TestCase):
     def history(self, *events):
-        from litterbox.records import registry
+        from litterbox.records import record_model
         from litterbox.core.part_number import parse
-        record = registry.Record(parse("HCR-00001-001"), "Upright", "Alex", "2026-10-11T00:00:00Z")
+        record = record_model.Record(parse("HCR-00001-001"), "Upright", "Alex", "2026-10-11T00:00:00Z")
         for event in events:
             record.history.append(dict({"by": "Bea", "at": "2026-10-11T01:00:00Z", "revision": "A"}, **event))
         return logic.format_history(record, local=False)

@@ -11,7 +11,7 @@ from unittest import mock
 from tests.support.vault_fixture import DRW, PART, PRT, git
 
 from litterbox.team import people
-from litterbox.records import registry
+from litterbox.records import record_model
 from litterbox.workflows import workflow as wf
 from tests.support.workflow_fixture import CHIEF, ENGINEER, MANAGER, PART2, PRT2, QUALITY, Fixture
 from litterbox.errors import LitterboxError
@@ -161,7 +161,7 @@ class TestTemplates(Fixture, unittest.TestCase):
 class TestWithoutAWorkflowThingsWorkAsBefore(Fixture, unittest.TestCase):
     def test_plain_release(self):
         self.do("Alex", lifecycle.release, PART)
-        self.assertEqual(self.record().status, registry.STATUS_RELEASED)
+        self.assertEqual(self.record().status, record_model.STATUS_RELEASED)
 
     def test_direct_actions_are_refused_once_there_are_templates(self):
         for action, call in ((wf.RELEASE, lambda r: lifecycle.release(r, PART)),
@@ -173,7 +173,7 @@ class TestWithoutAWorkflowThingsWorkAsBefore(Fixture, unittest.TestCase):
                 with self.assertRaises(LitterboxError) as ctx:
                     self.do("Alex", call)
                 self.assertIn("needs sign-offs", str(ctx.exception))
-        self.assertEqual(self.record().status, registry.STATUS_IN_WORK)
+        self.assertEqual(self.record().status, record_model.STATUS_IN_WORK)
 
     def test_requesting_without_a_template_says_so(self):
         with self.assertRaises(LitterboxError) as ctx:
@@ -300,7 +300,7 @@ class TestRequesting(Fixture, unittest.TestCase):
 
     def test_the_record_round_trips(self):
         self.request()
-        again = registry.Record.from_dict(__import__("yaml").safe_load(registry._dump(self.record())))
+        again = record_model.Record.from_dict(__import__("yaml").safe_load(record_model.dump(self.record())))
         self.assertEqual(again.pending, self.record().pending)
 
 
@@ -309,12 +309,12 @@ class TestSigning(Fixture, unittest.TestCase):
         self.request()
         r = self.do("Alex", wf.sign_off, [PART])
         self.assertEqual((r.signed, r.completed), ([PART], []))
-        self.assertEqual(self.record().status, registry.STATUS_IN_WORK)
+        self.assertEqual(self.record().status, record_model.STATUS_IN_WORK)
         self.get_latest("Bea")
         r = self.do("Bea", wf.sign_off, [PART], "Looks good")
         self.assertEqual(r.completed, [PART])
         record = self.record()
-        self.assertEqual((record.status, record.released_revision, record.pending), (registry.STATUS_RELEASED, "A", {}))
+        self.assertEqual((record.status, record.released_revision, record.pending), (record_model.STATUS_RELEASED, "A", {}))
         self.assertEqual(lfs_locks.get_locks(self.a), {})
 
     def test_the_trail_is_kept_in_approvals(self):
@@ -350,7 +350,7 @@ class TestSigning(Fixture, unittest.TestCase):
         self.assertEqual(sum(1 for c in seen if c == "git push"), 4)
         self.assertEqual(sum(1 for c in seen if c.startswith("git commit")), 4)      # one commit per step, not per part
         for pn in (PART, PART2):
-            self.assertEqual(self.record(pn).status, registry.STATUS_RELEASED)
+            self.assertEqual(self.record(pn).status, record_model.STATUS_RELEASED)
 
     def test_a_batch_is_signed_once_for_every_part(self):
         self.second_part()
@@ -360,7 +360,7 @@ class TestSigning(Fixture, unittest.TestCase):
         r = self.do("Bea", wf.sign_off, [PART, PART2])
         self.assertEqual(sorted(map(str, r.completed)), sorted(map(str, [PART, PART2])))
         for pn in (PART, PART2):
-            self.assertEqual(self.record(pn).status, registry.STATUS_RELEASED)
+            self.assertEqual(self.record(pn).status, record_model.STATUS_RELEASED)
 
     def test_signing_again_or_when_not_named_does_nothing(self):
         self.request()
@@ -392,7 +392,7 @@ class TestSigning(Fixture, unittest.TestCase):
         row = next(x for x in self.do("Alex", part_status.get_status) if x.pn == PART)
         self.assertEqual((row.kind, row.state), ("pending", "Release approved - ready to complete"))
         self.assertEqual(self.do("Alex", wf.complete, PART), [DRW, PRT])
-        self.assertEqual(self.record().status, registry.STATUS_RELEASED)
+        self.assertEqual(self.record().status, record_model.STATUS_RELEASED)
 
     def test_completing_before_everyone_signed_is_refused(self):
         self.request()
@@ -418,7 +418,7 @@ class TestSigning(Fixture, unittest.TestCase):
         r = self.do("Cy", wf.sign_off, [PART])
         self.assertEqual(r.completed, [PART])
         record = self.record()
-        self.assertEqual((record.status, record.released_revision, record.pending), (registry.STATUS_IN_WORK, "", {}))
+        self.assertEqual((record.status, record.released_revision, record.pending), (record_model.STATUS_IN_WORK, "", {}))
         self.assertEqual([e for e in record.history if e["event"] == "reopened"][-1]["reason"], "Drawing error")
         self.assertEqual(record.approvals[-1]["reason"], "Drawing error")
 
@@ -427,7 +427,7 @@ class TestSigning(Fixture, unittest.TestCase):
         self.do("Alex", wf.request, [PART], wf.VOID, "T", ["cy"], reason="Not needed")
         r = self.do("Cy", wf.sign_off, [PART])
         self.assertEqual(r.completed, [PART])
-        self.assertEqual(self.record().status, registry.STATUS_VOID)
+        self.assertEqual(self.record().status, record_model.STATUS_VOID)
 
     def test_make_cots_waits_for_someone_to_complete_it(self):
         self.set_template(wf.MAKE_COTS, rows=((ENGINEER,),))
@@ -450,7 +450,7 @@ class TestRejectingWithdrawingReassigning(Fixture, unittest.TestCase):
         self.do("Bea", wf.reject, [PART, PART2], "Wrong tolerance")
         for pn in (PART, PART2):
             record = self.record(pn)
-            self.assertEqual((record.pending, record.status), ({}, registry.STATUS_IN_WORK))
+            self.assertEqual((record.pending, record.status), ({}, record_model.STATUS_IN_WORK))
             last = record.history[-1]
             self.assertEqual((last["event"], last["reason"], last["signed"]), ("release_rejected", "Wrong tolerance",
                                                                                ["Alex Smith"]))
@@ -525,7 +525,7 @@ class TestOverride(Fixture, unittest.TestCase):
         self.do("Alex", wf.override, [PART, PART2], "Customer deadline")
         for pn in (PART, PART2):
             record = self.record(pn)
-            self.assertEqual((record.status, record.pending), (registry.STATUS_RELEASED, {}))
+            self.assertEqual((record.status, record.pending), (record_model.STATUS_RELEASED, {}))
             released = [e for e in record.history if e["event"] == "released"][-1]
             self.assertTrue(released["override"])
             self.assertEqual(record.approvals[-1]["override"]["reason"], "Customer deadline")
@@ -534,12 +534,12 @@ class TestOverride(Fixture, unittest.TestCase):
     def test_an_admin_can_act_with_no_request_at_all(self):
         self.set_template()
         self.do("Alex", wf.override, [PART], "Urgent", action=wf.RELEASE)
-        self.assertEqual(self.record().status, registry.STATUS_RELEASED)
+        self.assertEqual(self.record().status, record_model.STATUS_RELEASED)
 
     def test_an_override_can_void_with_its_reason(self):
         self.set_template(wf.VOID, rows=((MANAGER,),))
         self.do("Alex", wf.override, [PART], "Duplicate part", action=wf.VOID)
-        self.assertEqual(self.record().status, registry.STATUS_VOID)
+        self.assertEqual(self.record().status, record_model.STATUS_VOID)
 
 
 def identity_for(person_id, directory, access=people.MEMBER):

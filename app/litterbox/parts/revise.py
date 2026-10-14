@@ -27,7 +27,10 @@ from pathlib import Path
 
 from litterbox.importing import importer
 from litterbox.core import filenames
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_model
+from litterbox.records import record_revisions
+from litterbox.records import record_store
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
@@ -189,7 +192,7 @@ def _revised_name(rel, new_revision):
 
 def _copy_list(repo, record, files):
     """([(old, new)], kept, problems) for revising the given files to the next letter."""
-    new_revision = registry.next_free_revision(record)
+    new_revision = record_revisions.next_free_revision(record)
     copies, kept, problems = [], [], []
     for rel in files:
         if file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS:
@@ -209,14 +212,14 @@ def revise_plan(repo, pn, fetch=True):
     """What a revise would create, and anything that blocks it. Changes nothing."""
     repository.validate_repo(repo)
     pn = batch_core.as_pn(pn)
-    record = registry.load(repo, pn)
+    record = record_store.load(repo, pn)
     files, problems = planning.blockers(repo, pn, record, "revised", fetch,
-                                    required=registry.STATUS_RELEASED, required_label="released")
+                                    required=record_model.STATUS_RELEASED, required_label="released")
     if record.cots:
-        problems.insert(0, registry.can_revise(record))
+        problems.insert(0, record_revisions.can_revise(record))
     copies, kept, more = _copy_list(repo, record, files)
     problems += [p for p in more if p not in problems]
-    return RevisePlan(pn, record.name, record.revision, registry.next_free_revision(record),
+    return RevisePlan(pn, record.name, record.revision, record_revisions.next_free_revision(record),
                       files, copies, kept, problems)
 
 
@@ -244,10 +247,10 @@ def cancel_revision_plan(repo, pn, fetch=True):
     """What Cancel Revision would move, and anything that blocks it. Changes nothing."""
     repository.validate_repo(repo)
     pn = batch_core.as_pn(pn)
-    record = registry.load(repo, pn)
-    files = registry.cad_files(repo, pn, record.revision)
+    record = record_store.load(repo, pn)
+    files = record_files.cad_files(repo, pn, record.revision)
     problems = []
-    problem = registry.can_cancel_revision(record)
+    problem = record_revisions.can_cancel_revision(record)
     if problem:
         problems.append(problem)
     if fetch:
@@ -256,7 +259,7 @@ def cancel_revision_plan(repo, pn, fetch=True):
         except LitterboxError as e:
             diagnostics.LOG(f"WARNING: could not check the vault for newer changes. {e}")
     locks = lfs_locks.get_locks(repo, strict=True)
-    group = files + [registry.record_relpath(pn)]
+    group = files + [record_store.record_relpath(pn)]
     others = sorted({locks[p.lower()][1] for p in group if p.lower() in locks and locks[p.lower()][0] != "you"})
     if others:
         problems.append("It is checked out by " + ", ".join(others) + ".")
@@ -339,7 +342,7 @@ def revise(repo, pn, reason, backend=None, log=print):
     if not plan.ok:
         raise RevisionFailed(f"{pn} can't be revised yet:\n- " + "\n- ".join(plan.problems))
 
-    record_path = registry.record_relpath(pn)
+    record_path = record_store.record_relpath(pn)
     token = uuid.uuid4().hex[:12]
     locked, new_files, journal = [], [], None
     owns_backend = backend is None
@@ -351,9 +354,9 @@ def revise(repo, pn, reason, backend=None, log=print):
             lfs_locks.lock(repo, record_path, pn)                  # whoever gets this lock gets the revision
             locked.append(record_path)
             remote.pull(repo)                                   # lock first, THEN pull
-            record = registry.load(repo, pn)
-            files = registry.cad_files(repo, pn, record.revision)
-            if registry.can_revise(record) or record.revision != plan.revision:
+            record = record_store.load(repo, pn)
+            files = record_files.cad_files(repo, pn, record.revision)
+            if record_revisions.can_revise(record) or record.revision != plan.revision:
                 raise RevisionFailed(f"{pn} was changed by someone else a moment ago. Run Get Latest and try again.")
             copies, _kept, problems = _copy_list(repo, record, files)
             if problems:
@@ -363,10 +366,10 @@ def revise(repo, pn, reason, backend=None, log=print):
                        "removed": [], "locked": []}
             _write_journal(repo, journal)
 
-            log(f"Revising {pn} from Rev {record.revision} to Rev {registry.next_free_revision(record)}...")
+            log(f"Revising {pn} from Rev {record.revision} to Rev {record_revisions.next_free_revision(record)}...")
             _copy_set(repo, copies, backend, log)
-            registry.mark_revised(record, user, reason, new_files)
-            registry.save(repo, record)
+            record_revisions.mark_revised(record, user, reason, new_files)
+            record_store.save(repo, record)
             message = f"{pn}: Revised to Rev {record.revision} - {reason}\n\nLitterbox-Revise: {token}"
             _commit_and_push(repo, message, new_files, [], record_path)
             pushed = True
@@ -380,7 +383,7 @@ def revise(repo, pn, reason, backend=None, log=print):
             lfs_locks.force_unlock_quietly(repo, locked)
             _clear_journal(repo)
             read_only.enforce_read_only(repo)
-            raise RevisionFailed(f"Rev {registry.load(repo, pn).revision} of {pn} was created, but it could not be "
+            raise RevisionFailed(f"Rev {record_store.load(repo, pn).revision} of {pn} was created, but it could not be "
                                  "checked out to you. Click Check Out to continue.") from None
         try:
             if journal is not None:
@@ -421,7 +424,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     if not plan.ok:
         raise RevisionFailed(f"The revision of {pn} can't be cancelled yet:\n- " + "\n- ".join(plan.problems))
 
-    record_path = registry.record_relpath(pn)
+    record_path = record_store.record_relpath(pn)
     token = uuid.uuid4().hex[:12]
     locked, journal = [], None
     owns_backend = backend is None
@@ -434,10 +437,10 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
             lfs_locks.lock(repo, record_path, pn)
             locked.append(record_path)
             remote.pull(repo)
-            record = registry.load(repo, pn)
-            if registry.can_cancel_revision(record) or record.revision != plan.revision:
+            record = record_store.load(repo, pn)
+            if record_revisions.can_cancel_revision(record) or record.revision != plan.revision:
                 raise RevisionFailed(f"{pn} was changed by someone else a moment ago. Run Get Latest and try again.")
-            files = registry.cad_files(repo, pn, record.revision)
+            files = record_files.cad_files(repo, pn, record.revision)
             for rel in files:                                 # nobody else may pick the files up meanwhile
                 lfs_locks.lock(repo, rel, pn)
                 locked.append(rel)
@@ -452,8 +455,8 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
 
             log(f"Cancelling Rev {record.revision} of {pn}...")
             _copy_set(repo, moves, backend, log)
-            registry.mark_revision_cancelled(record, user, reason, kept)
-            registry.save(repo, record)
+            record_revisions.mark_revision_cancelled(record, user, reason, kept)
+            record_store.save(repo, record)
             message = (f"{pn}: Cancelled Rev {plan.revision} - {reason}\n\nLitterbox-Revise: {token}")
             _commit_and_push(repo, message, kept, [old for old, _new in moves], record_path)
             pushed = True

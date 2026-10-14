@@ -19,7 +19,10 @@ from litterbox.git import runner
 from litterbox.parts import batch_core
 from litterbox.parts import part_changes
 from litterbox.parts import permission_check
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 from litterbox.util import file_snapshot
 from litterbox.vault import config
@@ -29,7 +32,7 @@ def watch_files(repo, revisions):
     """Remember the size and modified time of these parts' CAD files, as they are right now ({PN: revision}).
     Pass the result to checkin_many(snapshot=...) so a part saved after you pressed Check In is not uploaded.
     Cheap: one look at the cad folder and one metadata lookup per file; nothing is read."""
-    index = registry.cad_index(repo)
+    index = record_files.cad_index(repo)
     return file_snapshot.FileSnapshot(repo, {pn: index.get(pn, {}).get(rev, []) for pn, rev in revisions.items()})
 
 
@@ -62,13 +65,13 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
 
     locks = lfs_locks.get_locks(repo, strict=True)
     modified = repository.get_modified(repo)
-    index = registry.cad_index(repo)
+    index = record_files.cad_index(repo)
     groups, cads = {}, {}                                    # the parts to upload: pn -> every path / the CAD files
     to_commit = []                                           # (pn, message, paths) in the order checked in
     for pn in pns:
         try:
-            record_path = registry.record_relpath(pn)
-            record = registry.load(repo, pn)
+            record_path = record_store.record_relpath(pn)
+            record = record_store.load(repo, pn)
             cad = index.get(pn, {}).get(record.revision, [])
             group = cad + [record_path]
             if not any(lfs_locks.is_mine(locks, p) for p in group):
@@ -99,13 +102,13 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                     except Exception as e:
                         diagnostics.LOG(f"WARNING: could not read what {pn} uses: {e}")
                 record_before = (Path(repo) / record_path).read_bytes()
-                registry.record_checkin(record, user, changed, comment, references=found_references)
-                registry.save(repo, record)
+                record_lifecycle.record_checkin(record, user, changed, comment, references=found_references)
+                record_store.save(repo, record)
                 message = f"{pn}: {(comment or '').strip() or 'Update'}"
                 to_commit.append((pn, message, changed, record_path, record_before))
             groups[pn], cads[pn] = group, cad
             batch.results[pn] = CheckinResult(True, changed)
-        except (LitterboxError, registry.RegistryError) as e:
+        except (LitterboxError, record_model.RegistryError) as e:
             batch.errors[pn] = e
 
     def fail(pn, error):

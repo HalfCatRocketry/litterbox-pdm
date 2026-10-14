@@ -13,7 +13,10 @@ from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, Tw
 
 from litterbox.vault import config
 from litterbox.references import references as refs
-from litterbox.records import registry
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_revisions
+from litterbox.records import record_store
 from litterbox.parts import revise
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
@@ -61,7 +64,7 @@ class RefsFixture(TwoUserVault):
             return lfs_locks.get_locks(repo, strict=True)
 
     def record(self, repo=None, pn=ASM):
-        return registry.load(repo or self.a, pn)
+        return record_store.load(repo or self.a, pn)
 
     def release_part_rev_b(self):
         """Part 1 gets a Rev B, which is released."""
@@ -185,15 +188,15 @@ class TestLookups(RefsFixture, unittest.TestCase):
         self.assertEqual((use.state, use.editable, use.replaceable), (refs.STALE, False, False))
 
     def test_unreleased_parts(self):
-        record_states = refs.classify(registry.load(self.a, ASM), "A")           # the assembly itself, unreleased
+        record_states = refs.classify(record_store.load(self.a, ASM), "A")           # the assembly itself, unreleased
         self.assertEqual(record_states, (refs.UNRELEASED, ""))
         self.assertEqual(refs.classify(None, "A"), (refs.MISSING, ""))
 
     def test_cancelled_and_void(self):
-        record = registry.load(self.a, PART)
+        record = record_store.load(self.a, PART)
         record.history.append({"event": "revision_cancelled", "by": "x", "at": "t", "cancelled": "B"})
         self.assertEqual(refs.classify(record, "B")[0], refs.CANCELLED)
-        record.status = registry.STATUS_VOID
+        record.status = record_model.STATUS_VOID
         self.assertEqual(refs.classify(record, "A")[0], refs.VOID)
 
 
@@ -309,9 +312,9 @@ class TestRescan(RefsFixture, unittest.TestCase):
         record_path = self.a / "PN-logs" / "HCR-00002-001.yaml"
         with self.user("Alex"):
             lfs_locks.lock(self.a, "PN-logs/HCR-00002-001.yaml", ASM)
-            record = registry.load(self.a, ASM)
+            record = record_store.load(self.a, ASM)
             record.references = {}
-            registry.save(self.a, record)
+            record_store.save(self.a, record)
             git(self.a, "commit", "-am", "forget the references")
             git(self.a, "push")
             lfs_locks.unlock_mine(self.a, ["PN-logs/HCR-00002-001.yaml"])
@@ -377,15 +380,15 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
         self.assertEqual(self.record().references, {"A": [STEM_A]})
 
     def test_an_assembly_with_no_stored_list_is_flagged_and_an_empty_list_is_not(self):
-        record = registry.load(self.a, ASM)
+        record = record_store.load(self.a, ASM)
         record.references = {}
-        self.assertTrue(registry.references_need_update(record, "A", [ASM_FILE]))
+        self.assertTrue(record_lifecycle.references_need_update(record, "A", [ASM_FILE]))
         record.references = {"A": []}                              # read, and it uses no Litterbox parts
-        self.assertFalse(registry.references_need_update(record, "A", [ASM_FILE]))
-        self.assertFalse(registry.references_need_update(record, "A", [PRT]))
+        self.assertFalse(record_lifecycle.references_need_update(record, "A", [ASM_FILE]))
+        self.assertFalse(record_lifecycle.references_need_update(record, "A", [PRT]))
         record.cots = True
         record.references = {}
-        self.assertFalse(registry.references_need_update(record, "A", [ASM_FILE]))
+        self.assertFalse(record_lifecycle.references_need_update(record, "A", [ASM_FILE]))
 
     def test_update_reads_the_files_and_clears_the_flag(self):
         self.check_in_unread(f"assembly A v2\nref: {self.a / PRT}\n")
@@ -422,30 +425,30 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
 
     def test_revise_keeps_the_flag(self):
         self.check_in_unread()
-        record = registry.load(self.a, ASM)
-        record.status = registry.STATUS_RELEASED
+        record = record_store.load(self.a, ASM)
+        record.status = record_model.STATUS_RELEASED
         record.released_revision = "A"
-        registry.mark_revised(record, "Alex", "Rework", [])
+        record_revisions.mark_revised(record, "Alex", "Rework", [])
         self.assertEqual(record.references_outdated, ["A", "B"])
-        registry.mark_revision_cancelled(record, "Alex", "Oops", [])
+        record_revisions.mark_revision_cancelled(record, "Alex", "Oops", [])
         self.assertEqual(record.references_outdated, ["A"])
 
 
 class TestRecordFormat(unittest.TestCase):
     def test_round_trip_and_validation(self):
-        record = registry.Record(pn=PN("HCR", 2, 1), name="x", created_by="a", created_at="t")
+        record = record_model.Record(pn=PN("HCR", 2, 1), name="x", created_by="a", created_at="t")
         record.references = {"B": ["HCR-00001-001_A"], "A": ["HCR-00001-001_A", "HCR-00003-001_C"]}
-        again = registry.Record.from_dict(__import__("yaml").safe_load(registry._dump(record)))
+        again = record_model.Record.from_dict(__import__("yaml").safe_load(record_model.dump(record)))
         self.assertEqual(again.references, record.references)
         data = record.to_dict()
         self.assertEqual(list(data["references"]), ["A", "B"])
         record.references_outdated = ["B", "A"]
-        self.assertEqual(registry.Record.from_dict(__import__("yaml").safe_load(registry._dump(record))).references_outdated,
+        self.assertEqual(record_model.Record.from_dict(__import__("yaml").safe_load(record_model.dump(record))).references_outdated,
                          ["A", "B"])
         data["references"] = ["nope"]
-        with self.assertRaises(registry.RegistryError):
-            registry.Record.from_dict(data)
-        self.assertNotIn("references", registry.Record(pn=PN("HCR", 3, 1), name="y", created_by="a",
+        with self.assertRaises(record_model.RegistryError):
+            record_model.Record.from_dict(data)
+        self.assertNotIn("references", record_model.Record(pn=PN("HCR", 3, 1), name="y", created_by="a",
                                                        created_at="t").to_dict())
 
 

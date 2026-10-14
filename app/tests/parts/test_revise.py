@@ -15,7 +15,8 @@ from unittest import mock
 from tests.support.import_fixture import FakeSolidWorks
 from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable
 
-from litterbox.records import registry
+from litterbox.records import record_revisions
+from litterbox.records import record_store
 from litterbox.parts import revise
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
@@ -69,7 +70,7 @@ class ReviseFixture(TwoUserVault):
 
     def assert_untouched(self, repo):
         """Rev A is still the released, locked-by-nobody revision, with nothing new in cad and git clean."""
-        record = registry.load(repo, PART)
+        record = record_store.load(repo, PART)
         self.assertEqual((record.revision, record.released_revision, record.status), ("A", "A", "released"))
         self.assertEqual(sorted(p.name for p in (repo / "cad").iterdir()),
                          ["HCR-00001-001_A.SLDDRW", "HCR-00001-001_A.SLDPRT"])
@@ -94,7 +95,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
         self.assertEqual((self.a / PRT_B).read_text(), "model A\n")
         self.assertIn(f"ref: {self.a / PRT_B}", (self.a / DRW_B).read_text())        # the drawing follows the new model
         self.assertNotIn(f"ref: {self.a / PRT}", (self.a / DRW_B).read_text())
-        record = registry.load(self.a, PART)
+        record = record_store.load(self.a, PART)
         self.assertEqual((record.revision, record.released_revision, record.status), ("B", "A", "in_work"))
         event = record.history[-1]
         self.assertEqual((event["event"], event["revision"], event["from_revision"], event["reason"]),
@@ -128,7 +129,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
             (self.a / PRT_B).write_text("model B\n", encoding="utf-8")
             checkin.checkin(self.a, PART, "Bigger bore")
             lifecycle.release(self.a, PART)
-            record = registry.load(self.a, PART)
+            record = record_store.load(self.a, PART)
         self.assertEqual((record.revision, record.released_revision, record.status), ("B", "B", "released"))
         self.assertEqual((self.a / PRT).read_text(), "model A\n")                    # Rev A never changed
         self.assertEqual((self.a / PRT_B).read_text(), "model B\n")
@@ -175,7 +176,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
         self.assert_untouched(self.a)
         self.fake.fail_on = None
         self.revise()                                           # and a later attempt works
-        self.assertEqual(registry.load(self.a, PART).revision, "B")
+        self.assertEqual(record_store.load(self.a, PART).revision, "B")
 
     def test_a_refused_repoint_leaves_the_vault_as_it_was(self):
         self.fake.refuse_repoint = True
@@ -246,12 +247,12 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.assertIn(f"ref: {self.a / CANCELLED_PRT}", (self.a / CANCELLED_DRW).read_text())
         self.assertFalse((self.a / PRT_B).exists())
         self.assertFalse((self.a / DRW_B).exists())
-        record = registry.load(self.a, PART)
+        record = record_store.load(self.a, PART)
         self.assertEqual((record.revision, record.released_revision, record.status), ("A", "A", "released"))
         event = record.history[-1]
         self.assertEqual((event["event"], event["cancelled"], event["reason"]),
                          ("revision_cancelled", "B", "Started by mistake"))
-        self.assertEqual(registry.cancelled_revisions(record), ["B"])
+        self.assertEqual(record_revisions.cancelled_revisions(record), ["B"])
         self.assertIn("HCR-00001-001: Cancelled Rev B - Started by mistake", self.remote_log())
         self.assertEqual(self.locks(self.a), {})
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
@@ -268,7 +269,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.cancel()
         files = self.revise(reason="Second try")
         self.assertEqual(sorted(files), [DRW.replace("_A.", "_C."), PRT_C])
-        self.assertEqual(registry.load(self.a, PART).revision, "C")
+        self.assertEqual(record_store.load(self.a, PART).revision, "C")
 
     def test_someone_else_can_cancel_a_revision_nobody_is_holding(self):
         self.revise()
@@ -277,7 +278,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         with self.user("Bea"):
             get_latest.get_latest(self.b)
         self.cancel(repo=self.b, user="Bea")
-        self.assertEqual(registry.load(self.b, PART).revision, "A")
+        self.assertEqual(record_store.load(self.b, PART).revision, "A")
         self.assertTrue((self.b / CANCELLED_PRT).exists())
 
     def test_it_is_refused_while_someone_else_has_the_revision_checked_out(self):
@@ -290,7 +291,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
             with self.assertRaises(LitterboxError):
                 revise.cancel_revision(self.b, PART, "No", backend=self.fake, log=lambda *_: None)
         self.assertTrue((self.a / PRT_B).exists())
-        self.assertEqual(registry.load(self.a, PART).revision, "B")
+        self.assertEqual(record_store.load(self.a, PART).revision, "B")
 
     def test_a_part_that_was_never_released_uses_void_instead(self):
         pn = self.add_created_part(2)
@@ -312,7 +313,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         with mock.patch.object(remote, "push_with_retry", side_effect=LitterboxError("network down")):
             with self.assertRaises(LitterboxError):
                 self.cancel()
-        record = registry.load(self.a, PART)
+        record = record_store.load(self.a, PART)
         self.assertEqual((record.revision, record.status), ("B", "in_work"))
         self.assertTrue((self.a / PRT_B).exists())
         self.assertTrue((self.a / DRW_B).exists())
@@ -328,7 +329,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
             self.cancel()
         self.assertTrue((self.a / PRT_B).exists())
         self.assertFalse((self.a / "cancelled-revs").exists())
-        self.assertEqual(registry.load(self.a, PART).revision, "B")
+        self.assertEqual(record_store.load(self.a, PART).revision, "B")
 
 
 class TestRulesAroundRevisions(ReviseFixture, unittest.TestCase):

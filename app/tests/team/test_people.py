@@ -13,7 +13,7 @@ from unittest import mock
 from tests.support.vault_fixture import DRW, PART, PRT, REC, git
 
 from litterbox.team import people
-from litterbox.records import registry
+from litterbox.records import record_store
 from tests.support.team_fixture import TeamFixture
 from litterbox.errors import LitterboxError
 from litterbox import layout
@@ -170,7 +170,7 @@ class TestSetup(TeamFixture, unittest.TestCase):
         with self.user("Alex"):
             self.assertEqual(repository.get_user(self.a), "Alex Smith")
             checkout.checkout(self.a, PART)
-        self.assertEqual(registry.load(self.a, PART).history[-1]["by"], "Alex Smith")
+        self.assertEqual(record_store.load(self.a, PART).history[-1]["by"], "Alex Smith")
 
 
 class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
@@ -198,7 +198,7 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
                            lambda: create.new_part(self.b, "Nope")):
                 with self.assertRaises(LitterboxError):
                     action()
-        self.assertEqual(len([p for p in registry.list_pns(self.b)]), 1)
+        self.assertEqual(len([p for p in record_store.list_pns(self.b)]), 1)
 
     def test_adding_bea_lets_her_work(self):
         self.add_bea()

@@ -20,7 +20,7 @@ from litterbox.vault import config
 from litterbox.importing import session as import_session
 from litterbox.importing import importer
 from litterbox.importing import manifest
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 
 
@@ -290,7 +290,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.make_manifest()
         with self.user("Alex"):
             result = self.run_import(cots=True)
-            records = [registry.load(self.a, pn) for pn in result.pns]
+            records = [record_store.load(self.a, pn) for pn in result.pns]
             self.assertTrue(all(r.cots and r.imported for r in records))
             self.assertIn("Imported 4 COTS parts", self.remote_log()[0])
             self.assertEqual(self.status_of(self.a, result.pns[0]).cots, True)

@@ -56,7 +56,9 @@ from litterbox.core import filenames
 from litterbox.core import numbering
 from litterbox.core import part_number
 from litterbox.core import revision_letters
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
@@ -158,7 +160,7 @@ def pair_references(stored, found):
 
 
 def _cad_target(repo, pn, original_path):
-    return str(registry.cad_dir(repo) / filenames.filename(pn, revision_letters.FIRST_REVISION, _extension(original_path)))
+    return str(record_store.cad_dir(repo) / filenames.filename(pn, revision_letters.FIRST_REVISION, _extension(original_path)))
 
 
 def _relative(repo, path):
@@ -598,7 +600,7 @@ def _copy_everything(repo, plan, backend, cancel, progress, log):
 
 def _verify(repo, plan, backend, before, log):
     """The copies must reference only each other, and the originals must be untouched."""
-    cad = registry.cad_dir(repo)
+    cad = record_store.cad_dir(repo)
     for path in plan.order:
         new_path = plan.copies[path]
         if not os.path.exists(new_path):
@@ -690,7 +692,7 @@ class Proposal:
 
 
 def _used_numbers(repo, org):
-    existing = registry.list_pns(repo, org)
+    existing = record_store.list_pns(repo, org)
     return set(existing), {pn.base for pn in existing}
 
 
@@ -714,7 +716,7 @@ def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=Non
 def _family_free_variants(repo, proposal, skip=()):
     """The variant numbers of the family base that nothing is using: not in the vault, and not typed into a row."""
     base, org = proposal.family, proposal.org
-    used = {pn.variant for pn in registry.list_pns(repo, org) if pn.base == base}
+    used = {pn.variant for pn in record_store.list_pns(repo, org) if pn.base == base}
     used |= {e.pn.variant for i, e in enumerate(proposal.entries)
              if e.manual and e.pn.base == base and i not in skip}
     return [v for v in range(part_number.MIN_VARIANT, part_number.MAX_VARIANT + 1) if v not in used]
@@ -778,9 +780,9 @@ def check_proposal(repo, proposal):
             reason = f"{entry.pn} is for a different organization (this vault uses {org})."
         elif entry.pn in taken:
             try:
-                holder = registry.load(repo, entry.pn)
+                holder = record_store.load(repo, entry.pn)
                 reason = f"{entry.pn} is already used by '{holder.name}'."
-            except registry.RegistryError:
+            except record_model.RegistryError:
                 reason = f"{entry.pn} is already used."
         elif entry.pn in claimed:
             reason = f"{entry.pn} is used twice in this import (rows {claimed[entry.pn] + 1} and {index + 1})."
@@ -966,7 +968,7 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
             create.sync_latest(repo)                               # the newest list of part numbers
             org = create._org(repo, org)
             block = pick_block(repo, len(items), org, gap, jitter, rng)
-        except (create.CreateError, config.ConfigError, registry.RegistryError) as e:
+        except (create.CreateError, config.ConfigError, record_model.RegistryError) as e:
             raise ImportFailed(str(e)) from None
         proposal = Proposal([Entry(item, pn, item.name, item.description) for item, pn in zip(items, block)], org)
         _taken, bases = _used_numbers(repo, org)
@@ -1022,7 +1024,7 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
                           renumbered=renumbered)
 
         new_files = [_relative(repo, plan.copies[p]) for p in plan.order]
-        record_paths = [registry.record_relpath(pn) for pn in pns]
+        record_paths = [record_store.record_relpath(pn) for pn in pns]
         token = uuid.uuid4().hex[:12]
         noun = "COTS parts" if prepared.cots else "parts"
         message = ((f"Imported {len(pns)} {noun}: {min(pns)} to {max(pns)}" if len(pns) > 1
@@ -1106,10 +1108,10 @@ def find_duplicates(repo, prepared):
 
     # names already in the vault
     by_name = {}
-    for pn in registry.list_pns(repo, org):
+    for pn in record_store.list_pns(repo, org):
         try:
-            by_name.setdefault(registry.load(repo, pn).name, []).append(pn)
-        except registry.RegistryError:
+            by_name.setdefault(record_store.load(repo, pn).name, []).append(pn)
+        except record_model.RegistryError:
             continue
 
     # same contents: only look at vault files whose size and type match
@@ -1122,7 +1124,7 @@ def find_duplicates(repo, prepared):
             continue
         wanted.setdefault((size, _extension(main.path)), []).append(index)
     hashes = {}
-    for pn, revisions in registry.cad_index(repo).items():
+    for pn, revisions in record_files.cad_index(repo).items():
         for rel in sorted(f for files in revisions.values() for f in files):
             path = Path(repo) / rel
             try:

@@ -11,7 +11,9 @@ from litterbox.errors import LitterboxError
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_model
+from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 
 
@@ -23,19 +25,19 @@ def _record_edited_by_hand(repo, pn, user):
     the fix away. A record that has been broken by a hand edit raises an error
     instead of returning False, so a broken edit is never silently discarded.
     """
-    record_path = registry.record_relpath(pn)
+    record_path = record_store.record_relpath(pn)
     try:
         head_text = runner.run(["git", "show", f"HEAD:{record_path}"], repo, quiet=True)
     except LitterboxError:
         return True                                   # not committed yet, so it is new
     try:
-        committed = registry.Record.from_dict(yaml.safe_load(head_text))
+        committed = record_model.Record.from_dict(yaml.safe_load(head_text))
     except yaml.YAMLError:
         return True
 
-    current = registry.load(repo, pn)                 # raises a clear error if the file is broken
+    current = record_store.load(repo, pn)                 # raises a clear error if the file is broken
     history = list(current.history)
-    if history and history[-1].get("event") == registry.EVENT_CHECKED_OUT and history[-1].get("by") == user:
+    if history and history[-1].get("event") == record_model.EVENT_CHECKED_OUT and history[-1].get("by") == user:
         history = history[:-1]                        # the entry added by checkout() is expected
     current.history = history
     return current.to_dict() != committed.to_dict()
@@ -52,9 +54,9 @@ class ChangeReport:
 
 def build_change_report(repo, pn, user, cad=None, modified=None):
     """`cad` and `modified` may be handed in when several parts are looked at together (they are read once)."""
-    record_path = registry.record_relpath(pn)
+    record_path = record_store.record_relpath(pn)
     if cad is None:
-        cad = registry.cad_files(repo, pn)
+        cad = record_files.cad_files(repo, pn)
     if modified is None:
         modified = repository.get_modified(repo)
     changed = [f for f in cad if f.lower() in modified]
@@ -82,9 +84,9 @@ def change_report(repo, pn):
 def change_reports(repo, pns):
     """change_report() for several parts, reading the vault's state once. Returns [(pn, ChangeReport)]."""
     repository.validate_repo(repo)
-    user, modified, index = repository.get_user(repo), repository.get_modified(repo), registry.cad_index(repo)
+    user, modified, index = repository.get_user(repo), repository.get_modified(repo), record_files.cad_index(repo)
     reports = []
     for pn in batch_core.unique_pns(pns):
-        cad = index.get(pn, {}).get(registry.load(repo, pn).revision, [])
+        cad = index.get(pn, {}).get(record_store.load(repo, pn).revision, [])
         reports.append((pn, build_change_report(repo, pn, user, cad, modified)))
     return reports

@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from litterbox.importing import manifest as mf
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.importing import scan
 from litterbox.core.part_number import PN
 
@@ -211,7 +211,7 @@ class TestAlreadyImported(ScanTestCase):
     def test_files_imported_before_are_left_out_by_default(self):
         old = self.put("a/valve.SLDPRT", "v")
         self.put("a/new.SLDPRT", "n")
-        registry.create_record(self.repo, PN("HCR", 5, 1), "valve", "Alex", imported=True, import_path=str(old))
+        record_store.create_record(self.repo, PN("HCR", 5, 1), "valve", "Alex", imported=True, import_path=str(old))
         items = self.by_name(self.run_scan(repo=self.repo))
         self.assertFalse(items["valve"].include)
         self.assertEqual(items["valve"].already_imported_as, "HCR-00005-001")

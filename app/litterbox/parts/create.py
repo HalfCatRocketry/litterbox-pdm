@@ -38,7 +38,8 @@ from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.core import part_number
-from litterbox.records import registry
+from litterbox.records import record_model
+from litterbox.records import record_store
 from dataclasses import dataclass
 
 from litterbox.core.part_number import PN, PNError, check_base, check_new_base, check_org, check_variant, format_base, format_variant
@@ -65,7 +66,7 @@ def _friendly(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (registry.RegistryError, config.ConfigError, PNError) as e:
+        except (record_model.RegistryError, config.ConfigError, PNError) as e:
             raise CreateError(str(e)) from e
     return wrapper
 
@@ -103,12 +104,12 @@ def _sync(repo):
 def _describe(repo, org, base, variant=None):
     """Who already has this number, for error messages."""
     try:
-        records = registry.load_variants(repo, base, org)
-    except registry.RegistryError:
+        records = record_store.load_variants(repo, base, org)
+    except record_model.RegistryError:
         return ""
     if variant is not None:
         records = [r for r in records if r.pn.variant == variant]
-    shown = ", ".join(f"{r.pn}: {r.name}" + (" [void]" if r.status == registry.STATUS_VOID else "")
+    shown = ", ".join(f"{r.pn}: {r.name}" + (" [void]" if r.status == record_model.STATUS_VOID else "")
                       for r in records[:3])
     if len(records) > 3:
         shown += f", and {len(records) - 3} more"
@@ -161,10 +162,10 @@ def _create(repo, name, description, org, choose):
     last_error = None
     for _attempt in range(ATTEMPTS):
         pn = choose(org)
-        record_path = registry.record_relpath(pn)
+        record_path = record_store.record_relpath(pn)
         try:
-            registry.create_record(repo, pn, name, user, description=description)
-        except registry.PNExistsError:
+            record_store.create_record(repo, pn, name, user, description=description)
+        except record_model.PNExistsError:
             raise CreateError(f"{pn} already exists in your copy of the vault.") from None
 
         committed = False
@@ -223,7 +224,7 @@ def _plan_batch(repo, specs, org):
     the lowest unused part numbers from the org's start number, skipping anything
     used in the vault or asked for elsewhere in this batch.
     """
-    existing = registry.list_pns(repo, org)
+    existing = record_store.list_pns(repo, org)
     taken = {(pn.base, pn.variant) for pn in existing}
     bases_used = {pn.base for pn in existing}
     start = config.get_start_number(repo)
@@ -337,7 +338,7 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
     repository.validate_repo(repo)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "create")
-    record_paths = [registry.record_relpath(pn) for pn in planned]
+    record_paths = [record_store.record_relpath(pn) for pn in planned]
     extras = list(extra_paths)
     pathspec = committing.write_pathspec(record_paths + extras)
     written, committed = [], False
@@ -345,11 +346,11 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
         try:
             for pn, spec in zip(planned, specs):
                 try:
-                    registry.create_record(repo, pn, spec.name, user, description=spec.description,
+                    record_store.create_record(repo, pn, spec.name, user, description=spec.description,
                                            cots=spec.cots, imported=spec.imported, import_path=spec.import_path)
-                except registry.PNExistsError:
+                except record_model.PNExistsError:
                     raise NumbersTaken(f"{pn} already exists in your copy of the vault.") from None
-                written.append(registry.record_relpath(pn))
+                written.append(record_store.record_relpath(pn))
             first, last = min(planned), max(planned)
             text = message or (f"Created {len(planned)} parts: {first} to {last}" if len(planned) > 1
                                else f"{first}: Created - {specs[0].name}")
@@ -409,17 +410,17 @@ def create_many(repo, specs, org=None, message=None):
     last_error = None
     for _attempt in range(ATTEMPTS):
         planned = _plan_batch(repo, cleaned, org)
-        record_paths = [registry.record_relpath(pn) for pn in planned]
+        record_paths = [record_store.record_relpath(pn) for pn in planned]
         pathspec = committing.write_pathspec(record_paths)
         written, committed = [], False
         try:
             for pn, spec in zip(planned, cleaned):
                 try:
-                    registry.create_record(repo, pn, spec.name, user, description=spec.description,
+                    record_store.create_record(repo, pn, spec.name, user, description=spec.description,
                                            cots=spec.cots, imported=spec.imported, import_path=spec.import_path)
-                except registry.PNExistsError:
+                except record_model.PNExistsError:
                     raise CreateError(f"{pn} already exists in your copy of the vault.") from None
-                written.append(registry.record_relpath(pn))
+                written.append(record_store.record_relpath(pn))
             first, last = min(planned), max(planned)
             text = message or (f"Created {len(planned)} parts: {first} to {last}" if len(planned) > 1
                                else f"{first}: Created - {cleaned[0].name}")
@@ -476,10 +477,10 @@ def new_part(repo, name, description="", base=None, variant=None, org=None):
     def choose(org):
         number = manual_base
         if number is None:
-            number = check_new_base(registry.next_free_base(repo, org, config.get_start_number(repo)))
+            number = check_new_base(record_store.next_free_base(repo, org, config.get_start_number(repo)))
         if manual_variant is None:
-            return PN(org, number, registry.next_free_variant(repo, number, org))
-        if manual_variant in registry.used_variants(repo, number, org):
+            return PN(org, number, record_store.next_free_variant(repo, number, org))
+        if manual_variant in record_store.used_variants(repo, number, org):
             raise CreateError(
                 f"{PN(org, number, manual_variant)} is already in use"
                 f"{_describe(repo, org, number, manual_variant)}. "
@@ -501,7 +502,7 @@ def new_variant(repo, base, name, description="", variant=None, org=None):
 def suggest_part_number(repo, org=None):
     """The part number New Part would use right now if the box were left empty."""
     repository.validate_repo(repo)
-    return registry.next_free_base(repo, _org(repo, org), config.get_start_number(repo))
+    return record_store.next_free_base(repo, _org(repo, org), config.get_start_number(repo))
 
 
 @_friendly
@@ -513,9 +514,9 @@ def suggest_numbers(repo, base=None, org=None):
     """
     repository.validate_repo(repo)
     org = _org(repo, org)
-    number = check_base(base) if base is not None else registry.next_free_base(
+    number = check_base(base) if base is not None else record_store.next_free_base(
         repo, org, config.get_start_number(repo))
-    return number, registry.next_free_variant(repo, number, org)
+    return number, record_store.next_free_variant(repo, number, org)
 
 
 @dataclass
@@ -537,14 +538,14 @@ def check_numbers(repo, base=None, variant=None, org=None):
     repository.validate_repo(repo)
     org = _org(repo, org)
     number = check_new_base(base) if base is not None else check_new_base(
-        registry.next_free_base(repo, org, config.get_start_number(repo)))
-    chosen = check_variant(variant) if variant is not None else registry.next_free_variant(repo, number, org)
+        record_store.next_free_base(repo, org, config.get_start_number(repo)))
+    chosen = check_variant(variant) if variant is not None else record_store.next_free_variant(repo, number, org)
     pn = PN(org, number, chosen)
-    if not registry.exists(repo, pn):
+    if not record_store.exists(repo, pn):
         return NumberCheck(pn)
     try:
-        record = registry.load(repo, pn)
-    except registry.RegistryError:
+        record = record_store.load(repo, pn)
+    except record_model.RegistryError:
         return NumberCheck(pn, True, "(its record can't be read)", "")
     return NumberCheck(pn, True, record.name, record.status)
 
@@ -553,14 +554,14 @@ def check_numbers(repo, base=None, variant=None, org=None):
 def suggest_variant_number(repo, base, org=None):
     """The variant number New Part would use right now for this part number."""
     repository.validate_repo(repo)
-    return registry.next_free_variant(repo, check_base(base), _org(repo, org))
+    return record_store.next_free_variant(repo, check_base(base), _org(repo, org))
 
 
 @_friendly
 def list_variants(repo, base, org=None):
     """The records of every variant of a part number, in order (for showing what already exists)."""
     repository.validate_repo(repo)
-    return registry.load_variants(repo, check_base(base), _org(repo, org))
+    return record_store.load_variants(repo, check_base(base), _org(repo, org))
 
 
 # ---------------------------------------------------------------------------

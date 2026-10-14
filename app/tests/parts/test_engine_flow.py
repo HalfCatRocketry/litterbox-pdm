@@ -16,7 +16,7 @@ from unittest import mock
 
 from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable
 
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.errors import LitterboxError, NoChangesError
 from litterbox.parts import checkin
 from litterbox.parts import checkout
@@ -47,7 +47,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(sorted(self.locks(self.a)), sorted([DRW.lower(), PRT.lower(), REC.lower()]))
             for rel in (PRT, DRW, REC):
                 self.assertTrue(is_writable(self.a / rel), rel)
-            history = registry.load(self.a, PART).history
+            history = record_store.load(self.a, PART).history
             self.assertEqual(history[-1]["event"], "checked_out")
             self.assertEqual(history[-1]["files"], [DRW, PRT])
             self.assertEqual(self.status_of(self.a).kind, "mine")
@@ -89,7 +89,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
                 with self.assertRaises(LitterboxError):
                     checkout.checkout(self.a, PART)
             self.assertEqual(self.locks(self.a), {})
-            self.assertEqual(registry.load(self.a, PART).history[-1]["event"], "created")
+            self.assertEqual(record_store.load(self.a, PART).history[-1]["event"], "created")
 
     # -- check in ----------------------------------------------------------
     def test_checkin_uploads_logs_and_unlocks(self):
@@ -103,7 +103,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             for rel in (PRT, DRW, REC):
                 self.assertFalse(is_writable(self.a / rel), rel)
             self.assertIn("HCR-00001-001: Added fillet", self.remote_log())
-            last = registry.load(self.a, PART).history[-1]
+            last = record_store.load(self.a, PART).history[-1]
             self.assertEqual((last["event"], last["comment"], last["files"]), ("checked_in", "Added fillet", [PRT]))
             self.assertEqual(self.status_of(self.a).kind, "ok")
         with self.user("Bea"):
@@ -132,7 +132,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(ctx.exception.pn, PART)
             self.assertEqual(len(self.locks(self.a)), 3)                          # still checked out
             self.assertTrue(is_writable(self.a / PRT))
-            self.assertEqual(registry.load(self.a, PART).history[-1]["event"], "checked_out")
+            self.assertEqual(record_store.load(self.a, PART).history[-1]["event"], "checked_out")
         self.assertEqual(len(self.remote_log()), commits_before)
 
     def test_checkin_anyway_records_uploads_and_unlocks(self):
@@ -144,14 +144,14 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(result.files, [])
             self.assertEqual(self.locks(self.a), {})
             self.assertFalse(is_writable(self.a / PRT))
-            last = registry.load(self.a, PART).history[-1]
+            last = record_store.load(self.a, PART).history[-1]
             self.assertEqual((last["event"], last["files"], last["comment"]), ("checked_in", [], "Looked it over"))
-            self.assertEqual(registry.load(self.a, PART).history[-2]["event"], "checked_out")
+            self.assertEqual(record_store.load(self.a, PART).history[-2]["event"], "checked_out")
         self.assertEqual(len(self.remote_log()), commits_before + 1)
         self.assertIn("HCR-00001-001: Looked it over", self.remote_log())
         with self.user("Bea"):
             get_latest.get_latest(self.b)
-            self.assertEqual(registry.load(self.b, PART).history[-1]["event"], "checked_in")
+            self.assertEqual(record_store.load(self.b, PART).history[-1]["event"], "checked_in")
 
     def test_save_progress_then_check_in_asks_instead_of_undoing(self):
         with self.user("Alex"):
@@ -290,13 +290,13 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             result = checkin.checkin(self.a, PART, "Fixed my name")
             self.assertTrue(result.uploaded)
             self.assertEqual(result.files, [])                          # no CAD files changed
-            self.assertEqual(registry.load(self.a, PART).created_by, "Alex Smith")
-            self.assertEqual(registry.load(self.a, PART).history[-1]["event"], "checked_in")
+            self.assertEqual(record_store.load(self.a, PART).created_by, "Alex Smith")
+            self.assertEqual(record_store.load(self.a, PART).history[-1]["event"], "checked_in")
             self.assertEqual(self.locks(self.a), {})
             self.assertIn("HCR-00001-001: Fixed my name", self.remote_log())
         with self.user("Bea"):
             get_latest.get_latest(self.b)
-            self.assertEqual(registry.load(self.b, PART).created_by, "Alex Smith")
+            self.assertEqual(record_store.load(self.b, PART).created_by, "Alex Smith")
 
     def test_hand_edited_record_with_save_progress_keeps_the_lock(self):
         with self.user("Alex"):
@@ -306,7 +306,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
                 "Front upright", "Front upright, right hand"), encoding="utf-8")
             self.assertTrue(checkin.checkin(self.a, PART, "Better description", keep_lock=True).uploaded)
             self.assertEqual(len(self.locks(self.a)), 3)
-            self.assertEqual(registry.load(self.a, PART).name, "Front upright, right hand")
+            self.assertEqual(record_store.load(self.a, PART).name, "Front upright, right hand")
 
     def test_broken_record_edit_is_never_discarded(self):
         with self.user("Alex"):
@@ -329,7 +329,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual((self.a / PRT).read_bytes(), b"version 1")
             self.assertTrue((self.a / "cad/HCR-00001-001_A.STEP").exists())   # not deleted
             self.assertEqual(self.locks(self.a), {})
-            self.assertEqual(registry.load(self.a, PART).history[-1]["event"], "created")
+            self.assertEqual(record_store.load(self.a, PART).history[-1]["event"], "created")
             self.assertFalse(is_writable(self.a / PRT))
 
     # -- a brand-new part, saved before it was checked out -------------------
@@ -366,7 +366,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertTrue(plan.ok, plan.problems)
             self.assertEqual(plan.files, [DRW, PRT])
             self.assertEqual(lifecycle.release(self.a, PART), [DRW, PRT])
-            self.assertEqual(registry.load(self.a, PART).status, "released")
+            self.assertEqual(record_store.load(self.a, PART).status, "released")
             self.assertEqual(self.locks(self.a), {})
             self.assertIn("HCR-00001-001: Released", self.remote_log())
             self.assertFalse(is_writable(self.a / REC))
@@ -381,7 +381,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
                 lifecycle.reopen(self.b, PART, "  ")
             self.assertEqual(self.locks(self.b), {})
             lifecycle.reopen(self.b, PART, "Bore diameter wrong")
-            record = registry.load(self.b, PART)
+            record = record_store.load(self.b, PART)
             self.assertEqual(record.status, "in_work")
             self.assertEqual(record.history[-1]["reason"], "Bore diameter wrong")
             self.assertIn("HCR-00001-001: Unreleased - Bore diameter wrong", self.remote_log())
@@ -416,7 +416,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             plan = planning.make_cots_plan(self.a, PART)
             self.assertTrue(plan.ok, plan.problems)
             self.assertEqual(lifecycle.make_cots(self.a, PART), [DRW, PRT])
-            record = registry.load(self.a, PART)
+            record = record_store.load(self.a, PART)
             self.assertTrue(record.cots)
             self.assertEqual(record.status, "in_work")
             self.assertEqual(record.history[-1]["event"], "made_cots")
@@ -443,7 +443,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertTrue(any("checked out by Alex" in p for p in plan.problems), plan.problems)
             with self.assertRaises(LitterboxError):
                 lifecycle.make_cots(self.b, PART)
-            self.assertFalse(registry.load(self.b, PART).cots)
+            self.assertFalse(record_store.load(self.b, PART).cots)
         with self.user("Alex"):
             self.assertTrue(any("not checked in" in p for p in planning.make_cots_plan(self.a, PART).problems))
             checkin.checkin(self.a, PART, "Changed")
@@ -466,7 +466,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             with self.assertRaises(LitterboxError):
                 lifecycle.reopen(self.b, PART, " ")
             lifecycle.reopen(self.b, PART, "Not a purchased part")
-            self.assertFalse(registry.load(self.b, PART).cots)
+            self.assertFalse(record_store.load(self.b, PART).cots)
             self.assertEqual(self.status_of(self.b).kind, "ok")
             self.assertIn("HCR-00001-001: Unreleased - Not a purchased part", self.remote_log())
             checkout.checkout(self.b, PART)
@@ -477,13 +477,13 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             for rev in revisions:
                 (self.a / f"cad/HCR-{base:05d}-001_{rev}.SLDPRT").write_bytes(f"rev {rev}".encode())
-            record = registry.load(self.a, pn)
+            record = record_store.load(self.a, pn)
             record.revision, record.released_revision = working, released
             if released == working:
                 record.status = "released"
             path = self.a / f"PN-logs/HCR-{base:05d}-001.yaml"
             path.chmod(0o644)
-            registry.save(self.a, record)
+            record_store.save(self.a, record)
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "Set up revisions")
             git(self.a, "push")
@@ -513,7 +513,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertTrue(plan.ok, plan.problems)
             self.assertEqual(plan.files, ["cad/HCR-00002-001_B.SLDPRT"])
             lifecycle.release(self.a, pn)
-            record = registry.load(self.a, pn)
+            record = record_store.load(self.a, pn)
             self.assertEqual((record.revision, record.released_revision, record.status), ("B", "B", "released"))
             self.assertEqual(record.history[-1]["revision"], "B")
             self.assertEqual(self.status_of(self.a, pn).kind, "released")
@@ -531,8 +531,8 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             with self.assertRaises(LitterboxError):
                 part_details.edit_details(self.a, PART, "New name", "")           # not checked out
             checkout.checkout(self.a, PART)
-            self.assertFalse(part_details.edit_details(self.a, PART, registry.load(self.a, PART).name,
-                                              registry.load(self.a, PART).description))
+            self.assertFalse(part_details.edit_details(self.a, PART, record_store.load(self.a, PART).name,
+                                              record_store.load(self.a, PART).description))
             self.assertTrue(part_details.edit_details(self.a, PART, "Renamed part", "A description"))
             row = self.status_of(self.a)
             self.assertEqual((row.name, row.description), ("Renamed part", "A description"))
@@ -541,7 +541,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             self.assertIn("HCR-00001-001: Fixed the name", self.remote_log())
         with self.user("Bea"):
             get_latest.get_latest(self.b)
-            record = registry.load(self.b, PART)
+            record = record_store.load(self.b, PART)
             self.assertEqual((record.name, record.description), ("Renamed part", "A description"))
             self.assertIn("edited", [e["event"] for e in record.history])
             with self.assertRaises(LitterboxError):                       # Alex no longer holds it
@@ -550,10 +550,10 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
     def test_undo_checkout_throws_away_edited_details(self):
         with self.user("Alex"):
             checkout.checkout(self.a, PART)
-            original = registry.load(self.a, PART).name
+            original = record_store.load(self.a, PART).name
             part_details.edit_details(self.a, PART, "Oops", "")
             undoing.undo_checkout(self.a, PART)
-            self.assertEqual(registry.load(self.a, PART).name, original)
+            self.assertEqual(record_store.load(self.a, PART).name, original)
 
     def test_cots_part_can_still_be_voided(self):
         with self.user("Alex"):
@@ -572,7 +572,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             lifecycle.void(self.a, pn, "Never needed")
             self.assertEqual(self.status_of(self.a, pn).kind, "void")
-            self.assertIn(2, registry.used_bases(self.a))
+            self.assertIn(2, record_store.used_bases(self.a))
             with self.assertRaises(LitterboxError):
                 checkout.checkout(self.a, pn)
             self.assertEqual(self.locks(self.a), {})
@@ -589,7 +589,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
             with mock.patch.object(runner, "run", failing):
                 with self.assertRaises(LitterboxError):
                     lifecycle.release(self.a, PART)
-            record = registry.load(self.a, PART)
+            record = record_store.load(self.a, PART)
             self.assertEqual(record.status, "in_work")
             self.assertEqual(len(record.history), 1)
             self.assertEqual(self.locks(self.a), {})

@@ -5,7 +5,7 @@ from unittest import mock
 from tests.support.vault_fixture import PART, SKIP_ON_WINDOWS, TwoUserVault, git
 
 from litterbox.team import people
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.workflows import workflow as wf
 from litterbox.core.part_number import PN
 from litterbox import diagnostics
@@ -51,7 +51,7 @@ class Fixture(TwoUserVault):
 
     def second_part(self):
         (self.a / PRT2).write_bytes(b"part two")
-        registry.create_record(self.a, PART2, "Second", "Alex")
+        record_store.create_record(self.a, PART2, "Second", "Alex")
         git(self.a, "add", ".")
         git(self.a, "commit", "-m", "Second part")
         git(self.a, "push")
@@ -71,7 +71,7 @@ class Fixture(TwoUserVault):
 
     def record(self, pn=PART):
         self.get_latest("Alex")                # the newest copy, whoever made the last change
-        return registry.load(self.a, pn)
+        return record_store.load(self.a, pn)
 
     def request(self, action=wf.RELEASE, pns=(PART,), name="T", assign=("bea", "alex"), **kwargs):
         if not wf.templates_for(self.a, action):

@@ -8,7 +8,7 @@ from unittest import mock
 from litterbox.parts import create
 from litterbox.importing import importer
 from litterbox.core import part_number
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 
 
@@ -19,7 +19,7 @@ def entry(base, variant=1, manual=False):
 class FamilyNumbering(unittest.TestCase):
     def setUp(self):
         self.existing = []
-        for target, value in ((registry, "list_pns"), (create, "sync_latest")):
+        for target, value in ((record_store, "list_pns"), (create, "sync_latest")):
             patcher = mock.patch.object(target, value, side_effect=self._fake(value))
             patcher.start()
             self.addCleanup(patcher.stop)

@@ -33,7 +33,7 @@ from pathlib import Path
 import yaml
 
 from litterbox.core import part_number
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox import version
 from litterbox.core.part_number import PNError, check_org
 from litterbox import layout
@@ -81,7 +81,7 @@ def get_org(repo):
         except PNError as e:
             raise ConfigError(f"The org code in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} is not valid. {e}")
 
-    orgs = sorted({pn.org for pn in registry.list_pns(repo)})
+    orgs = sorted({pn.org for pn in record_store.list_pns(repo)})
     if len(orgs) == 1:
         return orgs[0]
     if not orgs:
@@ -305,5 +305,5 @@ def save(repo, org=None, start_number=None, base_digits=None, variant_digits=Non
 
 
 def _has_records(repo):
-    folder = registry.log_dir(repo)
+    folder = record_store.log_dir(repo)
     return folder.is_dir() and any(folder.glob("*.yaml"))

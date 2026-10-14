@@ -14,7 +14,10 @@ from litterbox.core.part_number import PN
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import repository
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
 
 
 @dataclass
@@ -39,18 +42,18 @@ class PartStatus:
 def get_status(repo):
     """One PartStatus per part number that has a record."""
     repository.validate_repo(repo)
-    index = registry.cad_index(repo)
+    index = record_files.cad_index(repo)
     with ThreadPoolExecutor(max_workers=2) as pool:      # two independent git calls: do them at the same time
         locks_job = pool.submit(lfs_locks.get_locks, repo)
         modified_job = pool.submit(repository.get_modified, repo)
         locks, modified = locks_job.result(), modified_job.result()
 
     rows = []
-    for pn in registry.list_pns(repo):
+    for pn in record_store.list_pns(repo):
         revisions = index.get(pn, {})
         try:
-            record = registry.load(repo, pn)
-        except registry.RegistryError as e:
+            record = record_store.load(repo, pn)
+        except record_model.RegistryError as e:
             rows.append(PartStatus(pn, "", "", f"Unreadable record: {e}", "error",
                                    files=sorted(f for fs in revisions.values() for f in fs), revisions=revisions))
             continue
@@ -58,21 +61,21 @@ def get_status(repo):
         every_file = [f for fs in revisions.values() for f in fs]
 
         # The record lock is the one that counts; fall back to any file lock.
-        lock = locks.get(registry.record_relpath(pn).lower())
+        lock = locks.get(record_store.record_relpath(pn).lower())
         if lock is None:
             lock = next((locks[f.lower()] for f in files if f.lower() in locks), None)
         changed = any(f.lower() in modified for f in every_file)
         not_downloaded = any(read_only.is_pointer(Path(repo) / f) for f in files)
         owner = lock[1] if lock else ""
 
-        if record.status == registry.STATUS_VOID:
+        if record.status == record_model.STATUS_VOID:
             state, kind = "Void", "void"
         elif not_downloaded:
             state, kind = "Not downloaded", "missing"
         elif record.pending:
             from litterbox.workflows import workflow
             state, kind = workflow.describe_pending(record.pending), "pending"
-        elif record.status == registry.STATUS_RELEASED:
+        elif record.status == record_model.STATUS_RELEASED:
             if changed:
                 state, kind = "Released, but its files were modified", "stray"
             else:
@@ -93,9 +96,9 @@ def get_status(repo):
         else:
             state, kind = "Available", "ok"
 
-        if record.released_revision and record.status != registry.STATUS_RELEASED:
+        if record.released_revision and record.status != record_model.STATUS_RELEASED:
             state += f" (Rev {record.released_revision} released)"
-        outdated = any(registry.references_need_update(record, rev, fs) for rev, fs in revisions.items())
+        outdated = any(record_lifecycle.references_need_update(record, rev, fs) for rev, fs in revisions.items())
         if outdated and kind not in ("error", "missing"):
             state += " (references need updating)"
 

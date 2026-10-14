@@ -21,7 +21,7 @@ from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.importing import importer
 from litterbox.importing import manifest
-from litterbox.records import registry
+from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from tests.support.import_fixture import ImportFixture
 from litterbox.errors import LitterboxError
@@ -44,7 +44,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             # the 4 items are numbered 2..5 in manifest order; the drawing shares its model's number
             names = self.cad_names()
             self.assertEqual(len([n for n in names if n.endswith(".SLDDRW")]), 2)     # the old drawing + the imported one
-            by_name = {registry.load(self.a, pn).name: pn for pn in result.pns}
+            by_name = {record_store.load(self.a, pn).name: pn for pn in result.pns}
             self.assertEqual(sorted(by_name), ["p1", "p3", "sub", "top"])
             top = by_name["top"]
             top_text = (cad / f"{top}_A.SLDASM").read_text()
@@ -56,7 +56,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             sub_text = (cad / f"{by_name['sub']}_A.SLDASM").read_text()
             self.assertIn(f"ref: {cad / (str(by_name['p3']) + '_A.SLDPRT')}", sub_text)
             # records
-            record = registry.load(self.a, top)
+            record = record_store.load(self.a, top)
             self.assertTrue(record.imported)
             self.assertFalse(record.cots)
             self.assertEqual(record.description, "top.SLDASM, top.SLDDRW")
@@ -229,9 +229,9 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             self.assertNotIn("HCR-00002-001_A.SLDASM", names)                # nothing under the lost numbers
             self.assertFalse(any(n.startswith("HCR-00002") for n in names))
             self.assertEqual(len(self.fake.copied), 10)                    # copied twice
-            self.assertEqual(registry.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")   # her record was left alone
+            self.assertEqual(record_store.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")   # her record was left alone
             # and the references inside point at the final names
-            top = next(pn for pn in result.pns if registry.load(self.a, pn).name == "top")
+            top = next(pn for pn in result.pns if record_store.load(self.a, pn).name == "top")
             for line in (self.a / "cad" / f"{top}_A.SLDASM").read_text().splitlines():
                 if line.startswith("ref: "):
                     self.assertTrue(os.path.exists(line[5:]), line)
@@ -256,7 +256,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         with self.user("Alex"):
             rel_file, rel_record = "cad/HCR-00002-001_A.SLDPRT", "PN-logs/HCR-00002-001.yaml"
             (self.a / rel_file).write_text("copy")
-            registry.create_record(self.a, PN("HCR", 2, 1), "Crashed", "Alex")
+            record_store.create_record(self.a, PN("HCR", 2, 1), "Crashed", "Alex")
             importer._write_journal(self.a, "committing", "tok2", [rel_file], [rel_record])
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "Imported crash\n\nLitterbox-Import: tok2")
@@ -268,7 +268,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         with self.user("Alex"):
             rel_file, rel_record = "cad/HCR-00002-001_A.SLDPRT", "PN-logs/HCR-00002-001.yaml"
             (self.a / rel_file).write_text("copy")
-            registry.create_record(self.a, PN("HCR", 2, 1), "Done", "Alex")
+            record_store.create_record(self.a, PN("HCR", 2, 1), "Done", "Alex")
             importer._write_journal(self.a, "committing", "tok3", [rel_file], [rel_record])
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "Imported done\n\nLitterbox-Import: tok3")
@@ -309,7 +309,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             result = self.run_import(allow_external=True)
             self.assertEqual(len(result.pns), 3)
             self.assertTrue(any("outside the import" in w for w in result.warnings))
-            sub = next(pn for pn in result.pns if registry.load(self.a, pn).name == "sub")
+            sub = next(pn for pn in result.pns if record_store.load(self.a, pn).name == "sub")
             self.assertIn(str(self.src / "parts" / "p1.SLDPRT"), (self.a / "cad" / f"{sub}_A.SLDASM").read_text())
 
     def test_a_second_import_points_at_parts_imported_the_first_time(self):
@@ -325,8 +325,8 @@ class ImportFlow(ImportFixture, unittest.TestCase):
                 item.include = item.name in ("sub", "top")
             manifest.save(mf, self.manifest_path)
             second = self.run_import()
-            sub = next(pn for pn in second.pns if registry.load(self.a, pn).name == "sub")
-            p3 = next(pn for pn in first.pns if registry.load(self.a, pn).name == "p3")
+            sub = next(pn for pn in second.pns if record_store.load(self.a, pn).name == "sub")
+            p3 = next(pn for pn in first.pns if record_store.load(self.a, pn).name == "p3")
             self.assertIn(str(self.a / "cad" / f"{p3}_A.SLDPRT"), (self.a / "cad" / f"{sub}_A.SLDASM").read_text())
 
     def test_bad_manifests_and_missing_files_stop_before_anything_happens(self):
@@ -438,7 +438,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             self.assertEqual(result.pns[1], PN("HCR", 500, 2))
             self.assertTrue((self.a / "cad" / f"HCR-00500-002{Path(result.plan.order[0]).suffix}").exists()
                             or any(n.startswith("HCR-00500-002") for n in self.cad_names()))
-            record = registry.load(self.a, result.pns[0])
+            record = record_store.load(self.a, result.pns[0])
             self.assertEqual((record.name, record.description), ("Renamed by hand", "my notes"))
             saved = manifest.load(self.manifest_path)
             self.assertIn("Renamed by hand", [i.name for i in saved.items])

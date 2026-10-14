@@ -13,7 +13,8 @@ from pathlib import Path
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
-from litterbox.records import registry
+from litterbox.records import record_files
+from litterbox.records import record_store
 
 
 def is_pointer(path):
@@ -45,9 +46,9 @@ def enforce_read_only(repo):
     except LitterboxError:
         diagnostics.LOG("WARNING: skipped the read-only check because locks could not be read.")
         return
-    index = registry.cad_index(repo)
-    for pn in registry.list_pns(repo):
+    index = record_files.cad_index(repo)
+    for pn in record_store.list_pns(repo):
         every_file = [f for files in index.get(pn, {}).values() for f in files]
-        for rel in every_file + [registry.record_relpath(pn)]:
+        for rel in every_file + [record_store.record_relpath(pn)]:
             if not lfs_locks.is_mine(locks, rel):
                 _set_read_only(Path(repo) / rel)
