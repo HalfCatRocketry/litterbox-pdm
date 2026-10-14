@@ -36,11 +36,8 @@ import yaml
 
 from litterbox.core.pn import (FIRST_REVISION, PN, PNError, check_revision, next_base, next_revision, next_variant, parse, parse_filename,
                 parse_short, revision_number, try_parse)
+from litterbox import layout
 
-LOG_DIR_NAME = "PN-logs"
-CAD_DIR_NAME = "cad"
-CANCELLED_DIR_NAME = "cancelled-revs"       # revisions that were cancelled before release are kept here
-CANCELLED_PREFIX = "CANCELLED_"
 
 STATUS_IN_WORK = "in_work"
 STATUS_RELEASED = "released"
@@ -288,15 +285,15 @@ def _dump(record):
 # ---------------------------------------------------------------------------
 
 def log_dir(repo):
-    return Path(repo) / LOG_DIR_NAME
+    return Path(repo) / layout.LOG_DIR_NAME
 
 
 def cad_dir(repo):
-    return Path(repo) / CAD_DIR_NAME
+    return Path(repo) / layout.CAD_DIR_NAME
 
 
 def cancelled_dir(repo):
-    return Path(repo) / CANCELLED_DIR_NAME
+    return Path(repo) / layout.CANCELLED_DIR_NAME
 
 
 def record_path(repo, pn):
@@ -462,7 +459,7 @@ def cad_index(repo):
             file_pn, revision, _ext = parse_filename(path.name)
         except PNError:
             continue
-        index.setdefault(file_pn, {}).setdefault(revision, []).append(f"{CAD_DIR_NAME}/{path.name}")
+        index.setdefault(file_pn, {}).setdefault(revision, []).append(f"{layout.CAD_DIR_NAME}/{path.name}")
     for revisions in index.values():
         for files in revisions.values():
             files.sort()

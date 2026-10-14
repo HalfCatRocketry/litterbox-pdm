@@ -19,13 +19,11 @@ the vault, so a crash or a lost race can be cleaned up exactly, without touching
 Both need SolidWorks to copy the files (the same copy and re-point calls the importer uses).
 """
 
-import contextlib
-import json
 import os
 import shutil
 import uuid
 from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from litterbox.importing import importer
 from litterbox.parts import engine as eng
@@ -34,12 +32,13 @@ from litterbox.records import registry
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
+from litterbox import layout
+from litterbox.cad import file_types
+from litterbox.cad.solidworks import com
+from litterbox.util import journal as journal_file
 
 JOURNAL_NAME = "litterbox-revise.json"
 JOURNAL_VERSION = 1
-MODEL_EXTENSIONS = (".sldprt", ".sldasm")
-DRAWING_EXTENSIONS = (".slddrw",)
-SOLIDWORKS_EXTENSIONS = MODEL_EXTENSIONS + DRAWING_EXTENSIONS
 
 
 class RevisionFailed(LitterboxError):
@@ -50,34 +49,8 @@ class RevisionFailed(LitterboxError):
 # Small helpers
 # ---------------------------------------------------------------------------
 
-def _ext(path):
-    return PurePosixPath(str(path).replace("\\", "/")).suffix.lower()
-
-
-def _name(path):
-    return PurePosixPath(str(path).replace("\\", "/")).name
-
-
 def _abs(repo, rel):
     return str(Path(repo) / rel)
-
-
-@contextlib.contextmanager
-def _com_thread():
-    """SolidWorks is reached through COM, which must be switched on in the thread that uses it."""
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except Exception:                                   # not Windows, or no pywin32 (tests)
-        pythoncom = None
-    try:
-        yield
-    finally:
-        if pythoncom is not None:
-            try:
-                pythoncom.CoUninitialize()
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -85,47 +58,36 @@ def _com_thread():
 # ---------------------------------------------------------------------------
 
 def _journal_path(repo):
-    return Path(repo) / ".git" / JOURNAL_NAME
+    return journal_file.path(repo, JOURNAL_NAME)
 
 
 def _write_journal(repo, data):
-    data = dict(data, version=JOURNAL_VERSION)
-    path = _journal_path(repo)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(data, f, indent=1)
-    tmp.replace(path)
+    journal_file.write(repo, JOURNAL_NAME, dict(data, version=JOURNAL_VERSION))
 
 
 def _clear_journal(repo):
-    try:
-        _journal_path(repo).unlink()
-    except FileNotFoundError:
-        pass
+    journal_file.clear(repo, JOURNAL_NAME)
 
 
 def _read_journal(repo):
     path = _journal_path(repo)
-    if not path.exists():
-        return None
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        if data.get("version") != JOURNAL_VERSION:
-            raise ValueError("unknown version")
+        data = journal_file.load(repo, JOURNAL_NAME, JOURNAL_VERSION)
+        if data is None:
+            return None
         journal = {"op": str(data["op"]), "token": str(data["token"]), "record": str(data["record"]),
                    "added": list(data["added"]), "removed": list(data.get("removed", [])),
                    "locked": list(data.get("locked", []))}
     except (OSError, ValueError, KeyError, TypeError) as e:
         raise RevisionFailed(f"The note about an unfinished revise ({path}) can't be read ({e}). "
                              "Delete it by hand if you are sure nothing is running, then try again.") from None
-    folders = (f"{registry.CAD_DIR_NAME}/", f"{registry.CANCELLED_DIR_NAME}/")
+    folders = (f"{layout.CAD_DIR_NAME}/", f"{layout.CANCELLED_DIR_NAME}/")
     for rel in journal["added"] + journal["removed"]:
         if not str(rel).startswith(folders) or ".." in str(rel):
             raise RevisionFailed(f"The note about an unfinished revise lists a file outside the cad and "
                                  f"cancelled-revs folders ({rel}). Litterbox will not touch it. "
                                  f"Check {path} by hand.")
-    if not journal["record"].startswith(f"{registry.LOG_DIR_NAME}/") or ".." in journal["record"]:
+    if not journal["record"].startswith(f"{layout.LOG_DIR_NAME}/") or ".." in journal["record"]:
         raise RevisionFailed(f"The note about an unfinished revise lists a record outside PN-logs. Check {path}.")
     return journal
 
@@ -172,7 +134,7 @@ def _undo(repo, journal, log=print):
         raise RevisionFailed("Some files from an unfinished revise could not be deleted (are they open in "
                              "SolidWorks?). Close them and try again:\n" + "\n".join(problems[:8]))
     try:
-        (Path(repo) / registry.CANCELLED_DIR_NAME).rmdir()        # only succeeds if it is empty
+        (Path(repo) / layout.CANCELLED_DIR_NAME).rmdir()        # only succeeds if it is empty
     except OSError:
         pass
     eng._force_unlock_quietly(repo, journal["locked"] + [record])
@@ -215,7 +177,7 @@ class RevisePlan:
 
 def _revised_name(rel, new_revision):
     file_pn, _rev, ext = pn_module.parse_filename(rel)
-    return f"{registry.CAD_DIR_NAME}/{pn_module.filename(file_pn, new_revision, ext)}"
+    return f"{layout.CAD_DIR_NAME}/{pn_module.filename(file_pn, new_revision, ext)}"
 
 
 def _copy_list(repo, record, files):
@@ -223,14 +185,14 @@ def _copy_list(repo, record, files):
     new_revision = registry.next_free_revision(record)
     copies, kept, problems = [], [], []
     for rel in files:
-        if _ext(rel) in SOLIDWORKS_EXTENSIONS:
+        if file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS:
             new = _revised_name(rel, new_revision)
             copies.append((rel, new))
             if (Path(repo) / new).exists():
                 problems.append(f"{new} already exists in the cad folder.")
         else:
             kept.append(rel)
-    if not any(_ext(old) in MODEL_EXTENSIONS for old, _new in copies):
+    if not any(file_types.extension(old) in file_types.MODEL_EXTENSIONS for old, _new in copies):
         problems.append("There is no SolidWorks part or assembly file to copy.")
     return copies, kept, problems
 
@@ -267,7 +229,7 @@ class CancelPlan:
 
 
 def _cancelled_name(rel):
-    return f"{registry.CANCELLED_DIR_NAME}/{registry.CANCELLED_PREFIX}{_name(rel)}"
+    return f"{layout.CANCELLED_DIR_NAME}/{layout.CANCELLED_PREFIX}{file_types.file_name(rel)}"
 
 
 @converts_errors
@@ -306,33 +268,33 @@ def _copy_set(repo, pairs, backend, log):
     """Copy each (old, new) pair: SolidWorks files with SolidWorks, others as plain files.
     Drawings are re-pointed at the copy of the model they were drawn from."""
     new_model = {}
-    for old, new in sorted(pairs, key=lambda pair: (_ext(pair[0]) in DRAWING_EXTENSIONS, _name(pair[0]).lower())):
+    for old, new in sorted(pairs, key=lambda pair: (file_types.extension(pair[0]) in file_types.DRAWING_EXTENSIONS, file_types.file_name(pair[0]).lower())):
         src, dst = _abs(repo, old), _abs(repo, new)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        if _ext(old) in SOLIDWORKS_EXTENSIONS:
-            log(f"Copying {_name(old)} as {_name(new)}")
+        if file_types.extension(old) in file_types.SOLIDWORKS_EXTENSIONS:
+            log(f"Copying {file_types.file_name(old)} as {file_types.file_name(new)}")
             backend.copy(src, dst)
         else:
             shutil.copyfile(src, dst)
         if not os.path.exists(dst) or (os.path.getsize(dst) == 0 and os.path.getsize(src) > 0):
             raise RevisionFailed(f"The copy {new} was not created properly.")
-        if _ext(old) in MODEL_EXTENSIONS:
-            new_model[_name(old).lower()] = dst
-        elif _ext(old) in DRAWING_EXTENSIONS:
+        if file_types.extension(old) in file_types.MODEL_EXTENSIONS:
+            new_model[file_types.file_name(old).lower()] = dst
+        elif file_types.extension(old) in file_types.DRAWING_EXTENSIONS:
             _repoint_drawing(dst, new_model, backend)
 
 
 def _repoint_drawing(drawing, new_model, backend):
     """Make a copied drawing refer to the copied model instead of the original."""
     for stored, found in backend.references(drawing):
-        target = new_model.get(_name(stored or found).lower())
+        target = new_model.get(file_types.file_name(stored or found).lower())
         if target is None:
             continue
         if not backend.repoint(drawing, stored, target):
-            raise RevisionFailed(f"SolidWorks would not change the reference inside {_name(drawing)}.")
+            raise RevisionFailed(f"SolidWorks would not change the reference inside {file_types.file_name(drawing)}.")
     for stored, found in backend.references(drawing):
-        if _name(stored or found).lower() in new_model:
-            raise RevisionFailed(f"{_name(drawing)} still refers to the original model.")
+        if file_types.file_name(stored or found).lower() in new_model:
+            raise RevisionFailed(f"{file_types.file_name(drawing)} still refers to the original model.")
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +340,7 @@ def revise(repo, pn, reason, backend=None, log=print):
         backend = importer.SolidWorksBackend()
     pushed = False
     try:
-        with _com_thread():
+        with com.com_thread():
             eng._lock(repo, record_path, pn)                  # whoever gets this lock gets the revision
             locked.append(record_path)
             eng._pull(repo)                                   # lock first, THEN pull
@@ -461,7 +423,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     pushed = False
     kept = []
     try:
-        with _com_thread():
+        with com.com_thread():
             eng._lock(repo, record_path, pn)
             locked.append(record_path)
             eng._pull(repo)

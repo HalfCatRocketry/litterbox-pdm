@@ -17,6 +17,7 @@ from litterbox.team import people
 from litterbox.records import registry
 from tests.support.team_fixture import TeamFixture
 from litterbox.errors import LitterboxError
+from litterbox import layout
 
 
 def directory(*extra, roles=("Quality", "Manufacturing")):
@@ -146,7 +147,7 @@ class TestSetup(TeamFixture, unittest.TestCase):
     def test_setup_makes_the_runner_the_owner_and_uploads_it(self):
         person = self.setup_team()
         self.assertEqual((person.id, person.name, person.access, person.host_names), ("alex", "Alex Smith", "owner", ["Alex"]))
-        self.assertTrue((self.a / people.WHOAMI_FILE).is_file())
+        self.assertTrue((self.a / layout.WHOAMI_FILE).is_file())
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
         self.assertIn("Team: set up with Alex Smith as Owner", self.remote_log()[0])
         self.assertEqual(self.who(self.a, "Alex").state, people.OK)
@@ -226,11 +227,11 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
             eng.checkout(self.b, PART)
 
     def test_a_change_that_fails_is_rolled_back(self):
-        before = (self.a / people.PEOPLE_FILE).read_text()
+        before = (self.a / layout.PEOPLE_FILE).read_text()
         with self.user("Alex"), mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("offline")):
             with self.assertRaises(LitterboxError):
                 people.edit_directory(self.a, lambda d, who: people.add_person(d, who, "cy", "Cy"), "Team: add Cy")
-        self.assertEqual((self.a / people.PEOPLE_FILE).read_text(), before)
+        self.assertEqual((self.a / layout.PEOPLE_FILE).read_text(), before)
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
         self.assertEqual(self.locks_of(self.a, "Alex"), {})
@@ -247,12 +248,12 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         with self.user("Alex"):
             people.edit_directory(self.a, lambda d, who: people.update_person(d, who, "bea", signing_keys=[key]),
                                   "Team: add key")
-        text = (self.a / people.ALLOWED_SIGNERS_FILE).read_text()
+        text = (self.a / layout.ALLOWED_SIGNERS_FILE).read_text()
         self.assertEqual(text, f'bea namespaces="git" {key}\n')
-        self.assertEqual(git(self.a, "ls-files", people.ALLOWED_SIGNERS_FILE), people.ALLOWED_SIGNERS_FILE)
+        self.assertEqual(git(self.a, "ls-files", layout.ALLOWED_SIGNERS_FILE), layout.ALLOWED_SIGNERS_FILE)
         with self.user("Alex"):                                    # switching her off drops her key
             people.edit_directory(self.a, lambda d, who: people.set_active(d, who, "bea", False), "Team: off")
-        self.assertEqual((self.a / people.ALLOWED_SIGNERS_FILE).read_text(), "")
+        self.assertEqual((self.a / layout.ALLOWED_SIGNERS_FILE).read_text(), "")
 
     def test_transfer_ownership_through_the_vault(self):
         self.add_bea(people.ADMIN)

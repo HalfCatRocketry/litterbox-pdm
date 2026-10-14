@@ -41,7 +41,6 @@ PART NUMBERS
 """
 
 import argparse
-import json
 import os
 import random
 import shutil
@@ -59,12 +58,13 @@ from litterbox.records import registry
 from litterbox.core.pn import PN
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
+from litterbox import layout
+from litterbox.cad import file_types
+from litterbox.util import journal as journal_file
 
 JOURNAL_NAME = "litterbox-import.json"
 JOURNAL_VERSION = 1
 ATTEMPTS = 3
-MODEL_EXTENSIONS = {".sldprt", ".sldasm"}
-DRAWING_EXTENSION = ".slddrw"
 
 
 class ImportFailed(LitterboxError):
@@ -175,47 +175,37 @@ def _snapshot(paths):
 # ---------------------------------------------------------------------------
 
 def _journal_path(repo):
-    return Path(repo) / ".git" / JOURNAL_NAME
+    return journal_file.path(repo, JOURNAL_NAME)
 
 
 def _write_journal(repo, phase, token, files, records):
-    data = {"version": JOURNAL_VERSION, "phase": phase, "token": token, "files": files, "records": records}
-    path = _journal_path(repo)
-    tmp = path.with_name(path.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(data, f, indent=1)
-    tmp.replace(path)
+    journal_file.write(repo, JOURNAL_NAME, {"version": JOURNAL_VERSION, "phase": phase, "token": token,
+                                            "files": files, "records": records})
 
 
 def _read_journal(repo):
     path = _journal_path(repo)
-    if not path.exists():
-        return None
     try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        if data.get("version") != JOURNAL_VERSION:
-            raise ValueError("unknown version")
+        data = journal_file.load(repo, JOURNAL_NAME, JOURNAL_VERSION)
+        if data is None:
+            return None
         files, records = list(data["files"]), list(data["records"])
     except (OSError, ValueError, KeyError, TypeError) as e:
         raise ImportFailed(f"The note about an unfinished import ({path}) can't be read ({e}). "
                            "Delete it by hand if you are sure no import is running, then try again.") from None
     for rel in files:
-        if not str(rel).startswith(f"{registry.CAD_DIR_NAME}/") or ".." in str(rel):
+        if not str(rel).startswith(f"{layout.CAD_DIR_NAME}/") or ".." in str(rel):
             raise ImportFailed(f"The note about an unfinished import lists a file outside the cad folder ({rel}). "
                                f"Litterbox will not delete it. Check {_journal_path(repo)} by hand.")
     for rel in records:
-        if not str(rel).startswith(f"{registry.LOG_DIR_NAME}/") or ".." in str(rel):
+        if not str(rel).startswith(f"{layout.LOG_DIR_NAME}/") or ".." in str(rel):
             raise ImportFailed(f"The note about an unfinished import lists a record outside PN-logs ({rel}). "
                                f"Litterbox will not delete it. Check {_journal_path(repo)} by hand.")
     return {"phase": data.get("phase", ""), "token": str(data.get("token", "")), "files": files, "records": records}
 
 
 def _clear_journal(repo):
-    try:
-        _journal_path(repo).unlink()
-    except FileNotFoundError:
-        pass
+    journal_file.clear(repo, JOURNAL_NAME)
 
 
 def _git_out(repo, *args):
@@ -507,8 +497,8 @@ def read_references(items, backend, progress=None, cancel=None):
 def _order(items, refs):
     """The original files in copy order: models before what uses them, then the drawings."""
     in_set = {_key(p): p for item in items for p in _item_files(item)}
-    models = [p for p in in_set.values() if _extension(p) in MODEL_EXTENSIONS]
-    drawings = [p for p in in_set.values() if _extension(p) == DRAWING_EXTENSION]
+    models = [p for p in in_set.values() if _extension(p) in file_types.MODEL_EXTENSIONS]
+    drawings = [p for p in in_set.values() if _extension(p) == file_types.DRAWING_EXTENSION]
     others = [p for p in in_set.values() if p not in models and p not in drawings]
     order, done = [], set()
 
@@ -519,7 +509,7 @@ def _order(items, refs):
         if key in trail:
             raise ImportFailed(f"{path} ends up referencing itself, so there is no order to copy these files in.")
         for _stored, found in refs[key][1]:
-            if found and _key(found) in in_set and _extension(found) in MODEL_EXTENSIONS:
+            if found and _key(found) in in_set and _extension(found) in file_types.MODEL_EXTENSIONS:
                 visit(in_set[_key(found)], trail | {key})
         done.add(key)
         order.append(path)
@@ -967,7 +957,7 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
     candidates = [i for i in mf.items if not i.pn]
     readable = [i for i in candidates if all(os.path.isfile(p) for p in _item_files(i))]
     for item in items:
-        if _extension(item.main_path) not in MODEL_EXTENSIONS | {DRAWING_EXTENSION}:
+        if _extension(item.main_path) not in file_types.SOLIDWORKS_EXTENSIONS:
             raise ImportFailed(f"Item {item.id}: {item.main_path} is not a SolidWorks file.")
 
     owns_backend = backend is None

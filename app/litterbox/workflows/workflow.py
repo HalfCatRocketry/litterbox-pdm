@@ -59,8 +59,8 @@ from litterbox.records import registry
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
+from litterbox import layout
 
-WORKFLOWS_FILE = ".litterbox/workflows.yaml"
 RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
 ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)          # the actions that can have templates
 ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS: "Make COTS"}
@@ -173,24 +173,24 @@ def validate(templates, directory=None):
 
 def load(repo):
     """The vault's templates as {action: {name: Template}}. No file means no workflows."""
-    path = Path(repo) / WORKFLOWS_FILE
+    path = Path(repo) / layout.WORKFLOWS_FILE
     if not path.is_file():
         return {}
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as e:
-        raise WorkflowError(f"Could not read {WORKFLOWS_FILE}: {e}")
+        raise WorkflowError(f"Could not read {layout.WORKFLOWS_FILE}: {e}")
     if data in (None, ""):
         return {}
     flows = data.get("workflows") if isinstance(data, dict) else None
     if flows in (None, ""):
         return {}
     if not isinstance(flows, dict):
-        raise WorkflowError(f"{WORKFLOWS_FILE} should contain 'workflows:' followed by the actions.")
+        raise WorkflowError(f"{layout.WORKFLOWS_FILE} should contain 'workflows:' followed by the actions.")
     templates = {}
     for action, body in flows.items():
         if not isinstance(body, dict) or "signoffs" in body:
-            raise WorkflowError(f"{WORKFLOWS_FILE} is in the format of Litterbox 0.2. Delete the file (or the "
+            raise WorkflowError(f"{layout.WORKFLOWS_FILE} is in the format of Litterbox 0.2. Delete the file (or the "
                                 f"'{action}' part) and set the workflows up again in Team... > Workflows.")
         templates[str(action)] = {str(name): Template.from_dict(str(action), name, t) for name, t in body.items()}
     validate(templates)
@@ -198,7 +198,7 @@ def load(repo):
 
 
 def save(repo, templates):
-    path = Path(repo) / WORKFLOWS_FILE
+    path = Path(repo) / layout.WORKFLOWS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     body = {"workflows": {action: {name: t.to_dict() for name, t in named.items()}
                           for action, named in sorted(templates.items()) if named}}
@@ -264,8 +264,8 @@ def edit_templates(repo, change, message):
     identity = people.require(repo, "manage_workflows")
     if identity.state != people.OK:
         raise WorkflowError("Set up the team first (Team... > Set Up Team): workflows are about people's roles.")
-    rel = WORKFLOWS_FILE
-    config_rel = f"{config.CONFIG_DIR}/{config.CONFIG_FILE}"
+    rel = layout.WORKFLOWS_FILE
+    config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
     existed = people._tracked(repo, rel)
     config_tracked = people._tracked(repo, config_rel)
     config_before = (Path(repo) / config_rel).read_bytes() if (Path(repo) / config_rel).is_file() else None

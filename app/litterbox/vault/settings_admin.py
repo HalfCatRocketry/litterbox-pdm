@@ -21,8 +21,9 @@ from litterbox.team import people
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
+from litterbox import layout
 
-CONFIG_REL = f"{config.CONFIG_DIR}/{config.CONFIG_FILE}"
+CONFIG_REL = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
 
 
 @converts_errors

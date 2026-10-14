@@ -45,11 +45,8 @@ from litterbox.vault import config
 from litterbox.parts import engine as eng
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
+from litterbox import layout
 
-CONFIG_DIR = ".litterbox"
-PEOPLE_FILE = f"{CONFIG_DIR}/people.yaml"
-WHOAMI_FILE = f"{CONFIG_DIR}/whoami"
-ALLOWED_SIGNERS_FILE = f"{CONFIG_DIR}/allowed_signers"
 IDENTITY_CACHE = "litterbox-identity.json"
 IDENTITY_MAX_AGE = 24 * 3600
 
@@ -135,7 +132,7 @@ def _text_list(value, what):
 
 def from_dict(data):
     if not isinstance(data, dict):
-        raise PeopleError(f"{PEOPLE_FILE} should contain 'roles' and 'people'.")
+        raise PeopleError(f"{layout.PEOPLE_FILE} should contain 'roles' and 'people'.")
     people = []
     for entry in data.get("people") or []:
         if not isinstance(entry, dict):
@@ -200,14 +197,14 @@ def validate(directory):
 
 def load(repo):
     """The vault's Directory, or None when the vault has no people file yet (legacy mode)."""
-    path = Path(repo) / PEOPLE_FILE
+    path = Path(repo) / layout.PEOPLE_FILE
     if not path.is_file():
         return None
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
     except (OSError, yaml.YAMLError) as e:
-        raise PeopleError(f"Could not read {PEOPLE_FILE}: {e}")
+        raise PeopleError(f"Could not read {layout.PEOPLE_FILE}: {e}")
     return from_dict(data)
 
 
@@ -218,7 +215,7 @@ def _dump(directory):
 
 def save(repo, directory):
     validate(directory)
-    path = Path(repo) / PEOPLE_FILE
+    path = Path(repo) / layout.PEOPLE_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         os.chmod(path, 0o644)
@@ -315,12 +312,12 @@ def forget_identity(repo):
 
 def probe_host_name(repo, attempts=5):
     """Ask the host who we are signed in as: lock .litterbox/whoami, read the owner, unlock. Needs the internet."""
-    if not (Path(repo) / WHOAMI_FILE).is_file():
-        raise PeopleError(f"{WHOAMI_FILE} is missing from the vault. Run Get Latest, or set up the team again.")
+    if not (Path(repo) / layout.WHOAMI_FILE).is_file():
+        raise PeopleError(f"{layout.WHOAMI_FILE} is missing from the vault. Run Get Latest, or set up the team again.")
     last = None
     for attempt in range(attempts):
         try:
-            eng.run(["git", "lfs", "lock", WHOAMI_FILE], repo, quiet=True)
+            eng.run(["git", "lfs", "lock", layout.WHOAMI_FILE], repo, quiet=True)
             break
         except LitterboxError as e:             # someone else is probing at this moment: wait and retry
             last = e
@@ -329,17 +326,17 @@ def probe_host_name(repo, attempts=5):
         raise PeopleError(f"Could not ask the host who you are. {last}")
     try:
         locks = eng.get_locks(repo, strict=True)
-        mine = locks.get(WHOAMI_FILE.lower())
+        mine = locks.get(layout.WHOAMI_FILE.lower())
         if not mine or mine[0] != "you":
             raise PeopleError("The host did not say whose lock that was.")
         return mine[1]
     finally:
         try:
-            eng.run(["git", "lfs", "unlock", "--force", WHOAMI_FILE], repo, quiet=True)
+            eng.run(["git", "lfs", "unlock", "--force", layout.WHOAMI_FILE], repo, quiet=True)
         except LitterboxError:
             pass
         try:
-            os.chmod(Path(repo) / WHOAMI_FILE, 0o644)
+            os.chmod(Path(repo) / layout.WHOAMI_FILE, 0o644)
         except OSError:
             pass
 
@@ -520,14 +517,14 @@ def allowed_signers_text(directory):
 
 def _write_allowed_signers(repo, directory):
     text = allowed_signers_text(directory)
-    path = Path(repo) / ALLOWED_SIGNERS_FILE
+    path = Path(repo) / layout.ALLOWED_SIGNERS_FILE
     if not text and not path.exists():
         return None
     if path.exists():
         os.chmod(path, 0o644)
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
-    return ALLOWED_SIGNERS_FILE
+    return layout.ALLOWED_SIGNERS_FILE
 
 
 def _tracked(repo, rel):
@@ -546,10 +543,10 @@ def edit_directory(repo, change, message, action="manage_people"):
     identity = require(repo, action)
     if identity.state == LEGACY:
         raise PeopleError("The team has not been set up yet. Use Set Up Team first.")
-    rel = PEOPLE_FILE
+    rel = layout.PEOPLE_FILE
     eng._lock(repo, rel, "the people file")
     committed, added_signers, result = False, False, None
-    signers_before_tracked = _tracked(repo, ALLOWED_SIGNERS_FILE)
+    signers_before_tracked = _tracked(repo, layout.ALLOWED_SIGNERS_FILE)
     try:
         eng._pull(repo)
         directory = load(repo)
@@ -573,12 +570,12 @@ def edit_directory(repo, change, message, action="manage_people"):
                 eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
             eng.run(["git", "restore", "--staged", "--worktree", "--", rel], repo)
             if signers_before_tracked:
-                eng.run(["git", "restore", "--staged", "--worktree", "--", ALLOWED_SIGNERS_FILE], repo)
-            elif added_signers or (Path(repo) / ALLOWED_SIGNERS_FILE).exists():
-                eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", ALLOWED_SIGNERS_FILE], repo,
+                eng.run(["git", "restore", "--staged", "--worktree", "--", layout.ALLOWED_SIGNERS_FILE], repo)
+            elif added_signers or (Path(repo) / layout.ALLOWED_SIGNERS_FILE).exists():
+                eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.ALLOWED_SIGNERS_FILE], repo,
                         quiet=True)
                 try:
-                    (Path(repo) / ALLOWED_SIGNERS_FILE).unlink()
+                    (Path(repo) / layout.ALLOWED_SIGNERS_FILE).unlink()
                 except OSError:
                     pass
         except LitterboxError as e:
@@ -608,13 +605,13 @@ def setup_team(repo, name=None, email=None, roles=None):
         except LitterboxError:
             email = ""
     eng._pull(repo)
-    whoami = Path(repo) / WHOAMI_FILE
+    whoami = Path(repo) / layout.WHOAMI_FILE
     if not whoami.exists():
         whoami.parent.mkdir(parents=True, exist_ok=True)
         whoami.write_text("Litterbox takes a lock on this file to ask the host who you are. Leave it empty.\n",
                           encoding="utf-8")
-        eng.run(["git", "add", "--", WHOAMI_FILE], repo)
-        eng.run(["git", "commit", "-m", "Team: add whoami file", "--", WHOAMI_FILE], repo)
+        eng.run(["git", "add", "--", layout.WHOAMI_FILE], repo)
+        eng.run(["git", "commit", "-m", "Team: add whoami file", "--", layout.WHOAMI_FILE], repo)
         eng._push_with_retry(repo)
     host_name = probe_host_name(repo)
     person_id = re.sub(r"[^a-z0-9._-]+", "-", host_name.lower()).strip("-.")[:40] or "owner"
@@ -624,14 +621,14 @@ def setup_team(repo, name=None, email=None, roles=None):
                           list(roles if roles is not None else STANDARD_ROLES))
     save(repo, directory)
     try:
-        eng.run(["git", "add", "--", PEOPLE_FILE], repo)
-        eng.run(["git", "commit", "-m", f"Team: set up with {name} as Owner", "--", PEOPLE_FILE], repo)
+        eng.run(["git", "add", "--", layout.PEOPLE_FILE], repo)
+        eng.run(["git", "commit", "-m", f"Team: set up with {name} as Owner", "--", layout.PEOPLE_FILE], repo)
         eng._push_with_retry(repo)
     except BaseException:
         try:
             eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
-            eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", PEOPLE_FILE], repo, quiet=True)
-            (Path(repo) / PEOPLE_FILE).unlink()
+            eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.PEOPLE_FILE], repo, quiet=True)
+            (Path(repo) / layout.PEOPLE_FILE).unlink()
         except (LitterboxError, OSError):
             pass
         raise
@@ -653,7 +650,7 @@ def check_before_push(repo):
         return
     try:
         eng.run(["git", "fetch"], repo, quiet=True)
-        text = eng.run(["git", "show", f"@{{u}}:{PEOPLE_FILE}"], repo, quiet=True)
+        text = eng.run(["git", "show", f"@{{u}}:{layout.PEOPLE_FILE}"], repo, quiet=True)
     except LitterboxError:
         return                                  # offline, or the vault has no people file yet: git will say if the push fails
     try:

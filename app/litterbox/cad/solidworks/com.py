@@ -5,6 +5,26 @@ The small helpers every SolidWorks feature needs: attaching to (or starting) Sol
 that may turn out to be a property or a method. The experiments in tools/solidworks use these too.
 """
 
+import contextlib
+
+
+@contextlib.contextmanager
+def com_thread():
+    """SolidWorks is reached through COM, which must be switched on in the thread that uses it."""
+    try:
+        import pythoncom
+        pythoncom.CoInitialize()
+    except Exception:                                   # not Windows, or no pywin32 (tests)
+        pythoncom = None
+    try:
+        yield
+    finally:
+        if pythoncom is not None:
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
 
 def call(obj, name, *args):
     """Read a SolidWorks property or call a method, whichever `name` turns out to be.

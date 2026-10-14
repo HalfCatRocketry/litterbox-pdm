@@ -20,19 +20,18 @@ REPLACE      Litterbox can point an assembly that is still in work at the latest
              parts it uses. Released assemblies are frozen: to change one, revise it.
 """
 
-import contextlib
 import os
 from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.core.pn import PN
 from litterbox.errors import LitterboxError
+from litterbox.cad import file_types
+from litterbox.cad.solidworks import com
 
-MODEL_EXTENSIONS = (".sldprt", ".sldasm")
-ASSEMBLY_EXTENSIONS = (".sldasm",)
 
 # Why a reference is flagged
 OK = "ok"
@@ -79,31 +78,6 @@ def stem_of_path(path):
     return pn_module.file_stem(parsed[0], parsed[1])
 
 
-def _name(path):
-    return PurePosixPath(str(path).replace("\\", "/")).name
-
-
-def _ext(path):
-    return PurePosixPath(str(path).replace("\\", "/")).suffix.lower()
-
-
-@contextlib.contextmanager
-def _com_thread():
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-    except Exception:
-        pythoncom = None
-    try:
-        yield
-    finally:
-        if pythoncom is not None:
-            try:
-                pythoncom.CoUninitialize()
-            except Exception:
-                pass
-
-
 def _new_backend(attach_only=False):
     from litterbox.importing import importer
     return importer.SolidWorksBackend(attach_only=attach_only)
@@ -120,7 +94,7 @@ def read_assembly_references(repo, pn, revision, backend, files=None):
     own = pn_module.file_stem(pn, revision)
     found = set()
     for rel in files if files is not None else registry.cad_files(repo, pn, revision):
-        if _ext(rel) not in ASSEMBLY_EXTENSIONS:
+        if file_types.extension(rel) not in file_types.ASSEMBLY_EXTENSIONS:
             continue
         for stored, located in backend.references(os.path.join(str(repo), rel)):
             stem = stem_of_path(stored) or stem_of_path(located)
@@ -140,11 +114,11 @@ def make_reader(backend=None, log=None):
     log = log or (lambda text: None)
 
     def reader(repo, pn, revision, changed_files):
-        if not any(_ext(f) in ASSEMBLY_EXTENSIONS for f in changed_files):
+        if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in changed_files):
             return None
         mine = None
         try:
-            with _com_thread():
+            with com.com_thread():
                 use = backend
                 if use is None:
                     use = mine = _new_backend(attach_only=True)
@@ -368,7 +342,7 @@ def replacements_from(uses_list):
 
 
 def _model_file(repo, child, revision):
-    models = [f for f in registry.cad_files(repo, child, revision) if _ext(f) in MODEL_EXTENSIONS]
+    models = [f for f in registry.cad_files(repo, child, revision) if file_types.extension(f) in file_types.MODEL_EXTENSIONS]
     return models[0] if models else None
 
 
@@ -379,16 +353,16 @@ def _repoint_file(repo, rel, replacements, backend):
     for replacement, old_name, new_path in replacements:
         done = False
         for stored, located in backend.references(path):
-            if _name(stored or located).lower() == old_name.lower():
+            if file_types.file_name(stored or located).lower() == old_name.lower():
                 if not backend.repoint(path, stored, new_path):
                     raise ReferencesError(f"SolidWorks would not change the reference to {old_name} inside "
-                                          f"{_name(rel)}.")
+                                          f"{file_types.file_name(rel)}.")
                 done = True
         changed += done
     for replacement, old_name, _new in replacements:
         for stored, located in backend.references(path):
-            if _name(stored or located).lower() == old_name.lower():
-                raise ReferencesError(f"{_name(rel)} still refers to {old_name}.")
+            if file_types.file_name(stored or located).lower() == old_name.lower():
+                raise ReferencesError(f"{file_types.file_name(rel)} still refers to {old_name}.")
     return changed
 
 
@@ -413,7 +387,7 @@ def replace_references(repo, replacements, comment="Updated to the latest releas
         if owns_backend and by_parent:
             backend = _new_backend()
         reader = make_reader(backend, log)
-        with _com_thread():
+        with com.com_thread():
             _replace_in_all(repo, by_parent, comment, backend, reader, log, results)
     finally:
         if owns_backend and backend is not None:
@@ -444,7 +418,7 @@ def _plan_replacement(repo, parent, items, locks):
                                                          "Run Get Latest.")
             if eng.is_pointer(Path(repo) / new_rel):
                 return ReplaceResult(parent, "failed", f"{new_rel} has not been downloaded. Run Get Latest.")
-            old_name = pn_module.filename(item.child, item.old_revision, _ext(new_rel))
+            old_name = pn_module.filename(item.child, item.old_revision, file_types.extension(new_rel))
             edits.append((item, old_name, os.path.join(str(repo), new_rel)))
             names.append(f"{item.child} Rev {item.old_revision} -> {latest}")
         if not edits:
@@ -485,12 +459,12 @@ def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
     undo = []
     for parent, (revision, edits, names, user_checked_out) in list(jobs.items()):
         try:
-            files = [f for f in registry.cad_files(repo, parent, revision) if _ext(f) in ASSEMBLY_EXTENSIONS]
+            files = [f for f in registry.cad_files(repo, parent, revision) if file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS]
             if not files:
                 raise ReferencesError(f"{parent} has no assembly file in Rev {revision}.")
             changed = 0
             for rel in files:
-                log(f"Updating {_name(rel)}")
+                log(f"Updating {file_types.file_name(rel)}")
                 changed += _repoint_file(repo, rel, edits, backend)
             if not changed:
                 raise ReferencesError("None of those parts are in the assembly file any more. Check In the assembly "
@@ -551,7 +525,7 @@ def rescan(repo, pns=None, backend=None, log=print):
         for pn in (pns or registry.list_pns(repo)):
             pn = eng._as_pn(pn)
             revisions = index.get(pn, {})
-            if not any(_ext(f) in ASSEMBLY_EXTENSIONS for fs in revisions.values() for f in fs):
+            if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for fs in revisions.values() for f in fs):
                 continue
             lock = locks.get(eng.record_relpath(pn).lower())
             if lock:
@@ -591,9 +565,9 @@ def rescan(repo, pns=None, backend=None, log=print):
 
 def _rescan_one(repo, pn, revisions, backend):
     found = {}
-    with _com_thread():
+    with com.com_thread():
         for revision, files in revisions.items():
-            if not any(_ext(f) in ASSEMBLY_EXTENSIONS for f in files):
+            if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in files):
                 continue
             for f in files:
                 if eng.is_pointer(Path(repo) / f):

@@ -55,6 +55,7 @@ from litterbox.core.pn import parse as parse_pn
 from litterbox.errors import LitterboxError, NoChangesError, NothingToSaveError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
+from litterbox import layout
 
 
 def _check_permission(repo, user, action):
@@ -150,7 +151,7 @@ def get_user(repo):
 
 def record_relpath(pn):
     """Where a PN's record lives, relative to the repo, with forward slashes."""
-    return f"{registry.LOG_DIR_NAME}/{pn}.yaml"
+    return f"{layout.LOG_DIR_NAME}/{pn}.yaml"
 
 
 def _as_pn(value):

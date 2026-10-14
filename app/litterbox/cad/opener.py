@@ -19,19 +19,16 @@ import sys
 from pathlib import Path, PurePosixPath
 
 from litterbox.errors import LitterboxError
-
-
-MODEL_EXTENSIONS = (".sldasm", ".sldprt")     # opened first: the part or assembly itself
-DRAWING_EXTENSIONS = (".slddrw",)
+from litterbox.cad import file_types
 
 
 def open_order(files):
     """Order a part's files for opening: the model first, then drawings, then anything else."""
     def rank(path):
         ext = PurePosixPath(path).suffix.lower()
-        if ext in MODEL_EXTENSIONS:
+        if ext in file_types.MODEL_EXTENSIONS:
             return 0
-        if ext in DRAWING_EXTENSIONS:
+        if ext in file_types.DRAWING_EXTENSIONS:
             return 1
         return 2
     return sorted(files, key=lambda path: (rank(path), PurePosixPath(path).name.lower()))
@@ -45,7 +42,7 @@ def pick_model(files):
 
 def pick_drawing(files):
     """The file the Open Drawing button opens: the part's drawing. None if it has none."""
-    drawings = [f for f in open_order(files) if PurePosixPath(f).suffix.lower() in DRAWING_EXTENSIONS]
+    drawings = [f for f in open_order(files) if PurePosixPath(f).suffix.lower() in file_types.DRAWING_EXTENSIONS]
     return drawings[0] if drawings else None
 
 
@@ -58,9 +55,6 @@ def program_for(path, open_with):
         if str(key).strip().lower().lstrip("*") in (ext, ext.lstrip(".")) and program:
             return str(program)
     return None
-
-
-SOLIDWORKS_EXTENSIONS = (".sldprt", ".sldasm", ".slddrw")
 
 
 def show_hidden_solidworks():
@@ -102,11 +96,11 @@ def open_path(path, open_with=None, startfile=None, popen=None, show_hidden=None
                     "Fix it under open_with in C:\\Litterbox\\settings.yaml.")
             (popen or subprocess.Popen)([program, str(path)])
         elif startfile is not None:
-            if path.suffix.lower() in SOLIDWORKS_EXTENSIONS and show_hidden is not None:
+            if path.suffix.lower() in file_types.SOLIDWORKS_EXTENSIONS and show_hidden is not None:
                 show_hidden()
             startfile(str(path))
         elif hasattr(os, "startfile"):
-            if path.suffix.lower() in SOLIDWORKS_EXTENSIONS:
+            if path.suffix.lower() in file_types.SOLIDWORKS_EXTENSIONS:
                 (show_hidden or show_hidden_solidworks)()
             os.startfile(str(path))                                    # Windows
         else:

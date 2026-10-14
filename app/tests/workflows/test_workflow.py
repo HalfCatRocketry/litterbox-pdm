@@ -16,6 +16,7 @@ from litterbox.records import registry
 from litterbox.workflows import workflow as wf
 from tests.support.workflow_fixture import CHIEF, ENGINEER, MANAGER, PART2, PRT2, QUALITY, Fixture
 from litterbox.errors import LitterboxError
+from litterbox import layout
 
 
 class TestTemplates(Fixture, unittest.TestCase):
@@ -62,7 +63,7 @@ class TestTemplates(Fixture, unittest.TestCase):
                 wf.edit_templates(self.a, lambda t, d: wf.set_template(t, wf.RELEASE, "T", [[QUALITY]]), "x")
         eng._push_with_retry = real
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
-        self.assertFalse((self.a / wf.WORKFLOWS_FILE).exists())
+        self.assertFalse((self.a / layout.WORKFLOWS_FILE).exists())
         self.assertEqual(eng.get_locks(self.a), {})
 
     def test_a_member_cannot_change_workflows(self):
@@ -84,7 +85,7 @@ class TestTemplates(Fixture, unittest.TestCase):
                     with self.user("Alex"):
                         wf.edit_templates(self.a, lambda t, d, c=change: c(t), "x")
                 self.assertIn(text.split()[0], str(ctx.exception))
-                self.assertFalse((self.a / wf.WORKFLOWS_FILE).exists())
+                self.assertFalse((self.a / layout.WORKFLOWS_FILE).exists())
                 self.assertEqual(git(self.a, "status", "--porcelain"), "")
 
     def test_duplicate_names_are_refused(self):
@@ -122,7 +123,7 @@ class TestTemplates(Fixture, unittest.TestCase):
 
     def test_the_old_format_gets_a_clear_message(self):
         (self.a / ".litterbox").mkdir(exist_ok=True)
-        (self.a / wf.WORKFLOWS_FILE).write_text("workflows:\n  release:\n    signoffs:\n    - role: Quality\n")
+        (self.a / layout.WORKFLOWS_FILE).write_text("workflows:\n  release:\n    signoffs:\n    - role: Quality\n")
         with self.assertRaises(LitterboxError) as ctx:
             wf.load(self.a)
         self.assertIn("Litterbox 0.2", str(ctx.exception))

@@ -36,9 +36,8 @@ from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox import version
 from litterbox.core.pn import PNError, check_org
+from litterbox import layout
 
-CONFIG_DIR = ".litterbox"
-CONFIG_FILE = "config.yaml"
 
 
 class ConfigError(Exception):
@@ -50,7 +49,7 @@ class NoOrgError(ConfigError):
 
 
 def config_path(repo):
-    return Path(repo) / CONFIG_DIR / CONFIG_FILE
+    return Path(repo) / layout.CONFIG_DIR / layout.CONFIG_FILE
 
 
 def load(repo):
@@ -62,11 +61,11 @@ def load(repo):
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
-        raise ConfigError(f"Could not read {CONFIG_DIR}/{CONFIG_FILE}: {e}")
+        raise ConfigError(f"Could not read {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}")
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise ConfigError(f"{CONFIG_DIR}/{CONFIG_FILE} should contain settings like 'org: HCR'.")
+        raise ConfigError(f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE} should contain settings like 'org: HCR'.")
     return data
 
 
@@ -80,7 +79,7 @@ def get_org(repo):
         try:
             return check_org(configured)
         except PNError as e:
-            raise ConfigError(f"The org code in {CONFIG_DIR}/{CONFIG_FILE} is not valid. {e}")
+            raise ConfigError(f"The org code in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} is not valid. {e}")
 
     orgs = sorted({pn.org for pn in registry.list_pns(repo)})
     if len(orgs) == 1:
@@ -88,10 +87,10 @@ def get_org(repo):
     if not orgs:
         raise NoOrgError(
             "This vault doesn't have an org code yet. Create the file "
-            f"{CONFIG_DIR}/{CONFIG_FILE} in the vault, containing a line like:\n  org: HCR")
+            f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE} in the vault, containing a line like:\n  org: HCR")
     raise ConfigError(
         f"This vault has part numbers from several orgs ({', '.join(orgs)}), so Litterbox can't "
-        f"tell which to use. Set one in {CONFIG_DIR}/{CONFIG_FILE}, for example:\n  org: {orgs[0]}")
+        f"tell which to use. Set one in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}, for example:\n  org: {orgs[0]}")
 
 
 def get_start_number(repo):
@@ -100,7 +99,7 @@ def get_start_number(repo):
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise ConfigError(f"start_number in {CONFIG_DIR}/{CONFIG_FILE} must be a whole number, 1 or higher "
+        raise ConfigError(f"start_number in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be a whole number, 1 or higher "
                           f"(for example 10001), not {value!r}.")
     return value
 
@@ -111,7 +110,7 @@ def explain_start_number(repo):
     try:
         if not path.is_file():
             text = f"There is no settings file at {path}, so the start number is 1."
-            others = [p for p in (Path(repo) / CONFIG_DIR / "config.yml", Path(repo) / "config.yaml",
+            others = [p for p in (Path(repo) / layout.CONFIG_DIR / "config.yml", Path(repo) / "config.yaml",
                                   Path(repo) / "config.yml") if p.is_file()]
             if others:
                 text += f" (Litterbox does not read {others[0]}; the settings must be in {path}.)"
@@ -137,7 +136,7 @@ def get_digits(repo):
         if value in (None, ""):
             value = default
         if isinstance(value, bool) or not isinstance(value, int) or not (low <= value <= high):
-            raise ConfigError(f"{key} in {CONFIG_DIR}/{CONFIG_FILE} must be a whole number from {low} to {high}, "
+            raise ConfigError(f"{key} in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be a whole number from {low} to {high}, "
                               f"not {value!r}.")
         result.append(value)
     return tuple(result)
@@ -154,7 +153,7 @@ def get_release_rule(repo):
         return "warn"
     value = str(value).strip().lower()
     if value not in RELEASE_RULES:
-        raise ConfigError(f"release_rule in {CONFIG_DIR}/{CONFIG_FILE} must be one of "
+        raise ConfigError(f"release_rule in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be one of "
                           f"{', '.join(RELEASE_RULES)}, not {value!r}.")
     return value
 
@@ -170,7 +169,7 @@ def get_commit_style(repo):
         return "per_part"
     value = str(value).strip().lower()
     if value not in COMMIT_STYLES:
-        raise ConfigError(f"commit_style in {CONFIG_DIR}/{CONFIG_FILE} must be one of "
+        raise ConfigError(f"commit_style in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be one of "
                           f"{', '.join(COMMIT_STYLES)}, not {value!r}.")
     return value
 
@@ -219,26 +218,26 @@ def get_require_signatures(repo):
     """True if this vault refuses uploads of commits that aren't signed by a key on the team list."""
     value = load(repo).get("require_signatures", False)
     if not isinstance(value, bool):
-        raise ConfigError(f"require_signatures in {CONFIG_DIR}/{CONFIG_FILE} must be true or false.")
+        raise ConfigError(f"require_signatures in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be true or false.")
     return value
 
 
 def check_compatible(repo):
     """Raise ConfigError if this vault needs a newer Litterbox than this one (see version.py)."""
     data = load(repo)
-    layout = data.get("format_version", 1)
-    if isinstance(layout, bool) or not isinstance(layout, int) or layout < 1:
-        raise ConfigError(f"format_version in {CONFIG_DIR}/{CONFIG_FILE} must be a whole number, 1 or higher.")
-    if layout > version.VAULT_FORMAT:
+    vault_format = data.get("format_version", 1)
+    if isinstance(vault_format, bool) or not isinstance(vault_format, int) or vault_format < 1:
+        raise ConfigError(f"format_version in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be a whole number, 1 or higher.")
+    if vault_format > version.VAULT_FORMAT:
         raise ConfigError(
-            f"This vault was set up by a newer Litterbox (vault format {layout}; this copy only understands "
+            f"This vault was set up by a newer Litterbox (vault format {vault_format}; this copy only understands "
             f"up to {version.VAULT_FORMAT}). Update Litterbox to open it. You have {version.VERSION}.")
     wanted = data.get("min_litterbox_version")
     if wanted not in (None, ""):
         try:
             too_old = version.parse(wanted) > version.parse(version.VERSION)
         except ValueError:
-            raise ConfigError(f"min_litterbox_version in {CONFIG_DIR}/{CONFIG_FILE} should look like 0.1.0.")
+            raise ConfigError(f"min_litterbox_version in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} should look like 0.1.0.")
         if too_old:
             raise ConfigError(f"This vault needs Litterbox {wanted} or newer. You have {version.VERSION}. "
                               "Update Litterbox to continue.")

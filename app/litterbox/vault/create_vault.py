@@ -42,6 +42,7 @@ from litterbox import version
 from litterbox.core.pn import PNError, check_org
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
+from litterbox import layout
 
 GITATTRIBUTES = ".gitattributes"
 GITIGNORE = ".gitignore"
@@ -77,7 +78,7 @@ product data manager. Parts are checked out and in with the Litterbox app, not w
 Please don't rename, move or delete files here by hand.
 """
 
-EXISTING_VAULT_FOLDERS = ("cad", "PN-logs", ".litterbox")
+EXISTING_VAULT_FOLDERS = (layout.CAD_DIR_NAME, layout.LOG_DIR_NAME, layout.CONFIG_DIR)
 
 
 class InitError(LitterboxError):
@@ -307,9 +308,9 @@ def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGIT
             (repo / README).write_text(README_TEXT.format(org=org), encoding="utf-8", newline="\n")
             writer.note(README, None)
 
-        if not (repo / config.CONFIG_DIR).exists():
-            writer.made_folders.append(config.CONFIG_DIR)
-        config_rel = f"{config.CONFIG_DIR}/{config.CONFIG_FILE}"
+        if not (repo / layout.CONFIG_DIR).exists():
+            writer.made_folders.append(layout.CONFIG_DIR)
+        config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
         writer.note(config_rel, None)
         config.save(repo, org=org, start_number=start_number, base_digits=base_digits,
                     variant_digits=variant_digits)

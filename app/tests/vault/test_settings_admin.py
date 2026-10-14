@@ -15,6 +15,7 @@ from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.vault import settings_admin as vault_settings
 from litterbox.errors import LitterboxError
+from litterbox import layout
 
 
 class ConfigValues(unittest.TestCase):
@@ -44,8 +45,8 @@ class ConfigValues(unittest.TestCase):
 
     def test_other_lines_in_the_file_survive_a_change(self):
         config.set_values(self.repo, commit_style="per_batch")
-        text = (self.repo / config.CONFIG_DIR / config.CONFIG_FILE).read_text()
-        (self.repo / config.CONFIG_DIR / config.CONFIG_FILE).write_text(text + "org: HCR\n")
+        text = (self.repo / layout.CONFIG_DIR / layout.CONFIG_FILE).read_text()
+        (self.repo / layout.CONFIG_DIR / layout.CONFIG_FILE).write_text(text + "org: HCR\n")
         config.set_values(self.repo, release_rule="off")
         self.assertEqual(config.load(self.repo), {"commit_style": "per_batch", "org": "HCR", "release_rule": "off"})
 
@@ -62,8 +63,8 @@ class ConfigValues(unittest.TestCase):
             config.set_values(self.repo, colour="red")
 
     def test_a_hand_edited_bad_value_is_reported(self):
-        (self.repo / config.CONFIG_DIR).mkdir()
-        (self.repo / config.CONFIG_DIR / config.CONFIG_FILE).write_text("commit_style: nonsense\n")
+        (self.repo / layout.CONFIG_DIR).mkdir()
+        (self.repo / layout.CONFIG_DIR / layout.CONFIG_FILE).write_text("commit_style: nonsense\n")
         with self.assertRaises(config.ConfigError):
             config.get_commit_style(self.repo)
 
