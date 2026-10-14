@@ -12,9 +12,10 @@ from litterbox.records.error_conversion import converts_errors
 
 def _refuse_if_workflow(repo, action):
     """An action that has workflow templates must go through them, so it can't be done directly."""
-    from litterbox.workflows import workflow
-    if workflow.has_templates(repo, action):
-        raise LitterboxError(f"{workflow.label_of(action)} in this vault needs sign-offs. Use the Workflow window "
+    from litterbox.workflows import workflow_store
+    from litterbox.workflows import workflow_templates
+    if workflow_store.has_templates(repo, action):
+        raise LitterboxError(f"{workflow_templates.label_of(action)} in this vault needs sign-offs. Use the Workflow window "
                              "to ask for them; it happens when everyone required has signed.")
 
 

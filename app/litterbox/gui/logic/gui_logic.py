@@ -17,7 +17,9 @@ from litterbox.core import part_number
 from litterbox.core import revision_letters
 from litterbox.records import record_revisions
 from litterbox.records import record_store
-from litterbox.workflows import workflow
+from litterbox.workflows import workflow_editing
+from litterbox.workflows import signoff_slots
+from litterbox.workflows import workflow_templates
 
 # ---------------------------------------------------------------------------
 # The list: filtering
@@ -423,7 +425,7 @@ def format_history(record, local=True):
         name = event.get("event", "")
         label = EVENT_LABELS.get(name, str(name))
         if name in REQUEST_EVENTS:
-            label = workflow.label_of(event.get("action") or "release") + (" requested" if name == "release_requested"
+            label = workflow_templates.label_of(event.get("action") or "release") + (" requested" if name == "release_requested"
                                                                          else " rejected")
         if name == "released" and event.get("override"):
             label = "Released (Admin override)"
@@ -1081,15 +1083,15 @@ def release_confirm_text(plan):
 
 def request_confirm_text(action, parts, template, slots, reason="", warnings=()):
     """The question asked at the end of the Workflow window, before the request is made."""
-    label = workflow.label_of(action)
+    label = workflow_templates.label_of(action)
     listing = "\n".join(f"  {pn}  {name}".rstrip() for pn, name in parts)
-    signers = "\n".join(f"  {workflow.slot_text(s)}: {s['name']}" for s in slots)
+    signers = "\n".join(f"  {signoff_slots.slot_text(s)}: {s['name']}" for s in slots)
     text = (f"Start the {label} workflow ({template.name}) on:\n\n{listing}\n\nThese people will be asked to "
             f"sign off:\n{signers}\n\n")
     if reason:
         text += f"Reason: {reason}\n\n"
     text += ("While it waits, nobody can check these parts out. You can withdraw the request until it is done."
-             + (" It happens as soon as the last person signs." if action in workflow.AUTO_COMPLETE else
+             + (" It happens as soon as the last person signs." if action in workflow_templates.AUTO_COMPLETE else
                 " When everyone has signed, press the button again to finish it."))
     if warnings:
         text += "\n\nNOTE:\n" + "\n".join("- " + w for w in warnings)
@@ -1105,7 +1107,7 @@ def tasks_table(tasks, local=True):
     rows = []
     for t in tasks:
         name = t.parts[0][1] if len(t.parts) == 1 else f"{len(t.parts)} parts"
-        rows.append((t.id, (t.label, name, workflow.label_of(t.action), t.requested_by,
+        rows.append((t.id, (t.label, name, workflow_templates.label_of(t.action), t.requested_by,
                             to_display_time(t.requested_at, local), t.summary)))
     return rows
 
@@ -1142,7 +1144,7 @@ def person_labels(people_list):
 
 def row_choices(directory, roles, requester_id=None, requester_may_sign=True):
     """[(label, id)] of the people who can fill a sign-off with any of these roles."""
-    found = workflow.eligible(directory, roles)
+    found = workflow_editing.eligible(directory, roles)
     if not requester_may_sign:
         found = [p for p in found if p.id != requester_id]
     return person_labels(found)
@@ -1153,11 +1155,11 @@ class WorkflowEditor:
 
         editor = WorkflowEditor(draft.templates)
         editor.add(action) ... editor.add_role(action, index, row) ...
-        editor.ops()      # the changes to stage (see workflow.apply_ops); [] if nothing changed
+        editor.ops()      # the changes to stage (see workflow_editing.apply_ops); [] if nothing changed
     """
 
     def __init__(self, templates):
-        self.items = {a: [] for a in workflow.ACTIONS}
+        self.items = {a: [] for a in workflow_templates.ACTIONS}
         for action, named in templates.items():
             for name, t in named.items():
                 self.items.setdefault(action, []).append(
@@ -1216,13 +1218,13 @@ class WorkflowEditor:
         for action, items in self.items.items():
             seen = set()
             for item in items:
-                where = f"{workflow.label_of(action)} workflow '{item['name']}'"
-                if not workflow.tidy_name(item["name"]):
-                    return f"Every {workflow.label_of(action)} workflow needs a name."
-                if len(item["name"]) > workflow.MAX_NAME:
+                where = f"{workflow_templates.label_of(action)} workflow '{item['name']}'"
+                if not workflow_templates.tidy_name(item["name"]):
+                    return f"Every {workflow_templates.label_of(action)} workflow needs a name."
+                if len(item["name"]) > workflow_templates.MAX_NAME:
                     return f"The name of {where} is too long."
                 if item["name"].strip().lower() in seen:
-                    return f"There are two {workflow.label_of(action)} workflows called '{item['name']}'."
+                    return f"There are two {workflow_templates.label_of(action)} workflows called '{item['name']}'."
                 seen.add(item["name"].strip().lower())
                 if not item["rows"]:
                     return f"{where} needs at least one sign-off."
@@ -1238,8 +1240,8 @@ class WorkflowEditor:
         result = {}
         for action, items in self.items.items():
             for i in items:
-                result.setdefault(action, {})[i["name"].strip()] = workflow.Template(
-                    action, i["name"].strip(), [workflow.Row(list(r)) for r in i["rows"]], i["same"], i["requester"])
+                result.setdefault(action, {})[i["name"].strip()] = workflow_templates.Template(
+                    action, i["name"].strip(), [workflow_templates.Row(list(r)) for r in i["rows"]], i["same"], i["requester"])
         return result
 
     def ops(self):
@@ -1261,17 +1263,17 @@ class WorkflowEditor:
         """Add the standard workflows whose roles all exist; returns (added names, [(name, missing roles)])."""
         have = {r.lower() for r in roles}
         added, skipped = [], []
-        for action, items in workflow.STANDARD_WORKFLOWS.items():
+        for action, items in workflow_templates.STANDARD_WORKFLOWS.items():
             for name, rows in items:
                 if name.lower() in {n.lower() for n in self.names(action)}:
                     continue
                 missing = [r for row in rows for r in row if r.lower() not in have]
                 if missing:
-                    skipped.append((f"{workflow.label_of(action)} {name}", sorted(set(missing))))
+                    skipped.append((f"{workflow_templates.label_of(action)} {name}", sorted(set(missing))))
                     continue
                 self.items[action].append({"origin": None, "name": name, "rows": [list(r) for r in rows],
                                            "same": False, "requester": True})
-                added.append(f"{workflow.label_of(action)} {name}")
+                added.append(f"{workflow_templates.label_of(action)} {name}")
         return added, skipped
 
 
@@ -1281,7 +1283,7 @@ def ops_label(ops):
         return "Workflows"
     actions = []
     for op in ops:
-        label = workflow.label_of(op["action"])
+        label = workflow_templates.label_of(op["action"])
         if label not in actions:
             actions.append(label)
     return "Workflows: " + ", ".join(actions)

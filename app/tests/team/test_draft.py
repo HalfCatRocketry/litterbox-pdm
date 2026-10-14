@@ -9,7 +9,9 @@ from litterbox.team import team_editing
 from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.team import team_store
-from litterbox.workflows import workflow as wf
+from litterbox.workflows import workflow_editing
+from litterbox.workflows import workflow_store
+from litterbox.workflows import workflow_templates
 from litterbox.team.draft import TeamDraft
 from litterbox.errors import LitterboxError, NothingToSaveError
 from litterbox import diagnostics
@@ -30,7 +32,7 @@ class DraftFixture(TwoUserVault):
 
     def draft(self):
         with self.user("Alex"):
-            return TeamDraft(team_store.load(self.a), wf.load(self.a), "alex")
+            return TeamDraft(team_store.load(self.a), workflow_store.load(self.a), "alex")
 
     def commits(self):
         return int(git(self.a, "rev-list", "--count", "HEAD").strip())
@@ -77,17 +79,17 @@ class TestStaging(DraftFixture, unittest.TestCase):
         before = self.commits()
         d.stage_people("Add Bea", lambda dr, who: team_editing.add_person(dr, who, "bea", "Bea Jones", "", ["Bea"],
                                                                     team_model.MEMBER, [QUALITY]))
-        d.stage_workflow("Release workflow", lambda t, dr: wf.set_template(t, wf.RELEASE, "T1", [[QUALITY]]))
+        d.stage_workflow("Release workflow", lambda t, dr: workflow_editing.set_template(t, workflow_templates.RELEASE, "T1", [[QUALITY]]))
         with self.user("Alex"):
             d.save(self.a)
         self.assertEqual(self.commits(), before + 2)
         with self.user("Alex"):
-            self.assertIn("T1", wf.load(self.a)[wf.RELEASE])
+            self.assertIn("T1", workflow_store.load(self.a)[workflow_templates.RELEASE])
 
     def test_a_workflow_cannot_use_a_role_that_is_not_there(self):
         d = self.draft()
         with self.assertRaises(LitterboxError):
-            d.stage_workflow("Bad", lambda t, dr: wf.set_template(t, wf.RELEASE, "T1", [["Nobody"]]))
+            d.stage_workflow("Bad", lambda t, dr: workflow_editing.set_template(t, workflow_templates.RELEASE, "T1", [["Nobody"]]))
         self.assertFalse(d.dirty)
 
     def test_changes_saved_by_others_meanwhile_are_kept(self):

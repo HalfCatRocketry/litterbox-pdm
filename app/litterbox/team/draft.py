@@ -7,7 +7,7 @@ you are making several changes that is a lot of waiting, so the Team window work
     draft = TeamDraft(directory, templates, my_person_id)
     draft.stage_people("Add Bea", lambda d, who: team_editing.add_person(d, who, "bea", "Bea Jones"))
     draft.stage_people("Roles", lambda d, who: team_editing.set_roles(d, who, [...], scrub=True))
-    draft.stage_workflow("Release workflow", lambda t, d: workflow.set_template(t, "release", [...]))
+    draft.stage_workflow("Release workflow", lambda t, d: workflow_editing.set_template(t, "release", [...]))
     draft.directory / draft.templates      what the window shows (the vault's state plus your staged changes)
     draft.save(repo)                       one commit for the team file, one for the workflow file
 
@@ -22,7 +22,8 @@ import copy
 
 from litterbox.team import team_model
 from litterbox.team import team_store
-from litterbox.workflows import workflow
+from litterbox.workflows import workflow_store
+from litterbox.workflows import workflow_templates
 from litterbox.errors import LitterboxError, NothingToSaveError
 
 
@@ -63,7 +64,7 @@ class TeamDraft:
         change(trial, actor)
         team_model.validate(trial)
         if self.templates:
-            workflow.validate(copy.deepcopy(self.templates), trial)
+            workflow_templates.validate(copy.deepcopy(self.templates), trial)
         self.directory = trial
         self.people_ops.append((label, change))
         self.needs_owner = self.needs_owner or needs_owner
@@ -72,7 +73,7 @@ class TeamDraft:
         """Try `change(templates, directory)` on a copy of the draft's workflows; keep it if it works."""
         trial = copy.deepcopy(self.templates)
         change(trial, self.directory)
-        workflow.validate(trial, self.directory)
+        workflow_templates.validate(trial, self.directory)
         self.templates = trial
         self.workflow_ops.append((label, change))
 
@@ -106,7 +107,7 @@ class TeamDraft:
                     func(templates, directory)
 
             try:
-                workflow.edit_templates(repo, change_templates, "Workflow: " + _short("; ".join(
+                workflow_store.edit_templates(repo, change_templates, "Workflow: " + _short("; ".join(
                     label for label, _ in ops)))
                 changed = True
             except NothingToSaveError:
@@ -117,7 +118,7 @@ class TeamDraft:
                 raise
             saved += [label for label, _ in ops]
             self.workflow_ops = []
-        self.templates = workflow.load(repo)
+        self.templates = workflow_store.load(repo)
         if not changed:
             raise NothingToSaveError("Nothing was different from what is already saved in the vault, so "
                                          "there was nothing to save.")

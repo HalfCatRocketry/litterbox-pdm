@@ -714,8 +714,8 @@ class TestVaultCreatedText(unittest.TestCase):
 
 class TestWorkflowText(unittest.TestCase):
     def template(self):
-        from litterbox.workflows import workflow
-        return workflow.Template("release", "T1", [workflow.Row(["Quality"]), workflow.Row(["Manager", "Chief"])])
+        from litterbox.workflows import workflow_templates
+        return workflow_templates.Template("release", "T1", [workflow_templates.Row(["Quality"]), workflow_templates.Row(["Manager", "Chief"])])
 
     def slots(self):
         return [{"roles": ["Quality"], "id": "bea", "name": "Bea Jones"},
@@ -787,10 +787,10 @@ class TestWorkflowEditor(unittest.TestCase):
     ROLES = ["Responsible Engineer", "Quality", "Manager", "Chief"]
 
     def templates(self):
-        from litterbox.workflows import workflow
+        from litterbox.workflows import workflow_editing
         t = {}
-        workflow.set_template(t, "release", "T1", [["Responsible Engineer"], ["Quality"]])
-        workflow.set_template(t, "release", "T2", [["Responsible Engineer"]])
+        workflow_editing.set_template(t, "release", "T1", [["Responsible Engineer"], ["Quality"]])
+        workflow_editing.set_template(t, "release", "T2", [["Responsible Engineer"]])
         return t
 
     def test_nothing_changed_means_no_ops(self):
@@ -823,13 +823,13 @@ class TestWorkflowEditor(unittest.TestCase):
         self.assertEqual((op["name"], op["old"]), ("Flight", "T1"))
 
     def test_the_ops_replay_on_newer_files(self):
-        from litterbox.workflows import workflow
+        from litterbox.workflows import workflow_editing
         editor = logic.WorkflowEditor(self.templates())
         editor.items["release"][0]["name"] = "Flight"
         editor.delete("release", 1)
         newer = self.templates()
-        workflow.set_template(newer, "release", "Other", [["Chief"]])       # someone else's change
-        workflow.apply_ops(newer, editor.ops())
+        workflow_editing.set_template(newer, "release", "Other", [["Chief"]])       # someone else's change
+        workflow_editing.apply_ops(newer, editor.ops())
         self.assertEqual(list(newer["release"]), ["Flight", "Other"])
 
     def test_or_rows(self):

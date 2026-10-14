@@ -28,6 +28,7 @@ from litterbox.errors import NothingToSaveError
 from litterbox.team import team_identity
 from litterbox.team import team_model
 from litterbox.parts import create_batch
+from litterbox.core import part_number
 
 
 REAL_SESSION = import_session.ImportSession
@@ -394,7 +395,6 @@ class WorkflowWiring(unittest.TestCase):
         self.SimpleNamespace = SimpleNamespace
         self.box = FakeBox()
         self.gui = load_gui_with_fakes(self.box)
-        self.wf = self.gui.workflow
         app = self.gui.App.__new__(self.gui.App)
         self.tasks, self.said = [], []
         app.run_task = lambda work, done, on_success=None, refresh=True, is_refresh=False, **_kw: self.tasks.append(
@@ -413,8 +413,8 @@ class WorkflowWiring(unittest.TestCase):
         app._ask = lambda text, title: self.asked.append((text, title)) or self.answer
         self.answer = ""
         self.app = app
-        self.templates = {"T1": self.wf.Template("release", "T1", [self.wf.Row(["Quality"])])}
-        replace(self, self.wf, "templates_for", lambda repo, action: self.templates)
+        self.templates = {"T1": self.gui.workflow_templates.Template("release", "T1", [self.gui.workflow_templates.Row(["Quality"])])}
+        replace(self, self.gui.workflow_store, "templates_for", lambda repo, action: self.templates)
 
     def row(self, kind, pending=None, pn="HCR-00001-001"):
         return self.SimpleNamespace(pn=pn, name="Upright", kind=kind, state=kind, pending=pending or {})
@@ -451,7 +451,7 @@ class WorkflowWiring(unittest.TestCase):
 
         self.gui.WorkflowRequestDialog = Dialog
         calls = []
-        replace(self, self.wf, "request", lambda *a: calls.append(a) or "id")
+        replace(self, self.gui.workflow_request, "request", lambda *a: calls.append(a) or "id")
         self.app.release()
         self.assertEqual(seen, [("release", [("HCR-00001-001", "Upright"), ("HCR-00002-001", "Upright")], ["T1"],
                                  "alex")])
@@ -551,7 +551,7 @@ class WorkflowWiring(unittest.TestCase):
         self.targets("HCR-00001-001")
         self.app.rows_by_pn = {"HCR-00001-001": self.row("pending", self.pending(signed=True))}
         done = []
-        replace(self, self.wf, "complete_many", lambda repo, pns: done.append(pns))
+        replace(self, self.gui.workflow_signoff, "complete_many", lambda repo, pns: done.append(pns))
         self.app.release()
         self.tasks.pop()[0]()
         self.assertEqual(done, [["HCR-00001-001"]])
@@ -559,7 +559,7 @@ class WorkflowWiring(unittest.TestCase):
     def test_approving_passes_the_comment_and_reports_a_failure(self):
         self.answer = "Looks right"
         seen = []
-        replace(self, self.wf, "sign_off", lambda repo, pns, comment: seen.append((pns, comment)) or "result")
+        replace(self, self.gui.workflow_signoff, "sign_off", lambda repo, pns, comment: seen.append((pns, comment)) or "result")
         self.app.task_sign(self.task())
         work, done, on_success = self.tasks.pop()
         self.assertEqual(work(), "result")
@@ -581,7 +581,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn("A reason is required", self.shown("showwarning")[0][1][1])
         self.answer = "Missing tolerance"
         seen = []
-        replace(self, self.wf, "reject", lambda repo, pns, reason: seen.append((pns, reason)))
+        replace(self, self.gui.workflow_responses, "reject", lambda repo, pns, reason: seen.append((pns, reason)))
         self.app.task_reject(self.task())
         self.tasks.pop()[0]()
         self.assertEqual(seen, [(["HCR-00001-001"], "Missing tolerance")])
@@ -592,7 +592,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual(self.tasks, [])
         self.box.answer = True
         gone = []
-        replace(self, self.wf, "withdraw", lambda repo, pns: gone.append(pns))
+        replace(self, self.gui.workflow_responses, "withdraw", lambda repo, pns: gone.append(pns))
         self.app.task_withdraw(self.task())
         self.tasks.pop()[0]()
         self.assertEqual(gone, [["HCR-00001-001"]])
@@ -603,7 +603,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual(self.tasks, [])
         self.box.answer = True
         done = []
-        replace(self, self.wf, "complete_many", lambda repo, pns: done.append(pns))
+        replace(self, self.gui.workflow_signoff, "complete_many", lambda repo, pns: done.append(pns))
         self.app.task_complete(self.task())
         self.tasks.pop()[0]()
         self.assertEqual(done, [["HCR-00001-001"]])
@@ -618,7 +618,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual(self.tasks, [])
         self.box.answer = True
         seen = []
-        replace(self, self.wf, "override", lambda repo, pns, reason, action=None: seen.append((pns, reason, action)))
+        replace(self, self.gui.workflow_signoff, "override", lambda repo, pns, reason, action=None: seen.append((pns, reason, action)))
         self.app.task_override(self.task())
         self.tasks.pop()[0]()
         self.assertEqual(seen, [(["HCR-00001-001"], "Quality is away", "release")])
@@ -626,7 +626,7 @@ class WorkflowWiring(unittest.TestCase):
     def test_changing_a_signer(self):
         self.gui.ReassignDialog = lambda parent, task, directory: self.SimpleNamespace(show=lambda: (0, "alex"))
         seen = []
-        replace(self, self.wf, "reassign", lambda repo, pns, slot, person: seen.append((pns, slot, person)))
+        replace(self, self.gui.workflow_responses, "reassign", lambda repo, pns, slot, person: seen.append((pns, slot, person)))
         self.app.task_reassign(self.task())
         self.tasks.pop()[0]()
         self.assertEqual(seen, [(["HCR-00001-001"], 0, "alex")])
@@ -684,7 +684,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual(reloaded, [1])
 
     def test_removing_a_workflow_is_staged(self):
-        tpl = {"release": {"T1": self.wf.Template("release", "T1", [self.wf.Row(["Quality"])])}}
+        tpl = {"release": {"T1": self.gui.workflow_templates.Template("release", "T1", [self.gui.workflow_templates.Row(["Quality"])])}}
         window, draft, _ = self._draft_window(["Quality"], tpl)
         self._dialog_result([{"op": "remove", "action": "release", "name": "T1"}])
         self.app.edit_workflow(window)
@@ -1362,7 +1362,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
     def test_a_base_with_too_few_variants_is_refused_with_a_warning(self):
         self.scan()
         before = [r["values"][1] for r in self.rows()]
-        with mock.patch.object(importer.pn_module, "MAX_VARIANT", 3), \
+        with mock.patch.object(part_number, "MAX_VARIANT", 3), \
                 mock.patch.object(create_batch, "sync_latest", lambda repo: None):      # a sync resets the digit limits
             self.use_family("500")
         self.assertEqual([r["values"][1] for r in self.rows()], before)

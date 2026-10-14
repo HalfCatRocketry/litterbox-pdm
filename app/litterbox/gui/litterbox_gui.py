@@ -51,7 +51,14 @@ from litterbox.user import settings
 from litterbox.user import updater
 from litterbox.vault import clone as vault_clone
 from litterbox.vault import settings_admin as vault_settings
-from litterbox.workflows import workflow
+from litterbox.workflows import workflow_editing
+from litterbox.workflows import workflow_request
+from litterbox.workflows import workflow_responses
+from litterbox.workflows import workflow_signoff
+from litterbox.workflows import signoff_slots
+from litterbox.workflows import workflow_store
+from litterbox.workflows import workflow_tasks
+from litterbox.workflows import workflow_templates
 from litterbox.team.draft import TeamDraft
 from litterbox.core import filenames
 from litterbox.core import part_number
@@ -2424,7 +2431,7 @@ class WorkflowsDialog(ctk.CTkToplevel):
         self.apply = apply
         self.roles = list(roles)
         self.editor = logic.WorkflowEditor(templates)
-        self.selected = {action: 0 for action in workflow.ACTIONS}
+        self.selected = {action: 0 for action in workflow_templates.ACTIONS}
         self.name_vars = {}
         width, height = 820, 640
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
@@ -2441,8 +2448,8 @@ class WorkflowsDialog(ctk.CTkToplevel):
         self.tabs = ctk.CTkTabview(self)
         self.tabs.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 6))
         self.panes = {}
-        for action in workflow.ACTIONS:
-            tab = self.tabs.add(workflow.label_of(action))
+        for action in workflow_templates.ACTIONS:
+            tab = self.tabs.add(workflow_templates.label_of(action))
             tab.columnconfigure(0, weight=1)
             tab.rowconfigure(2, weight=1)
             self.panes[action] = tab
@@ -2485,7 +2492,7 @@ class WorkflowsDialog(ctk.CTkToplevel):
         self.selected[action] = index
         top = ctk.CTkFrame(pane, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew")
-        label = workflow.label_of(action)
+        label = workflow_templates.label_of(action)
         if not names:
             ctk.CTkLabel(top, text=f"No {label} workflow, so {label.lower()} just happens.", text_color=MUTED,
                          anchor="w").grid(row=0, column=0, padx=(0, 10), pady=4)
@@ -2566,7 +2573,7 @@ class WorkflowsDialog(ctk.CTkToplevel):
     def _delete(self, action):
         names = self.editor.names(action)
         index = self.selected[action]
-        if names and messagebox.askyesno("Delete workflow", f"Delete the {workflow.label_of(action)} workflow "
+        if names and messagebox.askyesno("Delete workflow", f"Delete the {workflow_templates.label_of(action)} workflow "
                                          f"'{names[index]}'? Requests already waiting keep their sign-offs.",
                                          parent=self):
             self.editor.delete(action, index)
@@ -2597,7 +2604,7 @@ class WorkflowsDialog(ctk.CTkToplevel):
 
     def _standard(self):
         added, skipped = self.editor.add_standard(self.roles)
-        for action in workflow.ACTIONS:
+        for action in workflow_templates.ACTIONS:
             self._redraw(action)
         lines = []
         if added:
@@ -2649,7 +2656,7 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
         self.action, self.parts, self.templates = action, parts, templates
         self.directory, self.my_id = directory, my_id
         self.row_vars, self.row_ids, self.extras = [], [], []
-        label = workflow.label_of(action)
+        label = workflow_templates.label_of(action)
         width, height = 680, 700
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
@@ -2674,7 +2681,7 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
                           button_color=GRAY_HOVER, button_hover_color=ACCENT,
                           command=lambda value: self._rebuild()).grid(row=0, column=1)
         self.reason_var = tk.StringVar()
-        if action in workflow.NEEDS_REASON:
+        if action in workflow_templates.NEEDS_REASON:
             reason = ctk.CTkFrame(self, fg_color="transparent")
             reason.grid(row=3, column=0, sticky="ew", padx=20, pady=(8, 0))
             reason.columnconfigure(1, weight=1)
@@ -2742,7 +2749,7 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
             notes.append("One person can't fill more than one sign-off.")
         if not template.requester_may_sign:
             notes.append("You can't sign your own request.")
-        notes += workflow.role_warnings(template, self.directory)
+        notes += workflow_editing.role_warnings(template, self.directory)
         self.note.configure(text=" ".join(notes))
 
     def _redraw_extras(self):
@@ -2784,16 +2791,16 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
         extras = [(e["role"].get(), e["ids"].get(e["person"].get(), "")) for e in self.extras]
         reason = " ".join(self.reason_var.get().split())
         try:
-            slots = workflow.build_slots(self.template, self.directory, self.my_id, assignments, extras)
-        except workflow.WorkflowError as e:
+            slots = signoff_slots.build_slots(self.template, self.directory, self.my_id, assignments, extras)
+        except workflow_templates.WorkflowError as e:
             self.problem.configure(text=logic.shorten(str(e)))
             return
-        if self.action in workflow.NEEDS_REASON and not reason:
+        if self.action in workflow_templates.NEEDS_REASON and not reason:
             self.problem.configure(text="A reason is required.")
             return
         self.problem.configure(text="")
         text = logic.request_confirm_text(self.action, self.parts, self.template, slots, reason,
-                                          workflow.role_warnings(self.template, self.directory))
+                                          workflow_editing.role_warnings(self.template, self.directory))
         if not messagebox.askokcancel("Start the workflow?", text, parent=self):
             return
         self.result = {"template": self.template.name, "assignments": assignments, "extras": extras,
@@ -3094,12 +3101,12 @@ class TasksWindow(ctk.CTkToplevel):
     def reload(self):
         """Redraw from the part list the main window last loaded."""
         keep = self.tree.selection()
-        tasks = workflow.tasks_from_rows(self.app.rows, self.app.identity)
+        tasks = workflow_tasks.tasks_from_rows(self.app.rows, self.app.identity)
         self.tasks = {t.id: t for t in tasks}
         self.tree.delete(*self.tree.get_children())
         for iid, values in logic.tasks_table(tasks):
             self.tree.insert("", "end", iid=iid, values=values)
-        mine = workflow.count_for_me(tasks)
+        mine = workflow_tasks.count_for_me(tasks)
         if not tasks:
             self.summary.configure(text="Nothing is waiting for sign-off. Press Get Latest in the main window to "
                                         "check for new requests.")
@@ -3196,7 +3203,7 @@ class TeamWindow(ctk.CTkToplevel):
         if identity.state == team_identity.LEGACY or identity.directory is None:
             return None
         try:
-            templates = workflow.load(self.app.repo())
+            templates = workflow_store.load(self.app.repo())
         except LitterboxError:
             templates = {}
         return TeamDraft(identity.directory, templates, identity.person.id if identity.person else "")
@@ -4145,8 +4152,8 @@ class App(ctk.CTk):
         button = getattr(self, "tasks_button", None)
         if button is None:
             return
-        tasks = workflow.tasks_from_rows(self.rows, self.identity)
-        button.configure(text=logic.tasks_button_text(workflow.count_for_me(tasks)))
+        tasks = workflow_tasks.tasks_from_rows(self.rows, self.identity)
+        button.configure(text=logic.tasks_button_text(workflow_tasks.count_for_me(tasks)))
         for window in self._task_windows():
             window.reload()
 
@@ -4163,7 +4170,7 @@ class App(ctk.CTk):
         if comment is None:
             return
         repo, pns = self.repo(), task.pns
-        self.run_task(lambda: workflow.sign_off(repo, pns, comment), f"Signed off {task.label}",
+        self.run_task(lambda: workflow_signoff.sign_off(repo, pns, comment), f"Signed off {task.label}",
                       on_success=lambda result: self._signed(task, result))
 
     def _signed(self, task, result):
@@ -4171,7 +4178,7 @@ class App(ctk.CTk):
         if text:
             messagebox.showwarning("Sign-off saved", text)
         elif result.completed:
-            self.note = f"Signed off; {workflow.label_of(task.action)} done on {len(result.completed)} part" \
+            self.note = f"Signed off; {workflow_templates.label_of(task.action)} done on {len(result.completed)} part" \
                         f"{'s' if len(result.completed) != 1 else ''}"
 
     def task_reject(self, task):
@@ -4180,22 +4187,22 @@ class App(ctk.CTk):
         if reason is None:
             return
         repo, pns = self.repo(), task.pns
-        self.run_task(lambda: workflow.reject(repo, pns, reason), f"Rejected {task.label}")
+        self.run_task(lambda: workflow_responses.reject(repo, pns, reason), f"Rejected {task.label}")
 
     def task_complete(self, task):
         repo, pns = self.repo(), task.pns
-        label = workflow.label_of(task.action)
+        label = workflow_templates.label_of(task.action)
         if messagebox.askokcancel(f"{label} {task.label}", f"Everyone needed has signed. {label} now?"):
-            self.run_task(lambda: workflow.complete_many(repo, pns), f"{label} done: {task.label}")
+            self.run_task(lambda: workflow_signoff.complete_many(repo, pns), f"{label} done: {task.label}")
 
     def task_withdraw(self, task):
         repo, pns = self.repo(), task.pns
         if messagebox.askyesno(f"Withdraw {task.label}", "Withdraw this request? The sign-offs so far are "
                                                          "discarded, and you can ask again later."):
-            self.run_task(lambda: workflow.withdraw(repo, pns), f"Withdrew the request for {task.label}")
+            self.run_task(lambda: workflow_responses.withdraw(repo, pns), f"Withdrew the request for {task.label}")
 
     def task_override(self, task):
-        label = workflow.label_of(task.action)
+        label = workflow_templates.label_of(task.action)
         reason = self._ask_reason(f"Why {label.lower()} without the sign-offs? This is recorded permanently.",
                                   f"Admin override: {label.lower()} {task.label}")
         if reason is None:
@@ -4203,7 +4210,7 @@ class App(ctk.CTk):
         repo, pns, action = self.repo(), task.pns, task.action
         if messagebox.askokcancel(f"{label} {task.label}", f"{label} without the required sign-offs?\n\nReason: "
                                                            f"{reason}\n\nThis is recorded as an Admin override."):
-            self.run_task(lambda: workflow.override(repo, pns, reason, action=action),
+            self.run_task(lambda: workflow_signoff.override(repo, pns, reason, action=action),
                           f"{label} done: {task.label} (Admin override)")
 
     def task_reassign(self, task):
@@ -4215,7 +4222,7 @@ class App(ctk.CTk):
             return
         slot, person_id = chosen
         repo, pns = self.repo(), task.pns
-        self.run_task(lambda: workflow.reassign(repo, pns, slot, person_id), f"Changed who signs {task.label}")
+        self.run_task(lambda: workflow_responses.reassign(repo, pns, slot, person_id), f"Changed who signs {task.label}")
 
     # -- starting a workflow ------------------------------------------------
     def _one_part_only(self, action, plan):
@@ -4231,7 +4238,7 @@ class App(ctk.CTk):
         request that has all its sign-offs) and return True. Return False when it should just happen."""
         repo = self.repo()
         try:
-            templates = workflow.templates_for(repo, action)
+            templates = workflow_store.templates_for(repo, action)
         except LitterboxError as e:
             messagebox.showerror("Litterbox", logic.shorten(str(e)))
             return True
@@ -4252,8 +4259,8 @@ class App(ctk.CTk):
         chosen = WorkflowRequestDialog(self, action, parts, templates, directory, me.id).show()
         if not chosen:
             return True
-        pns, label = list(plan.targets), workflow.label_of(action)
-        self.run_task(lambda: workflow.request(repo, pns, action, chosen["template"], chosen["assignments"],
+        pns, label = list(plan.targets), workflow_templates.label_of(action)
+        self.run_task(lambda: workflow_request.request(repo, pns, action, chosen["template"], chosen["assignments"],
                                                chosen["extras"], chosen["reason"]),
                       f"Started the {label} workflow on {len(pns)} part{'s' if len(pns) != 1 else ''}")
         return True
@@ -4261,22 +4268,22 @@ class App(ctk.CTk):
     def _finish_pending(self, action, pns):
         """The action's button on parts that already have a request: finish it if everyone has signed, else say
         what is missing."""
-        repo, label = self.repo(), workflow.label_of(action)
+        repo, label = self.repo(), workflow_templates.label_of(action)
         rows = [self.rows_by_pn[pn] for pn in pns]
         other = next((r for r in rows if r.pending.get("action") != action), None)
         if other is not None:
-            messagebox.showinfo(label, f"{other.pn} has a {workflow.label_of(other.pending.get('action'))} request "
+            messagebox.showinfo(label, f"{other.pn} has a {workflow_templates.label_of(other.pending.get('action'))} request "
                                        "waiting for sign-offs. Open My Tasks to approve, reject or withdraw it.")
             return
-        waiting = next((r for r in rows if not workflow.is_complete(r.pending)), None)
+        waiting = next((r for r in rows if not signoff_slots.is_complete(r.pending)), None)
         if waiting is not None:
             messagebox.showinfo(label, f"{waiting.pn} is still waiting for: " + ", ".join(
-                workflow.waiting_on(waiting.pending)) + ".\n\nOpen My Tasks to approve, reject or withdraw the "
+                signoff_slots.waiting_on(waiting.pending)) + ".\n\nOpen My Tasks to approve, reject or withdraw the "
                                                         "request.")
             return
         if messagebox.askokcancel(f"{label} {len(pns)} part{'s' if len(pns) != 1 else ''}",
                                   f"Everyone needed has signed. {label} now?"):
-            self.run_task(lambda: workflow.complete_many(repo, pns), f"{label} done: {', '.join(map(str, pns))}")
+            self.run_task(lambda: workflow_signoff.complete_many(repo, pns), f"{label} done: {', '.join(map(str, pns))}")
 
     def _may(self, action):
         """True if you may do `action`; otherwise says why in the status line."""
@@ -4431,15 +4438,15 @@ class App(ctk.CTk):
             for op in ops:
                 if op["op"] == "set":
                     template = wanted[op["action"]][op["name"]]
-                    notes += [f"{workflow.label_of(op['action'])} {op['name']}: {n}"
-                              for n in workflow.role_warnings(template, draft.directory)]
+                    notes += [f"{workflow_templates.label_of(op['action'])} {op['name']}: {n}"
+                              for n in workflow_editing.role_warnings(template, draft.directory)]
             if notes and not messagebox.askyesno(
                     "Workflows", "\n".join(notes) + "\n\nUntil that is fixed a request will wait for an Admin "
                     "override. Keep this change anyway?", parent=window):
                 return "Change the roles or the workflow, or press Cancel."
 
             def change(templates, _directory):
-                workflow.apply_ops(templates, ops)
+                workflow_editing.apply_ops(templates, ops)
 
             try:
                 draft.stage_workflow(logic.ops_label(ops), change)

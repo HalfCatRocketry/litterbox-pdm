@@ -73,8 +73,8 @@ def get_status(repo):
         elif not_downloaded:
             state, kind = "Not downloaded", "missing"
         elif record.pending:
-            from litterbox.workflows import workflow
-            state, kind = workflow.describe_pending(record.pending), "pending"
+            from litterbox.workflows import signoff_slots
+            state, kind = signoff_slots.describe_pending(record.pending), "pending"
         elif record.status == record_model.STATUS_RELEASED:
             if changed:
                 state, kind = "Released, but its files were modified", "stray"

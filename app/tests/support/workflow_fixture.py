@@ -9,7 +9,10 @@ from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.team import team_store
 from litterbox.records import record_store
-from litterbox.workflows import workflow as wf
+from litterbox.workflows import workflow_editing
+from litterbox.workflows import workflow_request
+from litterbox.workflows import workflow_store
+from litterbox.workflows import workflow_templates
 from litterbox.core.part_number import PN
 from litterbox import diagnostics
 from litterbox.parts import get_latest
@@ -62,9 +65,9 @@ class Fixture(TwoUserVault):
             read_only.enforce_read_only(self.a)
         self.get_latest("Bea")
 
-    def set_template(self, action=wf.RELEASE, name="T", rows=((QUALITY,), (ENGINEER,)), same=False, requester=True):
+    def set_template(self, action=workflow_templates.RELEASE, name="T", rows=((QUALITY,), (ENGINEER,)), same=False, requester=True):
         with self.user("Alex"):
-            wf.edit_templates(self.a, lambda t, d: wf.set_template(t, action, name, [list(r) for r in rows], same,
+            workflow_store.edit_templates(self.a, lambda t, d: workflow_editing.set_template(t, action, name, [list(r) for r in rows], same,
                                                                    requester), "Workflow")
         self.get_latest("Bea")
 
@@ -76,9 +79,9 @@ class Fixture(TwoUserVault):
         self.get_latest("Alex")                # the newest copy, whoever made the last change
         return record_store.load(self.a, pn)
 
-    def request(self, action=wf.RELEASE, pns=(PART,), name="T", assign=("bea", "alex"), **kwargs):
-        if not wf.templates_for(self.a, action):
+    def request(self, action=workflow_templates.RELEASE, pns=(PART,), name="T", assign=("bea", "alex"), **kwargs):
+        if not workflow_store.templates_for(self.a, action):
             self.set_template(action)
-        batch = self.do("Alex", wf.request, list(pns), action, name, list(assign), **kwargs)
+        batch = self.do("Alex", workflow_request.request, list(pns), action, name, list(assign), **kwargs)
         self.get_latest("Bea")
         return batch
