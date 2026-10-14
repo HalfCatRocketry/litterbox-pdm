@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.core import part_number
 from litterbox.records import record_store
 from litterbox.core.part_number import PN
@@ -86,11 +87,11 @@ class TestConfig(unittest.TestCase):
                     config.get_start_number(self.repo)
 
     def test_save_keeps_other_values(self):
-        config.save(self.repo, org="hcr")
-        config.save(self.repo, start_number=10001)
+        config_write.save(self.repo, org="hcr")
+        config_write.save(self.repo, start_number=10001)
         self.assertEqual(config.load(self.repo), {"org": "HCR", "start_number": 10001})
         with self.assertRaises(config.ConfigError):
-            config.save(self.repo, start_number=0)
+            config_write.save(self.repo, start_number=0)
 
     def test_no_org_has_its_own_error(self):
         with self.assertRaises(config.NoOrgError):
@@ -119,17 +120,17 @@ class TestConfig(unittest.TestCase):
 
     def test_digits_can_be_chosen_in_an_empty_vault_but_not_changed_afterwards(self):
         self.addCleanup(part_number.configure)
-        config.save(self.repo, org="HCR", base_digits=6, variant_digits=2)
+        config_write.save(self.repo, org="HCR", base_digits=6, variant_digits=2)
         self.assertEqual(config.get_digits(self.repo), (6, 2))
         config.apply(self.repo)
         self.make("HCR", 7)
-        config.save(self.repo, base_digits=6)                      # unchanged: fine
+        config_write.save(self.repo, base_digits=6)                      # unchanged: fine
         with self.assertRaises(config.ConfigError) as ctx:
-            config.save(self.repo, base_digits=5)
+            config_write.save(self.repo, base_digits=5)
         self.assertIn("can't be changed", str(ctx.exception))
         self.assertEqual(config.get_digits(self.repo), (6, 2))     # nothing was written
         with self.assertRaises(config.ConfigError):
-            config.save(self.repo, variant_digits=9)
+            config_write.save(self.repo, variant_digits=9)
 
     def test_the_engine_learns_the_digits_whenever_it_starts_work_on_a_vault(self):
         self.addCleanup(part_number.configure)

@@ -16,6 +16,7 @@ values the next time they get the latest.
 from pathlib import Path
 
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.team import people
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
@@ -31,7 +32,7 @@ CONFIG_REL = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
 
 @converts_errors
 def edit(repo, **values):
-    """Change the settings given (see config.set_values), commit and upload the change. If anything fails the file
+    """Change the settings given (see config_write.set_values), commit and upload the change. If anything fails the file
     is put back. Returns True if something changed, False if the vault already had those values."""
     repository.validate_repo(repo)
     people.require(repo, "manage_settings")
@@ -45,7 +46,7 @@ def edit(repo, **values):
         remote.pull(repo)
         before = path.read_bytes() if path.is_file() else None
         try:
-            config.set_values(repo, **values)
+            config_write.set_values(repo, **values)
         except config.ConfigError as e:
             raise LitterboxError(str(e)) from None
         after = path.read_bytes() if path.is_file() else None

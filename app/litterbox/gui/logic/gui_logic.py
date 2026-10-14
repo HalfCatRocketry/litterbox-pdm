@@ -526,6 +526,7 @@ def plan_add_org(url, root, known):
 def inspect_vault_folder(folder):
     """Look at a folder the user chose for Add org... Returns (org code, "") if it is a Litterbox vault, or
     ("", what is wrong and what to do about it)."""
+    from litterbox.vault import compatibility
     from litterbox.vault import config
     path = Path(folder)
     if not path.is_dir():
@@ -534,7 +535,7 @@ def inspect_vault_folder(folder):
         return "", ("That folder isn't a git repository. Clone your vault first (the clone is the vault folder), "
                     "then choose it here.")
     try:
-        config.check_compatible(path)
+        compatibility.check_compatible(path)
         return config.get_org(path), ""
     except config.NoOrgError:
         return "", ("That repository isn't a Litterbox vault yet: it has no .litterbox/config.yaml and no parts. "

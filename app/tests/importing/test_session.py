@@ -17,6 +17,7 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS
 
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.importing import session as import_session
 from litterbox.importing import importer
 from litterbox.importing import manifest
@@ -260,7 +261,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual(next(r for r in self.rows() if r.item_id == top).name, "Renamed while unticked")
 
     def test_proposed_numbers_start_at_the_start_number(self):
-        config.save(self.a, org="HCR", start_number=10001)       # the vault also has HCR-00001-001, below the start
+        config_write.save(self.a, org="HCR", start_number=10001)       # the vault also has HCR-00001-001, below the start
         with self.user("Alex"):
             self.make_manifest()
             prepared = importer.prepare(self.a, self.manifest_path, backend=self.fake, gap=0, jitter=0,

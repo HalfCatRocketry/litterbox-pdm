@@ -11,6 +11,7 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS, git
 from tests.support.workflow_fixture import Fixture
 
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.team import people
 from litterbox.vault import settings_admin as vault_settings
 from litterbox.errors import LitterboxError
@@ -29,38 +30,38 @@ class ConfigValues(unittest.TestCase):
         self.assertEqual(config.get_commit_style(self.repo), "per_part")
 
     def test_setting_and_clearing_it(self):
-        config.set_values(self.repo, commit_style="per_batch")
+        config_write.set_values(self.repo, commit_style="per_batch")
         self.assertEqual(config.get_commit_style(self.repo), "per_batch")
-        config.set_values(self.repo, commit_style="per_part")
+        config_write.set_values(self.repo, commit_style="per_part")
         self.assertEqual(config.get_commit_style(self.repo), "per_part")
 
     def test_the_release_rule_and_signatures_can_be_set_and_cleared(self):
-        config.set_values(self.repo, release_rule="block", require_signatures=True)
+        config_write.set_values(self.repo, release_rule="block", require_signatures=True)
         self.assertEqual(config.get_release_rule(self.repo), "block")
         self.assertTrue(config.get_require_signatures(self.repo))
-        config.set_values(self.repo, release_rule="warn", require_signatures=False)
+        config_write.set_values(self.repo, release_rule="warn", require_signatures=False)
         self.assertEqual(config.get_release_rule(self.repo), "warn")
         self.assertFalse(config.get_require_signatures(self.repo))
         self.assertEqual(config.load(self.repo), {})
 
     def test_other_lines_in_the_file_survive_a_change(self):
-        config.set_values(self.repo, commit_style="per_batch")
+        config_write.set_values(self.repo, commit_style="per_batch")
         text = (self.repo / layout.CONFIG_DIR / layout.CONFIG_FILE).read_text()
         (self.repo / layout.CONFIG_DIR / layout.CONFIG_FILE).write_text(text + "org: HCR\n")
-        config.set_values(self.repo, release_rule="off")
+        config_write.set_values(self.repo, release_rule="off")
         self.assertEqual(config.load(self.repo), {"commit_style": "per_batch", "org": "HCR", "release_rule": "off"})
 
     def test_bad_rule_and_signature_values_are_refused(self):
         with self.assertRaises(config.ConfigError):
-            config.set_values(self.repo, release_rule="maybe")
+            config_write.set_values(self.repo, release_rule="maybe")
         with self.assertRaises(config.ConfigError):
-            config.set_values(self.repo, require_signatures="yes")
+            config_write.set_values(self.repo, require_signatures="yes")
 
     def test_bad_values_are_refused(self):
         with self.assertRaises(config.ConfigError):
-            config.set_values(self.repo, commit_style="sometimes")
+            config_write.set_values(self.repo, commit_style="sometimes")
         with self.assertRaises(config.ConfigError):
-            config.set_values(self.repo, colour="red")
+            config_write.set_values(self.repo, colour="red")
 
     def test_a_hand_edited_bad_value_is_reported(self):
         (self.repo / layout.CONFIG_DIR).mkdir()

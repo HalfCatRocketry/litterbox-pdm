@@ -41,6 +41,7 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertEqual(lfs_locks.get_locks(self.a), {})
 
     def test_a_vault_with_a_workflow_asks_for_the_new_version(self):
+        from litterbox.vault import compatibility
         from litterbox.vault import config
         from litterbox import version
         self.set_template()
@@ -48,7 +49,7 @@ class TestTemplates(Fixture, unittest.TestCase):
             self.assertEqual(config.load(repo)["min_litterbox_version"], wf.MIN_VERSION)
         with mock.patch.object(version, "VERSION", "0.2.0"):
             with self.assertRaises(config.ConfigError) as ctx:
-                config.check_compatible(self.b)
+                compatibility.check_compatible(self.b)
         self.assertIn("needs Litterbox 0.3.0", str(ctx.exception))
 
     def test_removing_every_workflow_does_not_lower_the_minimum(self):

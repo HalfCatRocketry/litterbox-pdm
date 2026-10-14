@@ -12,6 +12,7 @@ from tests.support.import_fixture import FakeSolidWorks
 from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git
 
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.references import references as refs
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
@@ -211,7 +212,7 @@ class TestReleaseRule(RefsFixture, unittest.TestCase):
 
     def test_block_rule_refuses(self):
         self.release_part_rev_b()
-        config.save(self.a, org="HCR")
+        config_write.save(self.a, org="HCR")
         data = config.load(self.a)
         data["release_rule"] = "block"
         import yaml
@@ -226,7 +227,7 @@ class TestReleaseRule(RefsFixture, unittest.TestCase):
                 lifecycle.release(self.a, ASM)
 
     def test_rule_off_and_bad_value(self):
-        config.save(self.a, org="HCR")
+        config_write.save(self.a, org="HCR")
         import yaml
         path = self.a / ".litterbox" / "config.yaml"
         data = config.load(self.a)

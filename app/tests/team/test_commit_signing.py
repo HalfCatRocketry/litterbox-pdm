@@ -15,6 +15,7 @@ from tests.support.team_fixture import TeamFixture
 from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, git
 
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.team import commit_signing as signing
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
@@ -66,7 +67,7 @@ class RequireSignatures(TeamFixture, unittest.TestCase):
         super().setUp()
         self.setup_team()
         self.add_bea()
-        config.save(self.a, org="HCR")
+        config_write.save(self.a, org="HCR")
         data = config.load(self.a)
         data["require_signatures"] = True
         import yaml

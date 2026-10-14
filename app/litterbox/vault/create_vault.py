@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.team import people
 from litterbox.core import part_number
 from litterbox import version
@@ -311,9 +312,9 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
             writer.made_folders.append(layout.CONFIG_DIR)
         config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
         writer.note(config_rel, None)
-        config.save(repo, org=org, start_number=start_number, base_digits=base_digits,
+        config_write.save(repo, org=org, start_number=start_number, base_digits=base_digits,
                     variant_digits=variant_digits)
-        config.stamp(repo, min_version=min_version)
+        config_write.stamp(repo, min_version=min_version)
 
         paths = writer.paths
         runner.run(["git", "add", "--"] + paths, repo)

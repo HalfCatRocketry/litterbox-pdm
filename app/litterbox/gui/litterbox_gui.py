@@ -23,6 +23,7 @@ import customtkinter as ctk
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.cad import opener
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.team import people
@@ -3674,7 +3675,7 @@ class App(ctk.CTk):
             return
         new_org, new_folder, new_start, new_base_digits, new_variant_digits = result
         try:
-            config.save(new_folder, org=new_org, start_number=new_start,
+            config_write.save(new_folder, org=new_org, start_number=new_start,
                         base_digits=new_base_digits, variant_digits=new_variant_digits)
         except (config.ConfigError, OSError) as e:
             messagebox.showerror("Org setup", f"Could not save the settings in the vault:\n\n{e}", parent=self)

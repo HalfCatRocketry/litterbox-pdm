@@ -1,8 +1,6 @@
 """
-config.py - the vault's shared settings.
-
-They live INSIDE the vault, in .litterbox/config.yaml, so the whole team uses the
-same ones:
+config.py - the vault's shared settings, read from .litterbox/config.yaml (inside the vault, so the whole
+team uses the same ones):
 
     org: HCR              the org code that starts every part number
     start_number: 10001   the first part number to hand out (optional, default 1). Numbers count up from here to
@@ -11,33 +9,25 @@ same ones:
     pn_variant_digits: 3  digits in the variant number (HCR-10001-001), default 3
     format_version: 1     the layout of the vault's files (see version.py), default 1
     min_litterbox_version: 0.1.0   the oldest Litterbox allowed in this vault, default none
+    commit_style, release_rule, require_signatures   see their get_ functions below
 
-Choose the digit counts when the vault is set up. Changing them once part
-numbers exist would leave the old records and files with the wrong format, so
-save() refuses to.
+If the file doesn't exist yet, the org code is worked out from the part numbers already in the vault (as long as
+they all use the same one). vault/create_vault.py writes the file for new vaults.
 
-If the file doesn't exist yet, the org code is worked out from the part numbers
-already in the vault (as long as they all use the same one). A vault with no part
-numbers and no config file needs the file created by hand:
-
-    hcr-litterbox\\.litterbox\\config.yaml
-
-(init_vault.py will create it for new vaults.)
-
-This is different from settings.py, which holds YOUR personal settings and lives
-outside the vault.
+Writing the settings is in config_write.py; checking that this Litterbox may open the vault is in
+compatibility.py. This is different from user/settings.py, which holds YOUR personal settings and lives outside
+the vault.
 """
 
 from pathlib import Path
 
 import yaml
 
-from litterbox.core import part_number
-from litterbox.records import record_store
-from litterbox import version
-from litterbox.core.part_number import PNError, check_org
 from litterbox import layout
-
+from litterbox.core import part_number
+from litterbox.core.part_number import PNError, check_org
+from litterbox.records import record_store
+from litterbox.vault import compatibility
 
 
 class ConfigError(Exception):
@@ -174,46 +164,6 @@ def get_commit_style(repo):
     return value
 
 
-def set_values(repo, **values):
-    """Change vault settings that anyone may be allowed to edit (see vault_settings.py). Only the values given are
-    changed. Raises ConfigError for an unknown setting or a bad value."""
-    data = load(repo)
-    original = dict(data)
-    for key, value in values.items():
-        if key == "commit_style":
-            if value not in COMMIT_STYLES:
-                raise ConfigError(f"commit_style must be one of {', '.join(COMMIT_STYLES)}.")
-            if value == "per_part":
-                data.pop(key, None)                  # the default needs no line
-            else:
-                data[key] = value
-        elif key == "release_rule":
-            if value not in RELEASE_RULES:
-                raise ConfigError(f"release_rule must be one of {', '.join(RELEASE_RULES)}.")
-            if value == "warn":
-                data.pop(key, None)
-            else:
-                data[key] = value
-        elif key == "require_signatures":
-            if not isinstance(value, bool):
-                raise ConfigError("require_signatures must be true or false.")
-            if value:
-                data[key] = True
-            else:
-                data.pop(key, None)
-        else:
-            raise ConfigError(f"'{key}' is not a setting that can be changed here.")
-    path = config_path(repo)
-    if data == original:
-        return data                                  # nothing to change: leave the file (and its comments) alone
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(".tmp-config.yaml")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        yaml.safe_dump(data, f, sort_keys=False)
-    tmp.replace(path)
-    return data
-
-
 def get_require_signatures(repo):
     """True if this vault refuses uploads of commits that aren't signed by a key on the team list."""
     value = load(repo).get("require_signatures", False)
@@ -222,88 +172,9 @@ def get_require_signatures(repo):
     return value
 
 
-def check_compatible(repo):
-    """Raise ConfigError if this vault needs a newer Litterbox than this one (see version.py)."""
-    data = load(repo)
-    vault_format = data.get("format_version", 1)
-    if isinstance(vault_format, bool) or not isinstance(vault_format, int) or vault_format < 1:
-        raise ConfigError(f"format_version in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be a whole number, 1 or higher.")
-    if vault_format > version.VAULT_FORMAT:
-        raise ConfigError(
-            f"This vault was set up by a newer Litterbox (vault format {vault_format}; this copy only understands "
-            f"up to {version.VAULT_FORMAT}). Update Litterbox to open it. You have {version.VERSION}.")
-    wanted = data.get("min_litterbox_version")
-    if wanted not in (None, ""):
-        try:
-            too_old = version.parse(wanted) > version.parse(version.VERSION)
-        except ValueError:
-            raise ConfigError(f"min_litterbox_version in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} should look like 0.1.0.")
-        if too_old:
-            raise ConfigError(f"This vault needs Litterbox {wanted} or newer. You have {version.VERSION}. "
-                              "Update Litterbox to continue.")
-
-
-def stamp(repo, min_version=None):
-    """Record this program's vault format in the vault's config, and optionally the oldest Litterbox allowed.
-
-    Raising min_version makes everyone update before they can work in the vault. It never lowers an
-    existing minimum."""
-    data = load(repo)
-    data["format_version"] = max(version.VAULT_FORMAT, data.get("format_version", 1)
-                                 if isinstance(data.get("format_version"), int) else 1)
-    if min_version is not None:
-        version.parse(min_version)
-        current = data.get("min_litterbox_version")
-        if current in (None, "") or version.parse(min_version) > version.parse(current):
-            data["min_litterbox_version"] = str(min_version).lstrip("vV")
-    path = config_path(repo)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
-
-
 def apply(repo):
     """Tell the rest of the program how this vault writes its part numbers. Returns (base, variant) digits."""
-    check_compatible(repo)
+    compatibility.check_compatible(repo)
     digits = get_digits(repo)
     part_number.configure(*digits)
     return digits
-
-
-def save(repo, org=None, start_number=None, base_digits=None, variant_digits=None):
-    """Create or update the vault's config file. Only the values given are changed.
-
-    The digit counts can't be changed once the vault has part numbers in it.
-    """
-    data = load(repo)
-    if org is not None:
-        data["org"] = check_org(org)
-    if start_number is not None:
-        if isinstance(start_number, bool) or not isinstance(start_number, int) or start_number < 1:
-            raise ConfigError("The starting part number must be a whole number, 1 or higher.")
-        data["start_number"] = start_number
-    current = dict(zip(("pn_base_digits", "pn_variant_digits"), get_digits(repo)))
-    for key, value, (low, high) in (
-            ("pn_base_digits", base_digits, part_number.BASE_DIGITS_RANGE),
-            ("pn_variant_digits", variant_digits, part_number.VARIANT_DIGITS_RANGE)):
-        if value is None:
-            continue
-        if isinstance(value, bool) or not isinstance(value, int) or not (low <= value <= high):
-            raise ConfigError(f"{key} must be a whole number from {low} to {high}.")
-        if value != current[key] and _has_records(repo):
-            raise ConfigError(
-                "This vault already has part numbers, so the number of digits can't be changed. "
-                "The existing records and files would no longer match.")
-        data[key] = value
-    path = config_path(repo)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(".tmp-config.yaml")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        yaml.safe_dump(data, f, sort_keys=False)
-    tmp.replace(path)
-    return data
-
-
-def _has_records(repo):
-    folder = record_store.log_dir(repo)
-    return folder.is_dir() and any(folder.glob("*.yaml"))

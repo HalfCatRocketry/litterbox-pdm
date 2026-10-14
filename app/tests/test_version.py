@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 
+from litterbox.vault import compatibility
 from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox import version
 
 
@@ -50,31 +52,31 @@ class VaultCompatibility(unittest.TestCase):
 
     def test_old_vaults_without_the_fields_work(self):
         self.write("org: HCR\n")
-        config.check_compatible(self.dir)
-        config.check_compatible(Path(self.dir) / "nowhere")            # no config at all is fine too
+        compatibility.check_compatible(self.dir)
+        compatibility.check_compatible(Path(self.dir) / "nowhere")            # no config at all is fine too
 
     def test_a_newer_vault_format_is_refused(self):
         self.write("org: HCR\nformat_version: 2\n")
         with self.assertRaisesRegex(config.ConfigError, "newer Litterbox"):
-            config.check_compatible(self.dir)
+            compatibility.check_compatible(self.dir)
         version.VAULT_FORMAT = 2                                       # a Litterbox that knows format 2 is fine
-        config.check_compatible(self.dir)
+        compatibility.check_compatible(self.dir)
 
     def test_a_minimum_version_is_enforced(self):
         self.write("org: HCR\nmin_litterbox_version: 9.0.0\n")
         with self.assertRaisesRegex(config.ConfigError, "needs Litterbox 9.0.0"):
-            config.check_compatible(self.dir)
+            compatibility.check_compatible(self.dir)
         version.VERSION = "9.0.0"
-        config.check_compatible(self.dir)
+        compatibility.check_compatible(self.dir)
         version.VERSION = "10.0.0"                                     # compared as numbers, not text
-        config.check_compatible(self.dir)
+        compatibility.check_compatible(self.dir)
 
     def test_nonsense_values_get_a_plain_message(self):
         for text in ("format_version: abc\n", "format_version: 0\n", "format_version: true\n",
                      "min_litterbox_version: soon\n"):
             self.write("org: HCR\n" + text)
             with self.assertRaises(config.ConfigError):
-                config.check_compatible(self.dir)
+                compatibility.check_compatible(self.dir)
 
     def test_the_check_runs_whenever_a_vault_is_opened(self):
         self.write("org: HCR\nmin_litterbox_version: 9.0.0\n")
@@ -83,19 +85,19 @@ class VaultCompatibility(unittest.TestCase):
 
     def test_stamp_records_the_format_and_never_lowers_the_minimum(self):
         self.write("org: HCR\n")
-        config.stamp(self.dir, min_version="0.1.0")
+        config_write.stamp(self.dir, min_version="0.1.0")
         data = config.load(self.dir)
         self.assertEqual((data["org"], data["format_version"], data["min_litterbox_version"]), ("HCR", 1, "0.1.0"))
-        config.stamp(self.dir, min_version="0.3.0")
+        config_write.stamp(self.dir, min_version="0.3.0")
         self.assertEqual(config.load(self.dir)["min_litterbox_version"], "0.3.0")
-        config.stamp(self.dir, min_version="0.2.0")                     # lower: ignored
+        config_write.stamp(self.dir, min_version="0.2.0")                     # lower: ignored
         self.assertEqual(config.load(self.dir)["min_litterbox_version"], "0.3.0")
         with self.assertRaises(ValueError):
-            config.stamp(self.dir, min_version="soon")
+            config_write.stamp(self.dir, min_version="soon")
 
     def test_stamp_never_lowers_the_format(self):
         self.write("org: HCR\nformat_version: 3\n")
-        config.stamp(self.dir)
+        config_write.stamp(self.dir)
         self.assertEqual(config.load(self.dir)["format_version"], 3)
 
 

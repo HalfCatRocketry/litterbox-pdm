@@ -17,7 +17,7 @@ from unittest import mock
 
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, git, is_writable
 
-from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.parts import create
 from litterbox.importing import importer
 from litterbox.importing import manifest
@@ -388,7 +388,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             self.assertEqual([e.pn.base for e in prepared.proposal.entries], list(range(first, first + 4)))
 
     def test_the_gap_skips_numbers_already_in_use_and_loops_round(self):
-        config.save(self.a, org="HCR", start_number=99950)        # 5 digits: the highest is 99999
+        config_write.save(self.a, org="HCR", start_number=99950)        # 5 digits: the highest is 99999
         self.make_manifest()
         with self.user("Alex"):
             prepared = self.prepare(gap=100, jitter=0)            # 99950 + 100 is past the top, so round to 1 and on
@@ -411,7 +411,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             self.assertEqual(create.new_part(self.a, "Ordinary part"), PN("HCR", 6, 1))
 
     def test_import_numbers_loop_round_after_the_highest(self):
-        config.save(self.a, org="HCR", start_number=99998)       # 5 digits: the highest is 99999
+        config_write.save(self.a, org="HCR", start_number=99998)       # 5 digits: the highest is 99999
         self.make_manifest()
         with self.user("Alex"):
             prepared = self.prepare()

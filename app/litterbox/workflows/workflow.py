@@ -52,7 +52,7 @@ from pathlib import Path
 
 import yaml
 
-from litterbox.vault import config
+from litterbox.vault import config_write
 from litterbox.team import people
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
@@ -291,7 +291,7 @@ def edit_templates(repo, change, message):
         if templates:
             # Older versions don't know about pending requests and would let a part slip past its sign-offs, so
             # the vault now asks everyone to update before working in it.
-            config.stamp(repo, min_version=MIN_VERSION)
+            config_write.stamp(repo, min_version=MIN_VERSION)
             paths.append(config_rel)
         runner.run(["git", "add", "--"] + paths, repo)
         runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
