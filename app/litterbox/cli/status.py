@@ -37,8 +37,8 @@ def _print_status(repo):
         print(f"{row.pn}  {row.state:<38} {row.name}")
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Litterbox engine")
+def main(argv=None, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="Litterbox engine")
     parser.add_argument("repo", help="path to the repo folder")
     parser.add_argument("action", choices=["status", "latest", "checkout", "checkin", "save",
                                            "undo", "release", "makecots", "reopen", "void"])

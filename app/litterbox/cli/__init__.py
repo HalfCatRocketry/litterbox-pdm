@@ -34,5 +34,4 @@ def main(argv=None):
         return 0
     command, rest = argv[0], argv[1:]
     module = importlib.import_module(COMMANDS[command])
-    sys.argv[0] = f"python -m litterbox {command}"          # so each command's --help shows how to call it
-    return module.main(rest) or 0
+    return module.main(rest, prog=f"python -m litterbox {command}") or 0

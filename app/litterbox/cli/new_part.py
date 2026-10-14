@@ -11,8 +11,8 @@ from litterbox.parts import create
 from litterbox.parts import number_suggestions
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Litterbox: create part numbers")
+def main(argv=None, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="Litterbox: create part numbers")
     parser.add_argument("repo", help="path to the vault folder")
     sub = parser.add_subparsers(dest="command", required=True)
 

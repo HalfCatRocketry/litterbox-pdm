@@ -37,16 +37,16 @@ class Commands(unittest.TestCase):
     def test_the_command_gets_the_rest_of_the_line(self):
         seen = []
         module = importlib.import_module(cli.COMMANDS["scan"])
-        with mock.patch.object(module, "main", lambda argv: seen.append(argv) or 3):
+        with mock.patch.object(module, "main", lambda argv, prog=None: seen.append((argv, prog)) or 3):
             code, _ = self.run_cli("scan", "C:/old", "--no-hash")
-        self.assertEqual((code, seen), (3, [["C:/old", "--no-hash"]]))
+        self.assertEqual((code, seen), (3, [(["C:/old", "--no-hash"], "python -m litterbox scan")]))
 
-    def test_help_shows_how_to_call_the_command(self):
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out), mock.patch.object(sys, "argv", ["litterbox"]), \
-                self.assertRaises(SystemExit):
-            cli.main(["status", "--help"])
-        self.assertIn("usage: python -m litterbox status", out.getvalue())
+    def test_help_shows_how_to_call_each_command(self):
+        for command in cli.COMMANDS:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
+                cli.main([command, "--help"])
+            self.assertIn(f"usage: python -m litterbox {command}", out.getvalue())
 
 
 if __name__ == "__main__":

@@ -11,8 +11,8 @@ from litterbox.errors import LitterboxError
 from litterbox.vault import create_vault
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Turn an empty cloned repository into a Litterbox vault.")
+def main(argv=None, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="Turn an empty cloned repository into a Litterbox vault.")
     parser.add_argument("folder", help="the cloned, empty repository")
     parser.add_argument("--org", required=True, help="org code, 2 to 4 letters (HCR)")
     parser.add_argument("--start", type=int, default=1, help="first part number to hand out (default 1)")

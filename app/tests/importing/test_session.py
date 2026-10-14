@@ -25,6 +25,7 @@ from litterbox.importing import import_prepare
 from litterbox.importing import manifest
 from litterbox.records import record_store
 from litterbox.core.part_number import PN
+from litterbox.importing import scan
 
 
 @SKIP_ON_WINDOWS
@@ -189,14 +190,14 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             self.assertEqual(len(result.pns), 4)
 
     def test_cancel_during_the_scan_changes_nothing(self):
-        real_walk = import_session.scan_module.scan
+        real_walk = scan.scan
 
         def cancelling_scan(folders, repo=None, progress=None):
             self.session.cancel()
             return real_walk(folders, repo=repo, progress=progress)
 
-        import_session.scan_module.scan = cancelling_scan
-        self.addCleanup(setattr, import_session.scan_module, "scan", real_walk)
+        scan.scan = cancelling_scan
+        self.addCleanup(setattr, scan, "scan", real_walk)
         _, error, _ = self.go(folders=[self.src])
         self.assertIsInstance(error, import_errors.ImportCancelled)
         self.assertFalse((self.tmp / "settings" / "imports").exists())
@@ -310,7 +311,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             (other / "new_b.SLDPRT").write_text("new\n")
             (other / "unique.SLDPRT").write_text("unique\n")
             path = self.tmp / "other-manifest.yaml"
-            manifest.save(import_session.scan_module.scan([other], repo=self.a), path)
+            manifest.save(scan.scan([other], repo=self.a), path)
             prepared = import_prepare.prepare(self.a, path, backend=self.fake, gap=0, jitter=0, log=lambda *_: None, cots=True)
             names = [e.name for e in prepared.proposal.entries]
             found = import_duplicates.find_duplicates(self.a, prepared)

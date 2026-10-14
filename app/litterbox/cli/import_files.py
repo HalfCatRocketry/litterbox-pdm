@@ -12,8 +12,8 @@ from litterbox.importing import import_journal
 from litterbox.importing import import_numbering
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Litterbox: import files from a manifest")
+def main(argv=None, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="Litterbox: import files from a manifest")
     parser.add_argument("repo", help="path to the vault folder")
     parser.add_argument("manifest", nargs="?", help="the manifest file made by scan.py")
     parser.add_argument("--dry-run", action="store_true", help="check everything and show the plan; write nothing")

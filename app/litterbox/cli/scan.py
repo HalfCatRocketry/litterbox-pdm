@@ -10,8 +10,8 @@ from litterbox.importing import manifest as mf
 from litterbox.importing import scan
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser(description="Litterbox: scan old CAD folders and write an import manifest (read-only)")
+def main(argv=None, prog=None):
+    parser = argparse.ArgumentParser(prog=prog, description="Litterbox: scan old CAD folders and write an import manifest (read-only)")
     parser.add_argument("folders", nargs="+", help="the folders to scan")
     parser.add_argument("--out", default="import-manifest.yaml", help="where to write the manifest")
     parser.add_argument("--repo", help="your vault folder: files already imported from the same path are left out")
