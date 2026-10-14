@@ -13,7 +13,11 @@ from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, Tw
 
 from litterbox.vault import config
 from litterbox.vault import config_write
-from litterbox.references import references as refs
+from litterbox.references import reference_model
+from litterbox.references import reference_queries
+from litterbox.references import reference_reader
+from litterbox.references import reference_replace
+from litterbox.references import reference_rescan
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_revisions
@@ -56,7 +60,7 @@ class RefsFixture(TwoUserVault):
             self.add_created_part(2, "Frame")
             checkout.checkout(self.a, ASM)
             (self.a / ASM_FILE).write_text(f"assembly A\nref: {self.a / PRT}\n", encoding="utf-8")
-            checkin.checkin(self.a, ASM, "First version", references_reader=refs.make_reader(self.fake))
+            checkin.checkin(self.a, ASM, "First version", references_reader=reference_reader.make_reader(self.fake))
         with self.user("Bea"):
             get_latest.get_latest(self.b)
 
@@ -78,8 +82,8 @@ class RefsFixture(TwoUserVault):
     def replace(self, repo=None, user="Alex", pn=ASM):
         repo = repo or self.a
         with self.user(user):
-            items = refs.replacements_from(refs.uses(repo, pn))
-            return refs.replace_references(repo, items, backend=self.fake, log=self.log.append)
+            items = reference_replace.replacements_from(reference_queries.uses(repo, pn))
+            return reference_replace.replace_references(repo, items, backend=self.fake, log=self.log.append)
 
 
 class TestRecordingReferences(RefsFixture, unittest.TestCase):
@@ -110,7 +114,7 @@ class TestRecordingReferences(RefsFixture, unittest.TestCase):
         with self.user("Alex"):
             checkout.checkout(self.a, ASM)
             (self.a / ASM_FILE).write_text("assembly A, edited\n", encoding="utf-8")
-            checkin.checkin(self.a, ASM, "Edit", references_reader=refs.make_reader(Broken(), self.log.append))
+            checkin.checkin(self.a, ASM, "Edit", references_reader=reference_reader.make_reader(Broken(), self.log.append))
         self.assertEqual(self.record().references, {"A": [STEM_A]})            # unchanged
         self.assertTrue(any("could not read" in line for line in self.log))
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
@@ -123,10 +127,10 @@ class TestRecordingReferences(RefsFixture, unittest.TestCase):
             made.append(attach_only)
             raise RuntimeError("SolidWorks is not open.")
 
-        with self.user("Alex"), mock.patch.object(refs, "_new_backend", fake_new_backend):
+        with self.user("Alex"), mock.patch.object(reference_reader, "new_backend", fake_new_backend):
             checkout.checkout(self.a, ASM)
             (self.a / ASM_FILE).write_text("assembly A, edited\n", encoding="utf-8")
-            checkin.checkin(self.a, ASM, "Edit", references_reader=refs.make_reader(log=self.log.append))
+            checkin.checkin(self.a, ASM, "Edit", references_reader=reference_reader.make_reader(log=self.log.append))
         self.assertEqual(made, [True])                                 # asked to attach only
         self.assertEqual(self.record().references, {"A": [STEM_A]})
         self.assertTrue(any("SolidWorks is not open" in line for line in self.log))
@@ -135,7 +139,7 @@ class TestRecordingReferences(RefsFixture, unittest.TestCase):
         with self.user("Alex"):
             checkout.checkout(self.a, ASM)
             (self.a / ASM_FILE).write_text(f"assembly\nref: {self.a / PRT}\nref: /lib/screw.SLDPRT\n", encoding="utf-8")
-            checkin.checkin(self.a, ASM, "Add a screw", references_reader=refs.make_reader(self.fake))
+            checkin.checkin(self.a, ASM, "Add a screw", references_reader=reference_reader.make_reader(self.fake))
         self.assertEqual(self.record().references, {"A": [STEM_A]})
 
     def test_the_reader_does_not_touch_solidworks_when_no_assembly_changed(self):
@@ -149,7 +153,7 @@ class TestRecordingReferences(RefsFixture, unittest.TestCase):
         with self.user("Alex"):
             checkout.checkout(self.a, ASM)
             checkin.checkin(self.a, ASM, "No file change", allow_unchanged=True,
-                        references_reader=refs.make_reader(Spy()))
+                        references_reader=reference_reader.make_reader(Spy()))
         self.assertEqual(Spy.calls, 0)
         self.assertEqual(self.record().references, {"A": [STEM_A]})
 
@@ -164,41 +168,41 @@ class TestRecordingReferences(RefsFixture, unittest.TestCase):
 
 class TestLookups(RefsFixture, unittest.TestCase):
     def test_where_used(self):
-        found = refs.where_used(self.a, PART)
+        found = reference_queries.where_used(self.a, PART)
         self.assertEqual([(u.parent, u.parent_revision, u.child_revision, u.state) for u in found],
-                         [(ASM, "A", "A", refs.OK)])
+                         [(ASM, "A", "A", reference_model.OK)])
         self.assertTrue(found[0].editable)
-        self.assertEqual(refs.where_used(self.a, ASM), [])
+        self.assertEqual(reference_queries.where_used(self.a, ASM), [])
 
     def test_uses(self):
-        found = refs.uses(self.a, ASM)
-        self.assertEqual([(u.child, u.child_revision, u.state) for u in found], [(PART, "A", refs.OK)])
+        found = reference_queries.uses(self.a, ASM)
+        self.assertEqual([(u.child, u.child_revision, u.state) for u in found], [(PART, "A", reference_model.OK)])
 
     def test_a_newer_release_makes_it_stale_and_replaceable(self):
         self.release_part_rev_b()
-        (use,) = refs.uses(self.a, ASM)
-        self.assertEqual((use.state, use.latest_released, use.replaceable), (refs.STALE, "B", True))
+        (use,) = reference_queries.uses(self.a, ASM)
+        self.assertEqual((use.state, use.latest_released, use.replaceable), (reference_model.STALE, "B", True))
         self.assertIn("Rev B", use.state_text)
-        self.assertEqual(len(refs.stale_everywhere(self.a)), 1)
+        self.assertEqual(len(reference_queries.stale_everywhere(self.a)), 1)
 
     def test_a_released_assembly_is_not_replaceable(self):
         self.release_part_rev_b()
         with self.user("Alex"):
             lifecycle.release(self.a, ASM)
-        (use,) = refs.uses(self.a, ASM)
-        self.assertEqual((use.state, use.editable, use.replaceable), (refs.STALE, False, False))
+        (use,) = reference_queries.uses(self.a, ASM)
+        self.assertEqual((use.state, use.editable, use.replaceable), (reference_model.STALE, False, False))
 
     def test_unreleased_parts(self):
-        record_states = refs.classify(record_store.load(self.a, ASM), "A")           # the assembly itself, unreleased
-        self.assertEqual(record_states, (refs.UNRELEASED, ""))
-        self.assertEqual(refs.classify(None, "A"), (refs.MISSING, ""))
+        record_states = reference_model.classify(record_store.load(self.a, ASM), "A")           # the assembly itself, unreleased
+        self.assertEqual(record_states, (reference_model.UNRELEASED, ""))
+        self.assertEqual(reference_model.classify(None, "A"), (reference_model.MISSING, ""))
 
     def test_cancelled_and_void(self):
         record = record_store.load(self.a, PART)
         record.history.append({"event": "revision_cancelled", "by": "x", "at": "t", "cancelled": "B"})
-        self.assertEqual(refs.classify(record, "B")[0], refs.CANCELLED)
+        self.assertEqual(reference_model.classify(record, "B")[0], reference_model.CANCELLED)
         record.status = record_model.STATUS_VOID
-        self.assertEqual(refs.classify(record, "A")[0], refs.VOID)
+        self.assertEqual(reference_model.classify(record, "A")[0], reference_model.VOID)
 
 
 class TestReleaseRule(RefsFixture, unittest.TestCase):
@@ -256,8 +260,8 @@ class TestReplace(RefsFixture, unittest.TestCase):
         self.assertEqual(self.locks(self.a), {})
         self.assertIn("HCR-00002-001: Updated to the latest released parts", self.remote_log())
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
-        self.assertEqual(refs.stale_everywhere(self.a), [])
-        self.assertEqual(refs.where_used(self.a, PART)[0].child_revision, "B")
+        self.assertEqual(reference_queries.stale_everywhere(self.a), [])
+        self.assertEqual(reference_queries.where_used(self.a, PART)[0].child_revision, "B")
 
     def test_assembly_checked_out_by_someone_else_is_skipped(self):
         self.release_part_rev_b()
@@ -278,7 +282,7 @@ class TestReplace(RefsFixture, unittest.TestCase):
         self.assertIn(f"ref: {self.a / PRT_B}", (self.a / ASM_FILE).read_text())
         self.assertEqual(self.record().references, {"A": [STEM_A]})             # not yet
         with self.user("Alex"):
-            checkin.checkin(self.a, ASM, "Take new part", references_reader=refs.make_reader(self.fake))
+            checkin.checkin(self.a, ASM, "Take new part", references_reader=reference_reader.make_reader(self.fake))
         self.assertEqual(self.record().references, {"A": [STEM_B]})
 
     def test_a_failure_undoes_the_checkout_and_leaves_the_assembly_alone(self):
@@ -292,19 +296,19 @@ class TestReplace(RefsFixture, unittest.TestCase):
         self.assertEqual(self.record().references, {"A": [STEM_A]})
 
     def test_released_assemblies_and_up_to_date_references_are_never_in_the_list(self):
-        self.assertEqual(refs.replacements_from(refs.uses(self.a, ASM)), [])
+        self.assertEqual(reference_replace.replacements_from(reference_queries.uses(self.a, ASM)), [])
         self.release_part_rev_b()
         with self.user("Alex"):
             lifecycle.release(self.a, ASM)
-        self.assertEqual(refs.stale_everywhere(self.a), [])
+        self.assertEqual(reference_queries.stale_everywhere(self.a), [])
 
     def test_replace_refuses_a_part_whose_new_file_is_not_downloaded(self):
         self.release_part_rev_b()
-        items = [refs.Replacement(ASM, PART, "A")]
+        items = [reference_replace.Replacement(ASM, PART, "A")]
         pointer = self.a / PRT_B
         pointer.chmod(0o644)                                  # a part that isn't checked out is read-only on disk
         pointer.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 1\n")
-        (result,) = refs.replace_references(self.a, items, backend=self.fake, log=self.log.append)
+        (result,) = reference_replace.replace_references(self.a, items, backend=self.fake, log=self.log.append)
         self.assertEqual(result.status, "failed")
 
 
@@ -320,11 +324,11 @@ class TestRescan(RefsFixture, unittest.TestCase):
             git(self.a, "push")
             lfs_locks.unlock_mine(self.a, ["PN-logs/HCR-00002-001.yaml"])
             read_only.enforce_read_only(self.a)
-            result = refs.rescan(self.a, backend=self.fake, log=self.log.append)
+            result = reference_rescan.rescan(self.a, backend=self.fake, log=self.log.append)
         self.assertEqual(result, {ASM: "updated"})
         self.assertEqual(self.record().references, {"A": [STEM_A]})
         with self.user("Alex"):
-            self.assertEqual(refs.rescan(self.a, backend=self.fake, log=self.log.append), {ASM: "unchanged"})
+            self.assertEqual(reference_rescan.rescan(self.a, backend=self.fake, log=self.log.append), {ASM: "unchanged"})
         self.assertTrue(record_path.exists())
 
 
@@ -341,7 +345,7 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
         with self.user("Alex"):
             checkout.checkout(self.a, ASM)
             (self.a / ASM_FILE).write_text(text, encoding="utf-8")
-            checkin.checkin(self.a, ASM, "Edit", references_reader=refs.make_reader(self.Closed(), self.log.append))
+            checkin.checkin(self.a, ASM, "Edit", references_reader=reference_reader.make_reader(self.Closed(), self.log.append))
 
     def test_a_fresh_checkin_is_not_flagged(self):
         with self.user("Alex"):
@@ -356,7 +360,7 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
             row = self.status_of(self.a, ASM)
         self.assertTrue(row.refs_outdated)
         self.assertIn("(references need updating)", row.state)
-        self.assertEqual(refs.outdated_parts(self.a), [ASM])
+        self.assertEqual(reference_queries.outdated_parts(self.a), [ASM])
 
     def test_other_users_see_the_flag(self):
         self.check_in_unread()
@@ -376,7 +380,7 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
         with self.user("Alex"):
             checkout.checkout(self.a, ASM)
             (self.a / ASM_FILE).write_text(f"assembly A\nref: {self.a / PRT}\n", encoding="utf-8")
-            checkin.checkin(self.a, ASM, "Again", references_reader=refs.make_reader(self.fake))
+            checkin.checkin(self.a, ASM, "Again", references_reader=reference_reader.make_reader(self.fake))
         self.assertEqual(self.record().references_outdated, [])
         self.assertEqual(self.record().references, {"A": [STEM_A]})
 
@@ -394,7 +398,7 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
     def test_update_reads_the_files_and_clears_the_flag(self):
         self.check_in_unread(f"assembly A v2\nref: {self.a / PRT}\n")
         with self.user("Alex"):
-            result = refs.rescan(self.a, [ASM], backend=self.fake, log=self.log.append)
+            result = reference_rescan.rescan(self.a, [ASM], backend=self.fake, log=self.log.append)
             self.assertEqual(result, {ASM: "updated"})
             self.assertFalse(self.status_of(self.a, ASM).refs_outdated)
         self.assertEqual(self.record().references_outdated, [])
@@ -406,14 +410,14 @@ class TestNeedsUpdateFlag(RefsFixture, unittest.TestCase):
             get_latest.get_latest(self.b)
             checkout.checkout(self.b, ASM)
         with self.user("Alex"):
-            result = refs.rescan(self.a, [ASM], backend=self.fake, log=self.log.append)
+            result = reference_rescan.rescan(self.a, [ASM], backend=self.fake, log=self.log.append)
         self.assertIn("checked out by Bea", result[ASM])
         self.assertEqual(self.record().references_outdated, ["A"])
 
     def test_update_reports_a_failure_instead_of_stopping(self):
         self.check_in_unread()
         with self.user("Alex"):
-            result = refs.rescan(self.a, [ASM], backend=self.Closed(), log=self.log.append)
+            result = reference_rescan.rescan(self.a, [ASM], backend=self.Closed(), log=self.log.append)
         self.assertTrue(result[ASM].startswith("skipped"))
         self.assertEqual(self.record().references_outdated, ["A"])
 

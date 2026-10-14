@@ -64,8 +64,8 @@ class PlanContext:
 
     def records(self):
         if self._records is None:
-            from litterbox.references import references
-            self._records = references.LazyRecords(self.repo)
+            from litterbox.references import reference_model
+            self._records = reference_model.LazyRecords(self.repo)
         return self._records
 
 
@@ -124,8 +124,8 @@ def release_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     warnings = []
     rule = config.get_release_rule(repo)
     if rule != "off" and not record.cots:
-        from litterbox.references import references
-        found = references.release_warnings(repo, pn, ctx.records())
+        from litterbox.references import reference_queries
+        found = reference_queries.release_warnings(repo, pn, ctx.records())
         if rule == "block":
             problems.extend(found)
         else:

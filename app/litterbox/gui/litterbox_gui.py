@@ -31,7 +31,11 @@ from litterbox.team import team_identity
 from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.team import team_store
-from litterbox.references import references
+from litterbox.references import reference_model
+from litterbox.references import reference_queries
+from litterbox.references import reference_reader
+from litterbox.references import reference_replace
+from litterbox.references import reference_rescan
 from litterbox.parts import cancel_revision
 from litterbox.parts import revise
 from litterbox.team import commit_signing as signing
@@ -2066,7 +2070,7 @@ class ReferencesWindow(ctk.CTkToplevel):
                     key = (use.parent, use.child, use.child_revision)
                     if key not in seen:
                         seen.add(key)
-                        chosen.append(references.Replacement(use.parent, use.child, use.child_revision))
+                        chosen.append(reference_replace.Replacement(use.parent, use.child, use.child_revision))
         if not chosen:
             messagebox.showinfo("Nothing selected", "Select at least one reference to replace.")
             return
@@ -4111,7 +4115,7 @@ class App(ctk.CTk):
                 self.refresh()
                 return
             # Record which parts each imported assembly uses (a separate small step after the import)
-            self.run_task(lambda: references.rescan(repo, pns, log=lambda text: self.queue.put(("log", text))),
+            self.run_task(lambda: reference_rescan.rescan(repo, pns, log=lambda text: self.queue.put(("log", text))),
                           self.note)
 
         ImportWindow(self, self.repo(), self.org, imported, log=lambda text: self.queue.put(("log", text)), cots=cots)
@@ -4503,7 +4507,7 @@ class App(ctk.CTk):
         if comment is None:                                  # cancelled
             return
         comment = comment.strip() or "Update"
-        reader = references.make_reader(log=lambda text: self.queue.put(("log", text)))
+        reader = reference_reader.make_reader(log=lambda text: self.queue.put(("log", text)))
         snapshot = self._watch_files(plan.targets)
         self._run_batch(action, plan, lambda repo, pns: checkin.checkin_many(
             repo, pns, comment, keep_lock=keep_lock, allow_unchanged=allow_unchanged, references_reader=reader,
@@ -4623,7 +4627,7 @@ class App(ctk.CTk):
         if row.kind not in ("ok", "mine", "unclaimed") or rev != row.revision:
             return False
         try:
-            stale = [u for u in references.uses(self.repo(), pn, rev) if u.replaceable]
+            stale = [u for u in reference_queries.uses(self.repo(), pn, rev) if u.replaceable]
         except LitterboxError:
             return False
         if not stale:
@@ -4643,10 +4647,10 @@ class App(ctk.CTk):
         repo = self.repo()
 
         def load():
-            records = references.load_records(repo)
-            outdated = references.outdated_parts(repo, records)
-            return (records[pn].name if pn in records else "", references.uses(repo, pn, None, records),
-                    references.where_used(repo, pn, records), pn in outdated, [p for p in outdated if p != pn])
+            records = reference_model.load_records(repo)
+            outdated = reference_queries.outdated_parts(repo, records)
+            return (records[pn].name if pn in records else "", reference_queries.uses(repo, pn, None, records),
+                    reference_queries.where_used(repo, pn, records), pn in outdated, [p for p in outdated if p != pn])
 
         def show(r):
             if window is not None and window.winfo_exists():
@@ -4665,7 +4669,7 @@ class App(ctk.CTk):
 
         def work():
             try:
-                results = references.rescan(repo, pns, log=lambda text: self.queue.put(("log", text)))
+                results = reference_rescan.rescan(repo, pns, log=lambda text: self.queue.put(("log", text)))
                 return results, part_status.get_status(repo), ""
             except Exception as e:                       # the window must be given back either way
                 return None, None, str(e)
@@ -4701,7 +4705,7 @@ class App(ctk.CTk):
             text, problems = logic.replace_summary(results)
             (messagebox.showwarning if problems else messagebox.showinfo)("Replace references", text)
 
-        self.run_task(lambda: references.replace_references(
+        self.run_task(lambda: reference_replace.replace_references(
             repo, items, log=lambda text: self.queue.put(("log", text))), "Updated references", on_success=done)
 
     def _open_revision(self, pn, rev, drawing=False):

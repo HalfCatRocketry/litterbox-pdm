@@ -1040,7 +1040,7 @@ class OpenWiring(unittest.TestCase):
         return S(child=PN("HCR", 3, 1), child_revision="A", latest_released="B", replaceable=replaceable)
 
     def test_opening_an_assembly_with_out_of_date_parts_offers_a_review(self):
-        replace(self, self.gui.references, "uses", lambda repo, pn, rev: [self._stale()])
+        replace(self, self.gui.reference_queries, "uses", lambda repo, pn, rev: [self._stale()])
         asked, loaded = [], []
         self.box.askyesno = lambda title, text: asked.append((title, text)) or True
         self.gui.messagebox.askyesno = self.box.askyesno
@@ -1052,7 +1052,7 @@ class OpenWiring(unittest.TestCase):
         self.assertIn("newer released revision", asked[0][1])
 
     def test_declining_the_review_opens_the_file_anyway(self):
-        replace(self, self.gui.references, "uses", lambda repo, pn, rev: [self._stale()])
+        replace(self, self.gui.reference_queries, "uses", lambda repo, pn, rev: [self._stale()])
         self.gui.messagebox.askyesno = lambda title, text: False
         self.app._load_references = lambda pn: self.fail("should not review")
         self.picker.answer = "B"
@@ -1060,12 +1060,12 @@ class OpenWiring(unittest.TestCase):
         self.assertEqual(self.opened[0][0], "HCR-00007-001_B.SLDPRT")
 
     def test_no_offer_for_the_released_revision_or_when_nothing_can_change(self):
-        replace(self, self.gui.references, "uses", lambda repo, pn, rev: [self._stale()])
+        replace(self, self.gui.reference_queries, "uses", lambda repo, pn, rev: [self._stale()])
         self.gui.messagebox.askyesno = lambda *a: self.fail("should not ask")
         self.picker.answer = "A"                        # the released revision: frozen, nothing to replace
         self.app.open_part()
         self.assertEqual(len(self.opened), 1)
-        replace(self, self.gui.references, "uses", lambda repo, pn, rev: [self._stale(False)])
+        replace(self, self.gui.reference_queries, "uses", lambda repo, pn, rev: [self._stale(False)])
         self.picker.answer = "B"
         self.app.open_part()
         self.assertEqual(len(self.opened), 2)

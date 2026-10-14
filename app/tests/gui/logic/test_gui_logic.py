@@ -577,7 +577,7 @@ class TestReferenceText(unittest.TestCase):
 
     def test_stale_open_text_and_replace_summary(self):
         self.assertIn("Rev B is released", logic.stale_open_text(PN("HCR", 2, 1), [self.use()]))
-        from litterbox.references.references import ReplaceResult
+        from litterbox.references.reference_replace import ReplaceResult
         text, problems = logic.replace_summary([ReplaceResult(PN("HCR", 2, 1), "done", "ok"),
                                                 ReplaceResult(PN("HCR", 3, 1), "skipped", "Checked out by Bea.")])
         self.assertTrue(problems)
