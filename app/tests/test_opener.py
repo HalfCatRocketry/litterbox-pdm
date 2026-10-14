@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import opener  # noqa: E402
-from litterbox_engine import LitterboxError  # noqa: E402
+from litterbox.cad import opener  # noqa: E402
+from litterbox.parts.engine import LitterboxError  # noqa: E402
 
 
 class OpenOrder(unittest.TestCase):

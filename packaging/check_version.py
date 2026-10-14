@@ -1,6 +1,6 @@
 """Used by the release pipeline.
 
-    python packaging/check_version.py v0.1.0      fails unless that tag matches VERSION in app/version.py
+    python packaging/check_version.py v0.1.0      fails unless that tag matches VERSION in app/litterbox/version.py
     python packaging/check_version.py --print     prints VERSION (so the pipeline can use it)
 """
 
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
-import version  # noqa: E402
+from litterbox import version  # noqa: E402
 
 
 def main(argv):
@@ -20,7 +20,7 @@ def main(argv):
         return 2
     tag = argv[1].removeprefix("refs/tags/")
     if tag != f"v{version.VERSION}":
-        print(f"The tag is '{tag}' but app/version.py says VERSION = \"{version.VERSION}\".\n"
+        print(f"The tag is '{tag}' but app/litterbox/version.py says VERSION = \"{version.VERSION}\".\n"
               f"Change VERSION to match (or tag v{version.VERSION}), commit, and tag again.")
         return 1
     print(f"Tag {tag} matches VERSION {version.VERSION}.")

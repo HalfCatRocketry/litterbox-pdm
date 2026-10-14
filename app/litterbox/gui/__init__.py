@@ -1,0 +1,1 @@
+"""The Litterbox window (CustomTkinter)."""

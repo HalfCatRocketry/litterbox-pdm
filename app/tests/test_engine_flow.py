@@ -19,9 +19,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import registry  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 
 @SKIP_ON_WINDOWS
@@ -327,7 +327,7 @@ class EngineFlow(TwoUserVault, unittest.TestCase):
 
     # -- a brand-new part, saved before it was checked out -------------------
     def test_new_part_with_unclaimed_file_can_be_checked_out(self):
-        import create
+        from litterbox.parts import create
         with self.user("Bea"):
             pn = create.new_part(self.b, "Fresh")
             eng.checkout(self.b, pn)                   # what the New Part button now does

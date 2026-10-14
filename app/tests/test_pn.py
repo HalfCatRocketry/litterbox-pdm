@@ -2,8 +2,8 @@
 
 import unittest
 
-import pn as pn_module
-from pn import (PN, PNError, filename, lowest_unused, next_base, next_variant,
+from litterbox.core import pn as pn_module
+from litterbox.core.pn import (PN, PNError, filename, lowest_unused, next_base, next_variant,
                 parse, parse_filename, try_parse, try_parse_filename)
 
 

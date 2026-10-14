@@ -1,0 +1,1488 @@
+"""
+gui_logic.py - the decisions the Litterbox window makes, with no window code in it.
+
+Which parts a button may act on, how the list is filtered, what the summary line
+says, how history is laid out. Keeping this separate from the window code means
+all of it can be tested automatically.
+"""
+
+import time
+import re
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path, PurePosixPath
+
+from litterbox.parts.engine import LitterboxError
+from litterbox.core import pn as pn_module
+from litterbox.records import registry
+from litterbox.workflows import workflow
+
+# ---------------------------------------------------------------------------
+# The list: filtering
+# ---------------------------------------------------------------------------
+
+VIEWS = ("All", "Mine", "Checked out", "Released")
+
+
+def filter_rows(rows, search="", view="All", show_void=False):
+    """Pick which PartStatus rows to show.
+
+    search      matches part number, name or description, ignoring capitals
+    view        one of VIEWS
+    show_void   void parts are hidden unless this is True
+    """
+    needle = (search or "").strip().lower()
+    shown = []
+    for row in rows:
+        if row.kind == "void" and not show_void:
+            continue
+        if view == "Mine" and row.kind != "mine":
+            continue
+        if view == "Checked out" and row.kind not in ("mine", "theirs"):
+            continue
+        if view == "Released" and row.kind != "released" and not getattr(row, "released_revision", ""):
+            continue
+        if needle and not any(needle in text.lower() for text in
+                              (str(row.pn), row.name, row.description, row.import_path)):
+            continue
+        shown.append(row)
+    return shown
+
+
+def _natural_key(text):
+    """'HCR-10 b' sorts after 'HCR-9 b': numbers compare as numbers, words ignore capitals."""
+    return [(0, int(piece), "") if piece.isdigit() else (1, 0, piece)
+            for piece in re.split(r"(\d+)", text.lower()) if piece]
+
+
+def sort_order(values, reverse=False):
+    """Positions of `values` in sorted order. Blank values always come last."""
+    texts = [str(value).strip() for value in values]
+    filled = [i for i, text in enumerate(texts) if text]
+    blank = [i for i, text in enumerate(texts) if not text]
+    filled.sort(key=lambda i: _natural_key(texts[i]), reverse=reverse)
+    return filled + blank
+
+
+def file_types(files):
+    """['cad/HCR-00001-001.SLDPRT', 'cad/HCR-00001-001.SLDDRW'] -> 'PRT, DRW'"""
+    kinds = []
+    for path in files:
+        ext = PurePosixPath(path).suffix.lstrip(".").upper()
+        if ext.startswith("SLD") and len(ext) > 3:
+            ext = ext[3:]
+        if ext and ext not in kinds:
+            kinds.append(ext)
+    return ", ".join(kinds)
+
+
+# ---------------------------------------------------------------------------
+# Buttons: what each action may be used on
+# ---------------------------------------------------------------------------
+
+# The "kind" values come from litterbox_engine.PartStatus.kind
+ALLOWED_KINDS = {
+    "checkout": {"ok", "unclaimed"},
+    "checkin": {"mine"},
+    "save": {"mine"},
+    "undo": {"mine"},
+    "edit": {"mine"},
+    "open": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},    # anything downloaded
+    "open_drawing": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
+    "release": {"ok", "pending"},            # on a pending part it completes an approved request (see the window)
+    "make_cots": {"ok", "pending"},         # on a pending part it completes an approved request
+    "revise": {"released"},
+    "cancel_revision": {"ok", "mine"},
+    "reopen": {"released", "cots", "pending"},
+    "void": {"ok", "cots", "pending"},
+    "references": {"ok", "mine", "theirs", "unclaimed", "stray", "released", "cots", "void", "missing", "pending"},
+}
+
+# These can be done to several parts at once; the rest need exactly one part selected.
+MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots"}
+
+NAME = {            # "...cannot <name> ..."
+    "checkout": "check out", "checkin": "check in", "save": "save progress on",
+    "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
+}
+PAST = {            # "<past> 2 parts"
+    "checkout": "Checked out", "checkin": "Checked in", "save": "Saved progress on",
+    "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
+}
+
+
+@dataclass
+class ActionPlan:
+    targets: list = field(default_factory=list)     # part numbers the action will run on
+    skipped: list = field(default_factory=list)     # [(pn, reason)] that were selected but can't be used
+    message: str = ""                               # if not empty: show this and do nothing
+
+
+def plan_action(action, selected, rows_by_pn, pending=None):
+    """Decide which of the selected parts an action applies to.
+
+    `selected` is a list of PN objects; `rows_by_pn` maps PN -> PartStatus. `pending` maps a part (as text) to the
+    job that is queued or running for it: a part with a job in progress can't have anything else done to it yet
+    (except looking at it).
+    """
+    if not selected:
+        return ActionPlan(message="Select a part first (use its box on the left)." if action not in VIEW_ONLY else "Click a part first.")
+    if action not in MULTI and len(selected) > 1:
+        return ActionPlan(message=f"Select just one part to {NAME[action]}.")
+
+    allowed = ALLOWED_KINDS[action]
+    targets, skipped = [], []
+    for pn in selected:
+        row = rows_by_pn.get(pn)
+        if pending and action not in VIEW_ONLY and str(pn) in pending:
+            skipped.append((pn, f"busy: {pending[str(pn)].lower()}"))
+        elif row is not None and row.kind in allowed:
+            targets.append(pn)
+        else:
+            skipped.append((pn, row.state if row is not None else "not in the list"))
+
+    plan = ActionPlan(targets, skipped)
+    if not targets:
+        if len(skipped) == 1:
+            pn, reason = skipped[0]
+            plan.message = f"Can't {NAME[action]} {pn}: {reason}."
+        else:
+            plan.message = f"None of the selected parts can be used to {NAME[action]}."
+    return plan
+
+
+TICK_ON, TICK_OFF = "\u2611", "\u2610"          # the box glyphs in the list's first column
+
+
+VIEW_ONLY = {"open", "open_drawing", "references"}      # these only look at a part, so the blue highlighted row will do
+
+
+def choose_targets(action, ticked, highlighted):
+    """Which parts an action applies to. Looking at a part (VIEW_ONLY) uses the highlighted row, or the one
+    selected part if nothing is highlighted. Everything else, which changes or proposes a change, uses only the
+    parts whose boxes are selected, so a stray click on a row can never be what Release or Check Out acts on."""
+    if action in VIEW_ONLY:
+        if highlighted:
+            return list(highlighted)
+        return list(ticked) if len(ticked) == 1 else []
+    return list(ticked)
+
+
+# The main window's buttons that depend on the selection. Button text -> action key.
+BUTTON_ACTIONS = {
+    "Check Out": "checkout", "Check In": "checkin", "Save Progress": "save", "Undo Checkout": "undo",
+    "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
+    "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
+    "Unrelease": "reopen", "Void": "void", "History": "history",
+}
+
+
+def action_available(action, ticked, highlighted, rows_by_pn, pending=None):
+    """True if every part the action would act on is one it can be used on (so its button may light up)."""
+    targets = choose_targets("open" if action == "history" else action, ticked, highlighted)
+    if not targets:
+        return False
+    if pending and action not in VIEW_ONLY and action != "history" and any(str(pn) in pending for pn in targets):
+        return False
+    if action == "history":
+        return len(targets) == 1
+    if action not in MULTI and len(targets) > 1:
+        return False
+    allowed = ALLOWED_KINDS[action]
+    for pn in targets:
+        row = rows_by_pn.get(pn)
+        if row is None or row.kind not in allowed:
+            return False
+    return True
+
+
+def button_states(ticked, highlighted, rows_by_pn, pending=None):
+    """{button text: True if it should be usable} for the main window's selection-dependent buttons."""
+    return {text: action_available(action, ticked, highlighted, rows_by_pn, pending)
+            for text, action in BUTTON_ACTIONS.items()}
+
+
+def import_base_placeholder(repo, org):
+    """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
+    from litterbox.vault import config
+    try:
+        return pn_module.format_base(registry.next_free_base(repo, org, config.get_start_number(repo)))
+    except Exception:
+        return ""
+
+
+def range_between(shown, anchor, iid):
+    """Shift-click in a list with tick boxes: the rows from the last one clicked (`anchor`) to this one, in the
+    order shown. Without a usable anchor it is just the clicked row."""
+    if anchor in shown and iid in shown:
+        a, b = sorted((shown.index(anchor), shown.index(iid)))
+        return list(shown[a:b + 1])
+    return [iid]
+
+
+def shift_held(event):
+    """True if the Shift key was down for a Tk mouse event."""
+    return bool(getattr(event, "state", 0) & 0x1)
+
+
+def tick_text(count):
+    if not count:
+        return "Nothing selected."
+    return (f"{count} part{'s' if count != 1 else ''} selected. Check Out, Check In, Save Progress and Undo Checkout "
+            "apply to the selected parts.")
+
+
+def row_tags(kind, ticked):
+    """The list row's tags: its colour, plus 'ticked' when its box is ticked."""
+    return (kind, "ticked") if ticked else (kind,)
+
+
+def undo_prompt(targets):
+    """The question asked before Undo Checkout."""
+    return ("This will discard changes and release the lock on these parts:\n\n"
+            + "\n".join(str(pn) for pn in targets) + "\n\nContinue?")
+
+
+def person_unchanged(person, fields):
+    """True if the Edit Person form's fields (from person_form_result) are what the person already has."""
+    return (fields.get("name") == person.name and fields.get("email", "") == person.email
+            and list(fields.get("host_names", [])) == list(person.host_names)
+            and fields.get("access", person.access) == person.access
+            and list(fields.get("roles", [])) == list(person.roles)
+            and list(fields.get("signing_keys", [])) == list(person.signing_keys))
+
+
+def run_batch(targets, func):
+    """Run func(pn) for each part, carrying on if one fails.
+
+    Returns (done, failed): done is [(pn, result)], failed is [(pn, error text)].
+    """
+    done, failed = [], []
+    for pn in targets:
+        try:
+            done.append((pn, func(pn)))
+        except LitterboxError as e:
+            failed.append((pn, str(e)))
+    return done, failed
+
+
+def _parts(count):
+    return f"{count} part" + ("" if count == 1 else "s")
+
+
+def summary(action, done, failed=0, skipped=0):
+    """One line saying what just happened, e.g. 'Checked out 2 parts, 1 failed'."""
+    if done:
+        text = f"{PAST[action]} {_parts(done)}"
+        if failed:
+            text += f", {failed} failed"
+    else:
+        text = f"Could not {NAME[action]} {_parts(failed or skipped or 1)}"
+    if skipped and done:
+        text += f", skipped {skipped}"
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Window icon
+# ---------------------------------------------------------------------------
+
+ICON_CHOICES = ("white", "black")
+DEFAULT_ICON = "white"
+
+
+def icon_filename(choice=DEFAULT_ICON):
+    """'white' -> 'litterbox_icon_white.ico'. Anything unrecognized gives the default."""
+    choice = str(choice or "").strip().lower()
+    if choice not in ICON_CHOICES:
+        choice = DEFAULT_ICON
+    return f"litterbox_icon_{choice}.ico"
+
+
+def find_icon(assets_dir, choice=DEFAULT_ICON):
+    """The icon file to use, or None if there isn't one.
+
+    Tries the chosen icon first, then the default white one, then the black one,
+    so a missing file never stops the program from starting.
+    """
+    assets_dir = Path(assets_dir)
+    wanted = [icon_filename(choice), icon_filename("white"), icon_filename("black")]
+    for name in wanted:
+        path = assets_dir / name
+        if path.is_file():
+            return path
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Check-in with nothing changed
+# ---------------------------------------------------------------------------
+
+def parts_without_changes(reports):
+    """From [(pn, ChangeReport)], the parts with nothing to check in, as [(pn, [cad files])]."""
+    return [(pn, list(report.unchanged_files)) for pn, report in reports if not report.has_changes]
+
+
+def unchanged_lines(unchanged):
+    """Lines for the 'No changes were detected in these files' window.
+
+    `unchanged` is [(pn, [file paths])]. Each part is listed with its files under it.
+    """
+    lines = []
+    for pn, files in unchanged:
+        lines.append(str(pn))
+        names = [PurePosixPath(f).name for f in files]
+        if names:
+            lines.extend("    " + name for name in names)
+        else:
+            lines.append("    (no CAD files yet)")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# Messages
+# ---------------------------------------------------------------------------
+
+def cad_changes(paths, limit=15):
+    """From a list of changed paths, the CAD file names (for the 'close and reopen' warning)."""
+    names = [PurePosixPath(p).name for p in paths if p.startswith("cad/")]
+    if len(names) > limit:
+        names = names[:limit] + [f"... and {len(names) - limit} more"]
+    return names
+
+
+def shorten(text, limit=1200):
+    """Keep very long error text from filling the screen."""
+    text = str(text).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n... (the full text is in the log)"
+
+
+# ---------------------------------------------------------------------------
+# History window
+# ---------------------------------------------------------------------------
+
+EVENT_LABELS = {
+    "created": "Created", "checked_out": "Checked out", "checked_in": "Checked in",
+    "released": "Released", "reopened": "Unreleased", "voided": "Voided", "made_cots": "Made COTS",
+    "edited": "Edited details", "revised": "Revised", "revision_cancelled": "Revision cancelled",
+    "references_updated": "Parts used updated",
+    "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
+    "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",
+}
+REQUEST_EVENTS = {"release_requested", "release_rejected"}          # shown as "<Action> requested" / "rejected"
+
+
+def to_display_time(text, local=True):
+    """'2026-10-05T14:02:41Z' -> '2026-10-05 14:02' (in your time zone if local=True)."""
+    try:
+        moment = datetime.strptime(str(text), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return str(text)
+    if local:
+        moment = moment.astimezone()
+    return moment.strftime("%Y-%m-%d %H:%M")
+
+
+def format_history(record, local=True):
+    """Rows of (when, who, what, details) for a record, newest first."""
+    rows = []
+    for event in reversed(record.history):
+        parts = []
+        if event.get("reason"):
+            parts.append(str(event["reason"]))
+        if event.get("comment"):
+            parts.append(str(event["comment"]))
+        if event.get("event") == "revised" and event.get("from_revision"):
+            parts.append(f"Rev {event['from_revision']} to Rev {event.get('revision', '')}")
+        if event.get("event") == "revision_cancelled" and event.get("cancelled"):
+            parts.append(f"Rev {event['cancelled']}")
+        used = event.get("references")
+        if used is not None and event.get("event") == "checked_in":
+            parts.append("uses " + (", ".join(used) if used else "no parts"))
+        elif isinstance(used, dict):
+            parts.append("; ".join(f"Rev {rev} uses " + (", ".join(stems) if stems else "no parts")
+                                   for rev, stems in used.items()))
+        changes = event.get("changes") or []
+        if changes:
+            parts.append("; ".join(str(c) for c in changes))
+        if event.get("event") == "release_signed" and event.get("roles"):
+            parts.append("as " + ", ".join(event["roles"]))
+        if event.get("event") == "release_requested" and event.get("waiting_on"):
+            parts.append("needs " + ", ".join(event["waiting_on"]))
+        if event.get("event") == "release_rejected" and event.get("signed"):
+            parts.append("had been signed by " + ", ".join(event["signed"]))
+        if event.get("event") == "released" and event.get("signoffs"):
+            parts.append("signed off by " + ", ".join(event["signoffs"]))
+        files = event.get("files") or []
+        if files:
+            parts.append(", ".join(PurePosixPath(f).name for f in files))
+        name = event.get("event", "")
+        label = EVENT_LABELS.get(name, str(name))
+        if name in REQUEST_EVENTS:
+            label = workflow.label_of(event.get("action") or "release") + (" requested" if name == "release_requested"
+                                                                         else " rejected")
+        if name == "released" and event.get("override"):
+            label = "Released (Admin override)"
+        rows.append((
+            to_display_time(event.get("at", ""), local),
+            str(event.get("by", "")),
+            label,
+            "  -  ".join(parts),
+        ))
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Orgs: each org is one vault folder. settings.yaml remembers them.
+#
+#   orgs:
+#     HCR: C:\Litterbox\hcr-litterbox
+#     SAE: C:\Litterbox\sae-litterbox
+#   last_org: HCR
+# ---------------------------------------------------------------------------
+
+ADD_ORG = "Add org..."
+CREATE_VAULT = "Create new vault..."
+EDIT_ORG = "Org setup..."
+
+
+def known_orgs(data):
+    """{org code: vault folder} from the personal settings. Bad entries are ignored."""
+    orgs = data.get("orgs")
+    if not isinstance(orgs, dict):
+        return {}
+    return {str(code).upper(): str(path) for code, path in orgs.items() if code and path}
+
+
+def migrate_settings(data, detect_org):
+    """Older settings only had one 'repo'. Turn it into an org entry.
+
+    detect_org(folder) returns the folder's org code, or None if it can't tell.
+    Returns True if the settings changed.
+    """
+    if known_orgs(data) or not data.get("repo"):
+        return False
+    code = detect_org(data["repo"])
+    if not code:
+        return False
+    data["orgs"] = {code: data["repo"]}
+    data["last_org"] = code
+    return True
+
+
+def current_org(data):
+    """The org to open: the last one worked on if it is still known, else the first known one."""
+    orgs = known_orgs(data)
+    last = str(data.get("last_org") or "").upper()
+    if last in orgs:
+        return last
+    return next(iter(orgs), None)
+
+
+def org_menu_values(data):
+    """The dropdown entries: every known org, then the two setup actions."""
+    return list(known_orgs(data)) + [ADD_ORG, CREATE_VAULT, EDIT_ORG]
+
+
+CREATE_VAULT_INTRO = (
+    "A new vault starts as an empty repository on your Git host (Azure DevOps, GitHub or GitLab).\n\n"
+    "1. Create the empty repository on the host.\n"
+    "2. Clone it to this computer (for example into C:\\Litterbox).\n"
+    "3. Come back here and choose the cloned folder.\n\n"
+    "Litterbox will then add its settings, upload them, and make you the team's Owner. "
+    "Have you cloned the empty repository?")
+
+
+def vault_created_text(result):
+    """What to tell the user after init_vault.create() worked. `result` is an init_vault.InitResult."""
+    lines = [f"The {result.org} vault is set up" + (" and uploaded." if result.pushed else " on this computer only.")]
+    if result.owner is not None:
+        lines.append(f"{result.owner.name} is the team's Owner.")
+    elif result.team_error:
+        lines.append("The team could not be set up just now, so everyone can still do everything. "
+                     f"Use Team... to set it up later.\n\n{shorten(result.team_error)}")
+    lines.extend(result.warnings)
+    return "\n\n".join(lines)
+
+
+def plan_add_org(url, root, known):
+    """What Add org... will do with the URL the user pasted: (folder to clone into, problem). `known` is the
+    {org: folder} Litterbox already has, so a vault that is already added is said so, not cloned again."""
+    from litterbox.vault import clone as vault_clone
+    name, problem = vault_clone.parse_url(url)
+    if problem:
+        return None, problem
+    target = vault_clone.target_folder(root, name)
+    for org, folder in known.items():
+        if str(Path(folder)).lower() == str(target).lower():
+            return None, f"{org} is already added: it is in {target}. Choose it from the box next to the title."
+    return target, ""
+
+
+def inspect_vault_folder(folder):
+    """Look at a folder the user chose for Add org... Returns (org code, "") if it is a Litterbox vault, or
+    ("", what is wrong and what to do about it)."""
+    from litterbox.vault import config
+    path = Path(folder)
+    if not path.is_dir():
+        return "", "That folder doesn't exist."
+    if not (path / ".git").exists():
+        return "", ("That folder isn't a git repository. Clone your vault first (the clone is the vault folder), "
+                    "then choose it here.")
+    try:
+        config.check_compatible(path)
+        return config.get_org(path), ""
+    except config.NoOrgError:
+        return "", ("That repository isn't a Litterbox vault yet: it has no .litterbox/config.yaml and no parts. "
+                    "If it is a new, empty repository, use Create new vault... instead.")
+    except config.ConfigError as e:
+        return "", str(e)
+
+
+def remember_org(data, org, folder):
+    """Add or update an org and make it the last one worked on."""
+    orgs = known_orgs(data)
+    orgs[org.upper()] = str(folder)
+    data["orgs"] = orgs
+    data["last_org"] = org.upper()
+    data["repo"] = str(folder)            # kept so older copies of the app still open something
+    return data
+
+
+# ---------------------------------------------------------------------------
+# New Part / New Variant dialogs
+# ---------------------------------------------------------------------------
+
+def parse_number(text, label, minimum=1, maximum=None):
+    """A whole number typed into a box. Raises ValueError with a message safe to show."""
+    text = str(text or "").strip()
+    if not text:
+        raise ValueError(f"Enter the {label}.")
+    if not (text.isascii() and text.isdigit()):
+        raise ValueError(f"The {label} must be a whole number, like 42.")
+    number = int(text)
+    if number < minimum:
+        raise ValueError(f"The {label} must be {minimum} or higher.")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"The {label} can be at most {maximum}.")
+    return number
+
+
+def parse_typed_number(text, label, digits):
+    """A number typed into the part number or variant box, which must be written exactly.
+
+    An empty box gives None (use the suggested number). Otherwise the text must
+    be exactly `digits` plain digits, so with 5 digits "00002" is accepted but
+    "2" and "000002" are not. Raises ValueError with a message safe to show.
+    """
+    text = str(text or "").strip()
+    if not text:
+        return None
+    example = f"{1:0{digits}d}"
+    if not (text.isascii() and text.isdigit()) or len(text) != digits:
+        raise ValueError(f"The {label} must be exactly {digits} digits, like {example}.")
+    number = int(text)
+    if number < 1:
+        raise ValueError(f"The {label} can't be {text}. The lowest is {example}.")
+    return number
+
+
+def parse_digit_count(text, label, low, high):
+    """The number of digits typed in the org setup. Raises ValueError with a message safe to show."""
+    text = str(text or "").strip()
+    if not (text.isascii() and text.isdigit()) or not (low <= int(text) <= high):
+        raise ValueError(f"The {label} must be a whole number from {low} to {high}.")
+    return int(text)
+
+
+def in_use_text(check):
+    """The line shown under "PN in use:": the name of the part that has the number."""
+    text = check.name or "(no name)"
+    return text + (" (void)" if check.status == "void" else "")
+
+
+def parse_optional_number(text, label, minimum=1, maximum=None):
+    """Like parse_number, but an empty box gives None (meaning: use the suggested number)."""
+    if not str(text or "").strip():
+        return None
+    return parse_number(text, label, minimum, maximum)
+
+
+def variant_lines(records):
+    """One line per existing variant, for the New Variant list."""
+    lines = []
+    for record in records:
+        status = "" if record.status == "in_work" else f"  [{record.status}]"
+        lines.append(f"{record.pn}{status}   {record.name}")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# The Import window: what the table shows and what editing a cell does
+# ---------------------------------------------------------------------------
+
+IMPORT_KIND_LABELS = {"part": "Part", "assembly": "Assembly", "drawing": "Drawing only"}
+IMPORT_TAGS = ("conflict", "off", "typed", "warn", "ok")      # strongest first
+EDITABLE_COLUMNS = ("pn", "name", "description")
+
+
+@dataclass
+class ImportRow:
+    item_id: int
+    ticked: bool
+    pn: str
+    name: str
+    description: str
+    kind: str
+    files: str
+    notes: str
+    tag: str            # how the row is coloured: see IMPORT_TAGS
+    detail: str         # everything worth saying about the row, shown under the table when it is selected
+
+
+def import_rows(candidates, proposal, conflicts=(), duplicates=None):
+    """One ImportRow per item that could be imported, in order. `conflicts` come from importer.Refresh/PNConflict.
+
+    Rows that are selected show their new part number; unticked rows show none and are greyed.
+    """
+    placed = {id(entry.item): (index, entry) for index, entry in enumerate(proposal.entries)}
+    problems = {c.index: c for c in conflicts}
+    duplicates = duplicates or {}
+    rows = []
+    for item in candidates:
+        files = ", ".join(sorted({f.type for f in item.files if f.type}))
+        kind = IMPORT_KIND_LABELS.get(item.kind, item.kind)
+        details = []
+        if id(item) in placed:
+            index, entry = placed[id(item)]
+            conflict = problems.get(index)
+            if conflict:
+                tag, notes = "conflict", "Number taken: change it"
+                details.append(conflict.reason)
+            elif entry.manual:
+                tag, notes = "typed", ""
+            else:
+                tag, notes = "ok", ""
+            if duplicates.get(index):
+                details = duplicates[index] + details
+                if not conflict:
+                    notes = "Possible duplicate"
+                    tag = "warn"
+            pn, name, description, ticked = str(entry.pn), entry.name, entry.description, True
+        else:
+            pn, name, description, ticked, tag, notes = "", item.name, item.description, False, "off", ""
+        details += item.warnings
+        if item.already_imported_as:
+            details.append(f"Already imported as {item.already_imported_as}.")
+        if item.identical_to:
+            details.append("Identical file in item(s): " + ", ".join(str(i) for i in item.identical_to) + ".")
+        details.append("Files: " + "; ".join(f.path for f in item.files))
+        if not notes and (item.warnings or item.already_imported_as):
+            first = item.warnings[0] if item.warnings else f"Already imported as {item.already_imported_as}"
+            extra = len(item.warnings) - 1
+            notes = first if len(first) <= 60 else first[:57] + "..."
+            notes += f" (+{extra} more)" if extra > 0 else ""
+            if tag in ("ok",):
+                tag = "warn"
+        rows.append(ImportRow(item.id, ticked, pn, name, description, kind, files, notes, tag, "\n".join(details)))
+    return rows
+
+
+def edit_import_cell(prepared, item_id, column, text):
+    """Apply an edit made in the table. Returns '' if it worked, else a message to show the user."""
+    from litterbox.parts import create
+    from litterbox.importing import importer
+    item = next((i for i in prepared.candidates if i.id == item_id), None)
+    if item is None or column not in EDITABLE_COLUMNS:
+        return "That cell can't be edited."
+    entries = prepared.proposal.entries
+    index = next((n for n, e in enumerate(entries) if e.item is item), None)
+    text = " ".join(str(text).split()) if column != "pn" else str(text).strip()
+    if column == "pn":
+        if index is None:
+            return "Select the row first: unselected rows are not given a part number."
+        if not text:
+            prepared.proposal.reset_pn(index)
+            return ""
+        try:
+            prepared.proposal.set_pn(index, text)
+        except importer.ImportFailed as e:
+            return str(e)
+        return ""
+    if column == "name":
+        if not text:
+            return "A name is required."
+        if len(text) > create.MAX_NAME:
+            return f"Keep the name under {create.MAX_NAME} characters."
+    elif len(text) > create.MAX_DESCRIPTION:
+        return f"Keep the description under {create.MAX_DESCRIPTION} characters."
+    if index is None:
+        item.name, item.description = (text, item.description) if column == "name" else (item.name, text)
+    elif column == "name":
+        entries[index].name = text
+    else:
+        entries[index].description = text
+    return ""
+
+
+def import_summary_line(candidates, proposal, conflicts=()):
+    """The line above the table."""
+    ticked, total = len(proposal.entries), len(candidates)
+    text = f"{ticked} of {total} items will be imported"
+    if conflicts:
+        text += f"   |   {len(conflicts)} part number(s) can't be used (shown in red)"
+    return text
+
+
+def import_conflict_text(conflicts, renumbered=()):
+    """The message shown when Finish & Import is refused because typed part numbers are taken."""
+    lines = ["These part numbers can't be used:", ""]
+    lines += [f"  Row {c.index + 1}: {c.reason}" for c in conflicts]
+    lines += ["", "Change the part number in the highlighted rows (or clear it to let Litterbox choose), "
+              "then press Finish & Import again. Nothing was imported."]
+    if renumbered:
+        lines += ["", f"{len(renumbered)} automatic number(s) were also replaced because they had been taken."]
+    return "\n".join(lines)
+
+
+def import_result_text(result):
+    count = len(result.pns)
+    text = f"Imported {_parts(count)}: {min(result.pns)}" + (f" to {max(result.pns)}" if count > 1 else "") + "."
+    text += f"\n{len(result.files)} CAD file(s) were copied into the vault. Your original files were not changed."
+    if result.renumbered:
+        text += f"\n{len(result.renumbered)} automatic part number(s) had been taken meanwhile and were replaced."
+    if result.warnings:
+        text += "\n\nNotes:\n" + "\n".join("  " + w for w in result.warnings[:8])
+    return text
+
+
+def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
+    """Apply a part number typed into the two boxes [base]-[variant]. Returns '' if it worked, else a message.
+
+    Both boxes empty gives the row back to Litterbox. Only one box filled in: an empty variant means the
+    lowest free variant of that part number (as in New Part), an empty base keeps the row's current base.
+    Typing the numbers the row already has changes nothing (the row stays automatic).
+    """
+    from litterbox.records import registry
+    item = next((i for i in prepared.candidates if i.id == item_id), None)
+    entries = prepared.proposal.entries
+    index = next((n for n, e in enumerate(entries) if item is not None and e.item is item), None)
+    if item is None:
+        return "That cell can't be edited."
+    if index is None:
+        return "Select the row first: unselected rows are not given a part number."
+    try:
+        base = parse_typed_number(base_text, "part number", pn_module.BASE_DIGITS)
+        variant = parse_typed_number(variant_text, "variant number", pn_module.VARIANT_DIGITS)
+    except ValueError as e:
+        return str(e)
+    if base is None and variant is None:
+        prepared.proposal.reset_pn(index)
+        return ""
+    entry, org = entries[index], prepared.proposal.org
+    if base is None:
+        base = entry.pn.base
+    if variant is None:
+        try:
+            variant = registry.next_free_variant(repo, base, org) if repo else 1
+        except Exception:
+            variant = 1
+    chosen = pn_module.PN(org, base, variant)
+    if chosen == entry.pn:
+        return ""
+    try:
+        prepared.proposal.set_pn(index, str(chosen))
+    except LitterboxError as e:
+        return str(e)
+    return ""
+
+
+def import_external_text(error):
+    """The question asked when some files use files that are not part of the import."""
+    shown = [f"  {Path(file).name}  uses  {ref}" for file, ref in error.references[:10]]
+    more = len(error.references) - len(shown)
+    lines = [f"{len(error.references)} file reference(s) point at files that are not being imported:", ""] + shown
+    if more > 0:
+        lines.append(f"  ...and {more} more")
+    lines += ["", "If you continue, the imported copies will still depend on those original files. They will only "
+              "open completely on computers that have them at those paths, and the vault will not be "
+              "self-contained.", "",
+              "Usually it is better to say No, select the missing items (or scan their folder as well) and import again.",
+              "", "Import anyway?"]
+    return "\n".join(lines)
+
+
+def import_cots_confirm_text(count, duplicates, names):
+    """The question asked before an Import COTS goes ahead. `duplicates` is {row: [warnings]}; names[row] is the row's name."""
+    lines = [f"You are about to import {_parts(count)} and record every one as COTS (a purchased part).",
+             "", "Only choose this for parts you bought and have NOT modified. Anything you changed or "
+             "designed yourself should be imported with the normal Import."]
+    if duplicates:
+        lines += ["", "These look like parts the vault already has (this is only a warning):"]
+        for row in sorted(duplicates)[:8]:
+            lines.append(f"  Row {row + 1}, {names[row]}:")
+            lines += [f"      {text}" for text in duplicates[row][:3]]
+        if len(duplicates) > 8:
+            lines.append(f"  ...and {len(duplicates) - 8} more")
+    lines += ["", "Import them as COTS?"]
+    return "\n".join(lines)
+
+
+def make_cots_problem_text(pn, problems):
+    return f"{pn} can't be made COTS yet:\n\n" + "\n".join("- " + p for p in problems)
+
+
+def make_cots_confirm_text(pn, name, files):
+    listing = "\n".join("  " + f for f in files)
+    return (f"Record {pn} ({name}) as COTS, a purchased part?\n\nThese files are covered:\n{listing}\n\n"
+            "Only do this for a part you bought and have NOT modified. Nobody will be able to check it out "
+            "afterwards, so its files can't be changed.")
+
+
+def reopen_cots_warning(pns):
+    """The question asked before unreleasing COTS parts: one part number, or a list of them."""
+    if isinstance(pns, (list, tuple)) and len(pns) != 1:
+        listing = "\n".join("  " + str(pn) for pn in pns)
+        return (f"These are COTS parts:\n{listing}\n\nUnreleasing them makes them normal parts again: they can be "
+                "checked out and changed until they are released or made COTS again.\n\nContinue?")
+    pn = pns[0] if isinstance(pns, (list, tuple)) else pns
+    return (f"{pn} is a COTS part.\n\nUnreleasing it makes it a normal part again: it can be checked out and "
+            "changed until it is released or made COTS again.\n\nContinue?")
+
+
+def plans_problem_text(plans, verb):
+    """Why parts can't be released (or made COTS) yet: `verb` is 'released' or 'made COTS'. `plans` are the ones
+    that have problems."""
+    if len(plans) == 1:
+        return f"{plans[0].pn} can't be {verb} yet:\n\n" + "\n".join("- " + p for p in plans[0].problems)
+    return (f"These can't be {verb} yet:\n\n" + "\n\n".join(
+        f"{plan.pn}:\n" + "\n".join("- " + p for p in plan.problems) for plan in plans))
+
+
+def _skipped_text(bad, verb):
+    if not bad:
+        return ""
+    return (f"\n\nThese can't be {verb} yet, so they will be skipped:\n"
+            + "\n".join(f"  {plan.pn}: {plan.problems[0]}" for plan in bad))
+
+
+def release_many_confirm_text(good, bad=()):
+    """The question asked before releasing several parts at once. `good` are the plans that can go ahead."""
+    listing = "\n".join(f"  {plan.pn}  {plan.name}  ({len(plan.files)} file{'s' if len(plan.files) != 1 else ''})"
+                        for plan in good)
+    text = (f"Release these {len(good)} parts?\n\n{listing}\n\nTheir CAD files will be frozen. Nobody will be "
+            "able to check them out unless they are unreleased.")
+    warned = [plan for plan in good if plan.warnings]
+    if warned:
+        text += ("\n\nWARNING - the parts these use are not all final:\n" + "\n".join(
+            f"- {plan.pn}: {w}" for plan in warned for w in plan.warnings)
+            + "\n\nReleasing now freezes the assemblies with those parts.")
+    return text + _skipped_text(bad, "released")
+
+
+def make_cots_many_confirm_text(good, bad=()):
+    """The question asked before making several parts COTS at once."""
+    listing = "\n".join(f"  {plan.pn}  {plan.name}" for plan in good)
+    return (f"Record these {len(good)} parts as COTS, purchased parts?\n\n{listing}\n\nOnly do this for parts you "
+            "bought and have NOT modified. Nobody will be able to check them out afterwards, so their files can't "
+            "be changed." + _skipped_text(bad, "made COTS"))
+
+
+def void_many_confirm_text(pns):
+    listing = "\n".join("  " + str(pn) for pn in pns)
+    return (f"Void these {len(pns)} parts?\n\n{listing}\n\nTheir numbers will never be used again, and they can't be "
+            "checked out.")
+
+
+def edit_details_result(old_name, old_description, name, description):
+    """What the Edit Details window should do with what was typed.
+
+    Returns (problem, changed): `problem` is text to show if the name is blank, else "";
+    `changed` is whether anything differs from the old values (extra spaces don't count).
+    """
+    clean = lambda text: " ".join((text or "").split())
+    if not clean(name):
+        return "A name is required.", False
+    return "", (clean(name), clean(description)) != (clean(old_name), clean(old_description))
+
+
+def row_revisions(row):
+    """{revision: [files]} for a part row (older test rows only have .files for the working revision)."""
+    revisions = getattr(row, "revisions", None)
+    if revisions:
+        return revisions
+    return {getattr(row, "revision", "A"): list(row.files)} if row.files else {}
+
+
+def open_choices(row, drawing=False):
+    """[(revision, files)] that Open (or Open Drawing) can open for this part.
+
+    Normally one. When the part has both a released revision and a different working revision
+    with files, both are offered, working first, and the user is asked which to open.
+    With drawing=True only revisions that have a drawing are offered.
+    """
+    revisions = row_revisions(row)
+    working = getattr(row, "revision", "A")
+    released = getattr(row, "released_revision", "")
+    wanted = []
+    if revisions.get(working):
+        wanted.append(working)
+    if released and released != working and revisions.get(released):
+        wanted.append(released)
+    if not wanted and revisions:                       # fall back to the newest revision that has files
+        wanted.append(max(revisions, key=pn_module.revision_number))
+    choices = [(rev, revisions[rev]) for rev in wanted]
+    if drawing:
+        choices = [(rev, files) for rev, files in choices if _has_drawing(files)]
+    return choices
+
+
+def _has_drawing(files):
+    return any(PurePosixPath(f).suffix.lower() == ".slddrw" for f in files)
+
+
+def revision_label(row, rev):
+    """'Rev B (working)' / 'Rev A (released)' for the question asked before opening."""
+    released = getattr(row, "released_revision", "")
+    if rev == released and not (rev == getattr(row, "revision", "") and row.record_status != "released"):
+        return f"Rev {rev} (released)"
+    return f"Rev {rev} (working)"
+
+
+def open_message(row, drawing=False):
+    """Why a part's model (or drawing) can't be opened right now, or '' if it can."""
+    if not any(row_revisions(row).values()):
+        return f"{row.pn} has no CAD files yet."
+    if drawing and not open_choices(row, drawing=True):
+        return f"{row.pn} has no drawing."
+    return ""
+
+
+def revision_rows(record, revisions):
+    """Rows of (revision, state, details) for the History window's revision list, newest first.
+
+    `revisions` is {revision: [files]}. A revision appears if it has files, is the working
+    revision, or was released at some point.
+    """
+    released = {}
+    for event in record.history:
+        if event.get("event") == "released" and event.get("revision"):
+            released[event["revision"]] = event
+    cancelled = set(registry.cancelled_revisions(record))
+    letters = set(revisions) | set(released) | {record.revision} | cancelled
+    rows = []
+    for rev in sorted(letters, key=pn_module.revision_number, reverse=True):
+        event = released.get(rev)
+        if rev in cancelled:
+            rows.append((rev, "Cancelled", "kept in the cancelled-revs folder"))
+            continue
+        if rev == record.revision and record.status != "released":
+            state = "In work" if record.status == "in_work" else record.status.replace("_", " ").title()
+        elif event:
+            state = "Released" if rev == record.released_revision else "Released (superseded)"
+        else:
+            state = "No release"
+        details = []
+        if event:
+            details.append(f"by {event.get('by', '')} on {to_display_time(event.get('at', ''))}")
+        types = file_types(revisions.get(rev, []))
+        details.append(types if types else "no files")
+        rows.append((rev, state, "   ".join(details)))
+    return rows
+
+
+def void_problem(row):
+    """Why a part can't be voided (empty if it can). Once a revision is released a part can't disappear."""
+    released = getattr(row, "released_revision", "")
+    if released:
+        return (f"{row.pn} has a released revision (Rev {released}), so it can't be voided. "
+                "To throw away the revision that is in work, use Cancel Revision.")
+    return ""
+
+
+def revise_problem_text(pn, problems):
+    return f"{pn} can't be revised yet:\n\n" + "\n".join("- " + p for p in problems)
+
+
+def revise_confirm_text(plan):
+    new_files = "\n".join("  " + PurePosixPath(new).name for _old, new in plan.copies)
+    text = (f"Make Rev {plan.new_revision} of {plan.pn} ({plan.name})?\n\n"
+            f"These files will be created from Rev {plan.revision}:\n{new_files}\n\n"
+            f"Rev {plan.revision} stays released and unchanged, and anything that uses it keeps working. "
+            f"Rev {plan.new_revision} will be checked out to you.")
+    if plan.kept:
+        text += "\n\nThese files stay with Rev %s: %s." % (
+            plan.revision, ", ".join(PurePosixPath(f).name for f in plan.kept))
+    return text
+
+
+def cancel_problem_text(pn, problems):
+    return f"The revision of {pn} can't be cancelled yet:\n\n" + "\n".join("- " + p for p in problems)
+
+
+def cancel_confirm_text(plan):
+    kept = "\n".join("  " + PurePosixPath(new).name for _old, new in plan.moves) or "  (no files)"
+    return (f"Cancel Rev {plan.revision} of {plan.pn} ({plan.name})?\n\n"
+            f"Its files are not deleted. They are kept in the cancelled-revs folder as:\n{kept}\n\n"
+            f"The part goes back to Rev {plan.back_to}, and the letter {plan.revision} will not be used again. "
+            f"Any assembly that already uses Rev {plan.revision} will lose it.")
+
+
+# ---------------------------------------------------------------------------
+# References: what an assembly uses, where a part is used, and replacing with the latest release
+# ---------------------------------------------------------------------------
+
+CHECKED, UNCHECKED = "\u2611", "\u2610"
+
+
+def uses_table(uses_list):
+    """Rows for the 'Uses' table: (id, (tick, part, name, rev used, latest released, state), replaceable)."""
+    rows = []
+    for number, u in enumerate(uses_list):
+        rows.append((str(number),
+                     (CHECKED if u.replaceable else "", u.child.short, u.child_name, u.child_revision,
+                      u.latest_released, u.state_text),
+                     u.replaceable))
+    return rows
+
+
+def used_in_table(uses_list):
+    """Rows for the 'Used in' table: (id, (tick, assembly, name, its rev, its status, rev of this part used, state), replaceable)."""
+    rows = []
+    for number, u in enumerate(uses_list):
+        status = "Released" if u.parent_status == "released" else "In work"
+        rows.append((str(number),
+                     (CHECKED if u.replaceable else "", u.parent.short, u.parent_name, u.parent_revision,
+                      status, u.child_revision, u.state_text),
+                     u.replaceable))
+    return rows
+
+
+def toggled(mark):
+    """The tick box after a click ('' means there is no box)."""
+    return {CHECKED: UNCHECKED, UNCHECKED: CHECKED}.get(mark, mark)
+
+
+def release_confirm_text(plan):
+    listing = "\n".join("  " + f for f in plan.files)
+    text = (f"Release {plan.pn} ({plan.name})?\n\nThese files will be frozen:\n{listing}\n\n"
+            "Nobody will be able to check it out unless it is unreleased.")
+    if plan.warnings:
+        text += ("\n\nWARNING - the parts it uses are not all final:\n"
+                 + "\n".join("- " + w for w in plan.warnings)
+                 + "\n\nReleasing now freezes the assembly with those parts.")
+    return text
+
+
+def request_confirm_text(action, parts, template, slots, reason="", warnings=()):
+    """The question asked at the end of the Workflow window, before the request is made."""
+    label = workflow.label_of(action)
+    listing = "\n".join(f"  {pn}  {name}".rstrip() for pn, name in parts)
+    signers = "\n".join(f"  {workflow.slot_text(s)}: {s['name']}" for s in slots)
+    text = (f"Start the {label} workflow ({template.name}) on:\n\n{listing}\n\nThese people will be asked to "
+            f"sign off:\n{signers}\n\n")
+    if reason:
+        text += f"Reason: {reason}\n\n"
+    text += ("While it waits, nobody can check these parts out. You can withdraw the request until it is done."
+             + (" It happens as soon as the last person signs." if action in workflow.AUTO_COMPLETE else
+                " When everyone has signed, press the button again to finish it."))
+    if warnings:
+        text += "\n\nNOTE:\n" + "\n".join("- " + w for w in warnings)
+    return text
+
+
+TASK_COLUMNS = (("part", "Parts", 150), ("name", "Name", 200), ("action", "Action", 90), ("by", "Asked by", 120),
+                ("when", "Asked", 120), ("status", "Status", 330))
+
+
+def tasks_table(tasks, local=True):
+    """Rows of (iid, values) for the My Tasks window (one row per request)."""
+    rows = []
+    for t in tasks:
+        name = t.parts[0][1] if len(t.parts) == 1 else f"{len(t.parts)} parts"
+        rows.append((t.id, (t.label, name, workflow.label_of(t.action), t.requested_by,
+                            to_display_time(t.requested_at, local), t.summary)))
+    return rows
+
+
+def task_detail(task):
+    """Lines under the My Tasks table: who has signed and who is still to."""
+    lines = [f"{'✓' if s['done'] else '…'} {s['text']}: {s['name']}" + ("" if s["done"] else " (waiting)")
+             for s in task.slots]
+    head = ", ".join(str(p[0]) for p in task.parts)
+    text = f"{head}\n" + "   ".join(lines)
+    if task.reason:
+        text += f"\nReason: {task.reason}"
+    return text
+
+
+def tasks_button_text(count):
+    return f"My Tasks ({count})" if count else "My Tasks"
+
+
+def signoff_result_text(result, label="request"):
+    """(text, warn) shown after signing: '' when it all went to plan."""
+    if not result.errors:
+        return "", False
+    lines = "\n".join(f"{pn}: {why}" for pn, why in result.errors.items())
+    return (f"Your sign-off is saved where it could be, but not everything went through:\n\n{lines}\n\n"
+            "Whoever asked (or anyone) can finish it from My Tasks or with the action's button.", True)
+
+
+def person_labels(people_list):
+    """[(label, id)] for a drop-down of people; adds the id when two people share a name."""
+    names = [p.name for p in people_list]
+    return [(p.name if names.count(p.name) == 1 else f"{p.name} ({p.id})", p.id) for p in people_list]
+
+
+def row_choices(directory, roles, requester_id=None, requester_may_sign=True):
+    """[(label, id)] of the people who can fill a sign-off with any of these roles."""
+    found = workflow.eligible(directory, roles)
+    if not requester_may_sign:
+        found = [p for p in found if p.id != requester_id]
+    return person_labels(found)
+
+
+class WorkflowEditor:
+    """What the Workflows window edits: a working copy of every template, with the changes it makes.
+
+        editor = WorkflowEditor(draft.templates)
+        editor.add(action) ... editor.add_role(action, index, row) ...
+        editor.ops()      # the changes to stage (see workflow.apply_ops); [] if nothing changed
+    """
+
+    def __init__(self, templates):
+        self.items = {a: [] for a in workflow.ACTIONS}
+        for action, named in templates.items():
+            for name, t in named.items():
+                self.items.setdefault(action, []).append(
+                    {"origin": name, "name": name, "rows": [list(r.roles) for r in t.rows],
+                     "same": t.allow_same_person, "requester": t.requester_may_sign})
+        self.initial = self._snapshot()
+
+    def _snapshot(self):
+        return {a: [(i["origin"], i["name"], [list(r) for r in i["rows"]], i["same"], i["requester"])
+                    for i in items] for a, items in self.items.items()}
+
+    @property
+    def dirty(self):
+        return self._snapshot() != self.initial
+
+    def names(self, action):
+        return [i["name"] for i in self.items[action]]
+
+    def add(self, action, roles):
+        """A new template named T<n> (first free) with one sign-off. Returns its index."""
+        taken = {n.lower() for n in self.names(action)}
+        number = 1
+        while f"T{number}".lower() in taken:
+            number += 1
+        self.items[action].append({"origin": None, "name": f"T{number}", "rows": [[roles[0]] if roles else []],
+                                   "same": False, "requester": True})
+        return len(self.items[action]) - 1
+
+    def delete(self, action, index):
+        del self.items[action][index]
+
+    def add_row(self, action, index, roles):
+        self.items[action][index]["rows"].append([roles[0]] if roles else [])
+
+    def remove_row(self, action, index, row):
+        del self.items[action][index]["rows"][row]
+
+    def add_or(self, action, index, row, roles):
+        """Another role the sign-off may be filled from (the first one not used already, or None)."""
+        used = self.items[action][index]["rows"][row]
+        spare = next((r for r in roles if r.lower() not in {u.lower() for u in used}), None)
+        if spare is not None:
+            used.append(spare)
+        return spare
+
+    def remove_or(self, action, index, row, position):
+        roles = self.items[action][index]["rows"][row]
+        if len(roles) > 1:
+            del roles[position]
+
+    def set_role(self, action, index, row, position, role):
+        self.items[action][index]["rows"][row][position] = role
+
+    def problem(self):
+        """'' or the first thing wrong, in words for the window."""
+        for action, items in self.items.items():
+            seen = set()
+            for item in items:
+                where = f"{workflow.label_of(action)} workflow '{item['name']}'"
+                if not workflow.tidy_name(item["name"]):
+                    return f"Every {workflow.label_of(action)} workflow needs a name."
+                if len(item["name"]) > workflow.MAX_NAME:
+                    return f"The name of {where} is too long."
+                if item["name"].strip().lower() in seen:
+                    return f"There are two {workflow.label_of(action)} workflows called '{item['name']}'."
+                seen.add(item["name"].strip().lower())
+                if not item["rows"]:
+                    return f"{where} needs at least one sign-off."
+                for number, roles in enumerate(item["rows"], 1):
+                    if not roles:
+                        return f"Sign-off {number} of {where} needs a role."
+                    if len({r.lower() for r in roles}) != len(roles):
+                        return f"Sign-off {number} of {where} lists the same role twice."
+        return ""
+
+    def templates(self):
+        """The working copy as {action: {name: Template}} (for warnings)."""
+        result = {}
+        for action, items in self.items.items():
+            for i in items:
+                result.setdefault(action, {})[i["name"].strip()] = workflow.Template(
+                    action, i["name"].strip(), [workflow.Row(list(r)) for r in i["rows"]], i["same"], i["requester"])
+        return result
+
+    def ops(self):
+        """The changes made, in an order that works when replayed: removals, then sets in list order."""
+        removals, sets = [], []
+        for action, items in self.items.items():
+            kept = {i["origin"] for i in items if i["origin"] is not None}
+            initial = {o for o, *_rest in self.initial[action] if o is not None}
+            removals += [{"op": "remove", "action": action, "name": origin} for origin in sorted(initial - kept)]
+            before = {o: (n, r, sm, rq) for o, n, r, sm, rq in self.initial[action]}
+            for i in items:
+                now = (i["name"].strip(), [list(r) for r in i["rows"]], i["same"], i["requester"])
+                if i["origin"] is None or before.get(i["origin"]) != now:
+                    sets.append({"op": "set", "action": action, "name": i["name"].strip(), "rows": now[1],
+                                 "same": i["same"], "requester": i["requester"], "old": i["origin"]})
+        return removals + sets
+
+    def add_standard(self, roles):
+        """Add the standard workflows whose roles all exist; returns (added names, [(name, missing roles)])."""
+        have = {r.lower() for r in roles}
+        added, skipped = [], []
+        for action, items in workflow.STANDARD_WORKFLOWS.items():
+            for name, rows in items:
+                if name.lower() in {n.lower() for n in self.names(action)}:
+                    continue
+                missing = [r for row in rows for r in row if r.lower() not in have]
+                if missing:
+                    skipped.append((f"{workflow.label_of(action)} {name}", sorted(set(missing))))
+                    continue
+                self.items[action].append({"origin": None, "name": name, "rows": [list(r) for r in rows],
+                                           "same": False, "requester": True})
+                added.append(f"{workflow.label_of(action)} {name}")
+        return added, skipped
+
+
+def ops_label(ops):
+    """The Team window's name for a staged Workflows change."""
+    if not ops:
+        return "Workflows"
+    actions = []
+    for op in ops:
+        label = workflow.label_of(op["action"])
+        if label not in actions:
+            actions.append(label)
+    return "Workflows: " + ", ".join(actions)
+
+
+def stale_open_text(pn, uses_list):
+    lines = "\n".join(f"  {u.child.short} Rev {u.child_revision} (Rev {u.latest_released} is released)"
+                      for u in uses_list)
+    return (f"{pn.short} uses parts that have a newer released revision:\n\n{lines}\n\n"
+            "Review them before opening?")
+
+
+def replace_summary(results):
+    """(text, had_problems) for a list of ReplaceResult."""
+    names = {"done": "updated and checked in", "left_checked_out": "changed, still checked out to you",
+             "skipped": "skipped", "failed": "FAILED"}
+    lines = []
+    for r in results:
+        lines.append(f"{r.parent.short}: {names.get(r.status, r.status)}" + (f" - {r.message}" if r.status != "done" and r.message else ""))
+    problems = any(r.status in ("skipped", "failed") for r in results)
+    done = sum(r.status in ("done", "left_checked_out") for r in results)
+    head = f"{done} of {len(results)} assemblies updated."
+    return head + "\n\n" + "\n".join(lines), problems
+
+
+def outdated_note(pn, this_outdated, others):
+    """The yellow banner in the References window ('' if every list of parts is up to date)."""
+    lines = []
+    if this_outdated:
+        lines.append(f"The list of parts {pn.short} uses is out of date (SolidWorks was not open at its last check-in, "
+                     "or it was never read).")
+    if others:
+        lines.append(f"{len(others)} other assembl{'y has' if len(others) == 1 else 'ies have'} an out-of-date list, "
+                     "so 'This part is used in' may be incomplete.")
+    return "\n".join(lines)
+
+
+def update_summary(results):
+    """(text, had_problems) for rescan's {PN: result}."""
+    updated = sum(1 for r in results.values() if r == "updated")
+    skipped = {pn: r for pn, r in results.items() if r.startswith("skipped")}
+    text = f"{updated} of {len(results)} assemblies updated."
+    if skipped:
+        text += "\n\n" + "\n".join(f"{pn.short}: {r}" for pn, r in skipped.items())
+    return text, bool(skipped)
+
+
+# ---------------------------------------------------------------------------
+# The team: who you are, the people table, and the Add/Edit Person form
+# ---------------------------------------------------------------------------
+
+def identity_banner(identity):
+    """(text, tone) for the line under the title. tone is 'normal' or 'warn'."""
+    text = identity.describe()
+    return text, ("normal" if identity.state in ("ok", "legacy") else "warn")
+
+
+def people_table(directory):
+    """Rows for the Team window: (id, (name, email, access, roles, active, host names, keys))."""
+    rows = []
+    for p in directory.people:
+        rows.append((p.id, (p.name, p.email, p.label, ", ".join(p.roles), "Yes" if p.active else "No",
+                            ", ".join(p.host_names), len(p.signing_keys) or "")))
+    return rows
+
+
+def split_list(text):
+    """'a, b\nc' -> ['a', 'b', 'c'] (commas or new lines)."""
+    return [part.strip() for part in str(text or "").replace("\n", ",").split(",") if part.strip()]
+
+
+def suggest_person_id(name, existing):
+    """A short lowercase id from a name ('Alex Smith' -> 'alex-smith'), made unique among `existing`."""
+    import re
+    base = re.sub(r"[^a-z0-9._-]+", "-", str(name).lower()).strip("-.")[:36] or "person"
+    taken = {str(e).lower() for e in existing}
+    candidate, number = base, 2
+    while candidate in taken:
+        candidate, number = f"{base}-{number}", number + 1
+    return candidate
+
+
+def who_am_i_text(identity):
+    lines = [f"The host says you are signed in as: {identity.host_name or '(unknown)'}"]
+    if identity.state == "legacy":
+        lines.append("This vault has no team list yet, so everyone can do everything.")
+    elif identity.state == "ok":
+        p = identity.person
+        lines.append(f"That matches {p.name} on the team list: {p.label}"
+                     + (f", {', '.join(p.roles)}" if p.roles else "") + ".")
+    else:
+        lines.append(identity.message())
+    return "\n\n".join(lines)
+
+
+def person_form_result(old_id, form, existing_ids):
+    """Check the Add/Edit Person form. Returns (problem text, fields dict). `form` has name, email,
+    host_names, roles, keys, id and access (all text)."""
+    name = " ".join(str(form.get("name", "")).split())
+    if not name:
+        return "Enter a name.", {}
+    email = str(form.get("email", "")).strip()
+    if email and "@" not in email:
+        return "That doesn't look like an email address.", {}
+    fields = {"name": name, "email": email, "host_names": split_list(form.get("host_names")),
+              "roles": split_list(form.get("roles")), "signing_keys": [line.strip() for line in str(form.get("keys", "")).splitlines() if line.strip()],
+              "access": str(form.get("access", "member")).strip().lower()}
+    if old_id is None:
+        fields["id"] = str(form.get("id", "")).strip().lower() or suggest_person_id(name, existing_ids)
+    return "", fields
+
+
+def add_role_result(text, roles):
+    """Check a role typed into the Roles window. Returns (problem, tidy role name)."""
+    role = " ".join(str(text or "").split())
+    if not role:
+        return "Type a role first.", ""
+    if "," in role:
+        return "A role can't contain a comma.", ""
+    if role.lower() in (r.lower() for r in roles):
+        return f"'{role}' is already on the list.", ""
+    return "", role
+
+
+def role_removal_text(role, holders):
+    if not holders:
+        return f"Remove the role '{role}' from the list?"
+    names = ", ".join(holders[:8]) + (f" and {len(holders) - 8} more" if len(holders) > 8 else "")
+    return (f"Remove the role '{role}'?\n\nIt will also be taken off everyone who has it ({names}). "
+            "This happens when you press Save.")
+
+
+def roles_to_choose(all_roles, chosen):
+    """The roles a person doesn't have yet, for the drop-down."""
+    have = {r.lower() for r in chosen}
+    return [r for r in all_roles if r.lower() not in have]
+
+
+def changed_settings(current, chosen):
+    """The vault settings in `chosen` (from the Vault Settings dialog) that differ from `current`. {} if none."""
+    if not chosen:
+        return {}
+    return {key: value for key, value in chosen.items() if current.get(key) != value}
+
+
+# ---------------------------------------------------------------------------
+# Background jobs and the status banner (see job_queue.py)
+# ---------------------------------------------------------------------------
+
+PROGRESS = {        # what the banner says while a job runs: "<progress> 3 parts"
+    "checkout": "Checking out", "checkin": "Checking in", "save": "Saving progress on", "undo": "Undoing checkout of",
+    "edit": "Editing", "release": "Releasing", "make_cots": "Making COTS", "revise": "Revising",
+    "cancel_revision": "Cancelling the revision of", "reopen": "Unreleasing", "void": "Voiding",
+}
+
+
+def job_label(action, count):
+    """'Checking in 3 parts' (or 'Checking in HCR-00007-001' is left to the caller for one part's name)."""
+    return f"{PROGRESS.get(action, 'Working on')} {_parts(count)}"
+
+
+def busy_state_text(state, label):
+    """What the Status column shows for a part that has a job queued or running."""
+    return f"\u23f3 {label.lower()}..."
+
+
+def error_advice(message):
+    """A plain next step for an error message, from what it says. Always returns something."""
+    text = str(message).lower()
+    if "could not unlock" in text or "could not be unlocked" in text:
+        return ("Your changes are saved. Press Check In on the same parts again to finish releasing their locks.")
+    if any(k in text for k in ("could not resolve host", "unable to access", "timed out", "connection refused",
+                               "network is unreachable", "could not read from remote", "early eof", "ssl")):
+        return "Check your internet connection (and VPN, if you use one), then press Refresh. Nothing was lost."
+    if any(k in text for k in ("authentication failed", "permission denied", "401", "403", "could not read username",
+                               "access denied", "login")):
+        return ("Git rejected your sign-in. Sign in to the host again (for example by running a git command in a "
+                "terminal), then try again.")
+    if "already checked out by" in text or "locked by" in text:
+        return "Someone else has it. Ask them to check it in, or ask an Admin to release their lock."
+    if "push was rejected" in text or "non-fast-forward" in text or "failed to push" in text:
+        return "Press Get Latest and try again. If it keeps happening, ask an Admin: the vault may be locked down."
+    if "not allowed" in text or "you can't" in text or "role" in text and "need" in text:
+        return "You don't have the role for that. Ask an Admin if you should."
+    if "unexpected error" in text:
+        return ("Something Litterbox did not expect. Press Refresh. If it happens again, send the log below to "
+                "whoever looks after Litterbox.")
+    return "Press Refresh to see where things stand, then try again. The log below has the details."
+
+
+def error_report_text(notes):
+    """The text of the error Details window: each problem, what it was doing, and what to do about it."""
+    blocks = []
+    for note in notes:
+        when = time.strftime("%H:%M:%S", time.localtime(note.when))
+        blocks.append(f"[{when}] {note.label}\n\n{shorten(note.message)}\n\nWhat to do: {note.advice}")
+    return "\n\n----------------------------------------\n\n".join(blocks)
+
+
+CHECKIN_CAUTION = ("Litterbox uploads in the background. Until the banner says Ready, don't open these parts in "
+                   "SolidWorks and don't save them: a save in the middle of an upload can end up half in the vault.")
+
+
+def open_while_busy_text(pn, label):
+    """The question asked before opening a part that has a job queued or running."""
+    return (f"{pn} is busy: {label.lower()}.\n\nOpening it now is safe, but don't save it in SolidWorks until the "
+            "banner says Ready, or the upload can end up half in the vault.\n\nOpen it anyway?")

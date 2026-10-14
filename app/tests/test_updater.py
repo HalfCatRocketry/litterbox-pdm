@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import updater  # noqa: E402
-import version  # noqa: E402
+from litterbox.user import updater  # noqa: E402
+from litterbox import version  # noqa: E402
 
 REPO = "someone/litterbox-pdm"
 PRIVATE, PUBLIC = updater.generate_keypair()

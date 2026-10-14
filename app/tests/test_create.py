@@ -18,10 +18,10 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import PART, PRT, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import registry  # noqa: E402
-import create  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.parts import create  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 
 @SKIP_ON_WINDOWS
@@ -59,7 +59,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(numbers, [2, 3, 5])
 
     def test_numbers_loop_round_to_the_bottom_after_the_highest(self):
-        import config
+        from litterbox.vault import config
         config.save(self.a, org="HCR", start_number=99998)       # 5 digits: the highest is 99999
         with self.user("Alex"):
             numbers = [create.new_part(self.a, f"Part {n}").base for n in range(4)]
@@ -97,7 +97,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(create.suggest_numbers(self.a, 77), (77, 1))      # unused: 001
             create.new_part(self.a, "Right hand", base=1)
             self.assertEqual(create.suggest_numbers(self.a, 1), (1, 3))
-            import config
+            from litterbox.vault import config
             config.save(self.a, start_number=10001)
             self.assertEqual(create.suggest_numbers(self.a), (10001, 1))
             with self.assertRaises(create.CreateError):
@@ -129,7 +129,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
                 create.new_part(self.a, "Reuse attempt", base=50, variant=1)
 
     def test_automatic_numbers_start_at_start_number_whatever_exists_below_it(self):
-        import config
+        from litterbox.vault import config
         with self.user("Alex"):
             config.save(self.a, start_number=10001)             # HCR-00001-001 already exists
             self.assertEqual(create.suggest_part_number(self.a), 10001)
@@ -211,7 +211,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assert_clean(self.a)
 
     def test_start_number_from_vault_config(self):
-        import config
+        from litterbox.vault import config
         with self.user("Alex"):
             config.save(self.a, start_number=10001)
             self.assertEqual(create.suggest_part_number(self.a), 10001)
@@ -336,7 +336,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(len(registry.list_pns(self.b)), 4)
 
     def test_create_many_numbers_from_the_start_number_and_respects_requested_numbers(self):
-        import config
+        from litterbox.vault import config
         with self.user("Alex"):
             config.save(self.a, start_number=10001)
             specs = [create.PartSpec("A"), create.PartSpec("Wants 10002", base=10002),
@@ -432,8 +432,8 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     def test_scan_then_manifest_then_create_many_end_to_end(self):
         import tempfile
-        import manifest
-        import scan
+        from litterbox.importing import manifest
+        from litterbox.importing import scan
         with tempfile.TemporaryDirectory() as tmp, self.user("Alex"):
             source = Path(tmp) / "old cad"
             (source / "valves").mkdir(parents=True)

@@ -12,10 +12,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import SKIP_ON_WINDOWS, git  # noqa: E402
 from test_workflow import Fixture  # noqa: E402
 
-import config  # noqa: E402
-import litterbox_engine as eng  # noqa: E402
-import people  # noqa: E402
-import vault_settings  # noqa: E402
+from litterbox.vault import config  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.team import people  # noqa: E402
+from litterbox.vault import settings_admin as vault_settings  # noqa: E402
 
 
 class ConfigValues(unittest.TestCase):
@@ -115,7 +115,7 @@ class EditingTheSetting(Fixture, unittest.TestCase):
 
 class DialogLogic(unittest.TestCase):
     def test_only_what_changed_is_saved(self):
-        import gui_logic as logic
+        from litterbox.gui.logic import gui_logic as logic
         current = {"commit_style": "per_part", "release_rule": "warn", "require_signatures": False}
         self.assertEqual(logic.changed_settings(current, dict(current)), {})
         self.assertEqual(logic.changed_settings(current, None), {})
@@ -125,7 +125,7 @@ class DialogLogic(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_the_team_window_and_app_are_wired_to_the_dialog(self):
-        source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parent.parent / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
         self.assertIn('"Vault Settings..."', source)
         self.assertIn("def edit_vault_settings", source)
         self.assertIn("vault_settings.edit(repo, **changes)", source)

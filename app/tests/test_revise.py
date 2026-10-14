@@ -18,10 +18,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_importer import FakeSolidWorks  # noqa: E402
 from vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import registry  # noqa: E402
-import revise  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.parts import revise  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 PRT_B = PRT.replace("_A.", "_B.")
 DRW_B = DRW.replace("_A.", "_B.")

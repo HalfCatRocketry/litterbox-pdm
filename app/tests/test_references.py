@@ -14,12 +14,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_importer import FakeSolidWorks  # noqa: E402
 from vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git  # noqa: E402
 
-import config  # noqa: E402
-import litterbox_engine as eng  # noqa: E402
-import references as refs  # noqa: E402
-import registry  # noqa: E402
-import revise  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.vault import config  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.references import references as refs  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.parts import revise  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 ASM = PN("HCR", 2, 1)
 ASM_FILE = "cad/HCR-00002-001_A.SLDASM"

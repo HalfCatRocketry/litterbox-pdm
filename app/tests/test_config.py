@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import config
-import litterbox_engine as eng
-import pn as pn_module
-import registry
-from pn import PN
+from litterbox.vault import config
+from litterbox.parts import engine as eng
+from litterbox.core import pn as pn_module
+from litterbox.records import registry
+from litterbox.core.pn import PN
 
 
 class TestConfig(unittest.TestCase):

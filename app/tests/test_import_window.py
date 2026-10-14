@@ -21,10 +21,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_importer import ImportFixture  # noqa: E402
 from vault_fixture import SKIP_ON_WINDOWS  # noqa: E402
 
-import import_session  # noqa: E402
-import importer  # noqa: E402
-import registry  # noqa: E402
-import settings  # noqa: E402
+from litterbox.importing import session as import_session  # noqa: E402
+from litterbox.importing import importer  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.user import settings  # noqa: E402
 
 
 REAL_SESSION = import_session.ImportSession
@@ -130,7 +130,7 @@ def load_gui_with_fakes(box):
     tk.filedialog, tk.messagebox, tk.ttk = dialogs, mbox, ttk
     fakes = {"customtkinter": ctk, "tkinter": tk, "tkinter.ttk": ttk, "tkinter.filedialog": dialogs,
              "tkinter.messagebox": mbox}
-    app = Path(__file__).resolve().parent.parent / "litterbox_gui.py"
+    app = Path(__file__).resolve().parent.parent / "litterbox" / "gui" / "litterbox_gui.py"
     with mock.patch.dict(sys.modules, fakes):
         spec = importlib.util.spec_from_file_location("litterbox_gui_under_test", app)
         module = importlib.util.module_from_spec(spec)
@@ -192,9 +192,9 @@ class TeamWiring(unittest.TestCase):
 
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
-        import people
-        from litterbox_engine import PartStatus
-        from pn import PN
+        from litterbox.team import people
+        from litterbox.parts.engine import PartStatus
+        from litterbox.core.pn import PN
         self.people = people
         self.pn = PN("HCR", 7, 1)
         row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=["cad/HCR-00007-001_A.SLDPRT"],
@@ -705,7 +705,7 @@ class TickAndSaveWiring(unittest.TestCase):
     def setUp(self):
         from types import SimpleNamespace
         self.gui = load_gui_with_fakes(FakeBox())
-        from pn import PN
+        from litterbox.core.pn import PN
         self.PN = PN
         app = self.gui.App.__new__(self.gui.App)
         app.ticked = set()
@@ -768,7 +768,7 @@ class TickAndSaveWiring(unittest.TestCase):
 
     def _buttons(self):
         from types import SimpleNamespace
-        from litterbox_engine import PartStatus
+        from litterbox.parts.engine import PartStatus
         app = self.app
         app.jobs = fake_jobs()
         app.rows_by_pn = {self.PN.parse if False else None: None}
@@ -914,7 +914,7 @@ class UpdateWiring(unittest.TestCase):
         self.assertIn("Fixes things.", question)
 
     def test_a_download_problem_becomes_a_plain_error(self):
-        from litterbox_engine import LitterboxError
+        from litterbox.parts.engine import LitterboxError
         self.app.install_update(self.update)
         work, _ = self.tasks[0]
         original = self.updater.download
@@ -973,8 +973,8 @@ class OpenWiring(unittest.TestCase):
     def setUp(self):
         self.box = FakeBox()
         self.gui = load_gui_with_fakes(self.box)
-        from litterbox_engine import PartStatus
-        from pn import PN
+        from litterbox.parts.engine import PartStatus
+        from litterbox.core.pn import PN
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=list(self.B), revision="B",
                               released_revision="A", revisions={"A": self.A, "B": self.B})
@@ -1036,7 +1036,7 @@ class OpenWiring(unittest.TestCase):
     # -- out-of-date parts offered when an assembly in work is opened -------------------------
     def _stale(self, replaceable=True):
         from types import SimpleNamespace as S
-        from pn import PN
+        from litterbox.core.pn import PN
         return S(child=PN("HCR", 3, 1), child_revision="A", latest_released="B", replaceable=replaceable)
 
     def test_opening_an_assembly_with_out_of_date_parts_offers_a_review(self):
@@ -1081,8 +1081,8 @@ class OpenWiring(unittest.TestCase):
 class ListAndFilenameWiring(unittest.TestCase):
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
-        from litterbox_engine import PartStatus
-        from pn import PN
+        from litterbox.parts.engine import PartStatus
+        from litterbox.core.pn import PN
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Bracket", "in_work", "Available (Rev A released)", "ok",
                               files=["cad/HCR-00007-001_B.SLDPRT"], revision="B", released_revision="A",
@@ -1103,7 +1103,7 @@ class ListAndFilenameWiring(unittest.TestCase):
                          ["\u2610", "00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
 
     def test_a_voided_part_that_is_hidden_loses_its_tick(self):
-        from litterbox_engine import PartStatus
+        from litterbox.parts.engine import PartStatus
         voided = PartStatus(self.pn, "Bracket", "void", "Void", "void")
         for shown, expected in ((0, set()), (1, {"HCR-00007-001"})):
             app = self.gui.App.__new__(self.gui.App)
@@ -1598,7 +1598,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
         self.assertIn("available", self.window.status.options["text"])
 
     def test_the_main_window_has_an_import_button(self):
-        source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parent.parent / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
         self.assertIn('("Import...", self.import_cad', source)
 
 

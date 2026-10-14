@@ -15,9 +15,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import people  # noqa: E402
-import registry  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.team import people  # noqa: E402
+from litterbox.records import registry  # noqa: E402
 
 
 def directory(*extra, roles=("Quality", "Manufacturing")):
@@ -210,7 +210,7 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         self.assertEqual(self.locks_of(self.b, "Bea"), {})
 
     def test_every_changing_action_is_refused_for_them(self):
-        import create
+        from litterbox.parts import create
         with self.user("Bea"):
             for action in (lambda: eng.checkout(self.b, PART), lambda: eng.undo_checkout(self.b, PART),
                            lambda: eng.edit_details(self.b, PART, "x", ""), lambda: eng.release(self.b, PART),

@@ -16,10 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_people import TeamFixture  # noqa: E402
 from vault_fixture import PART, PRT, SKIP_ON_WINDOWS, git  # noqa: E402
 
-import config  # noqa: E402
-import litterbox_engine as eng  # noqa: E402
-import people  # noqa: E402
-import signing  # noqa: E402
+from litterbox.vault import config  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.team import people  # noqa: E402
+from litterbox.team import commit_signing as signing  # noqa: E402
 
 
 @SKIP_ON_WINDOWS

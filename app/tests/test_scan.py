@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import manifest as mf
-import registry
-import scan
-from pn import PN
+from litterbox.importing import manifest as mf
+from litterbox.records import registry
+from litterbox.importing import scan
+from litterbox.core.pn import PN
 
 
 class ScanTestCase(unittest.TestCase):

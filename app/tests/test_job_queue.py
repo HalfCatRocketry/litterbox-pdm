@@ -10,10 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import gui_logic as logic  # noqa: E402
-import job_queue as jobs  # noqa: E402
-import litterbox_engine as eng  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.gui.logic import gui_logic as logic  # noqa: E402
+from litterbox.jobs import job_queue as jobs  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 
 class Collector:
@@ -186,7 +186,7 @@ class Logic(unittest.TestCase):
             self.assertIn(part, text)
 
     def test_parts_with_a_job_in_progress_are_skipped_but_can_still_be_looked_at(self):
-        from litterbox_engine import PartStatus
+        from litterbox.parts.engine import PartStatus
         pn1, pn2 = PN("HCR", 1, 1), PN("HCR", 2, 1)
         rows = {pn1: PartStatus(pn1, "a", "in_work", "mine", "mine"), pn2: PartStatus(pn2, "b", "in_work", "mine", "mine")}
         pending = {str(pn1): "Checking in 1 part"}
@@ -210,7 +210,7 @@ class Wiring(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
+        cls.source = (Path(__file__).resolve().parent.parent / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
 
     def test_the_banner_and_its_buttons_exist(self):
         for text in ("self.banner_title", 'text="Details..."', 'text="Dismiss"', "class ErrorDetailsWindow",

@@ -8,11 +8,11 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import create  # noqa: E402
-import importer  # noqa: E402
-import pn as pn_module  # noqa: E402
-import registry  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.parts import create  # noqa: E402
+from litterbox.importing import importer  # noqa: E402
+from litterbox.core import pn as pn_module  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 
 def entry(base, variant=1, manual=False):

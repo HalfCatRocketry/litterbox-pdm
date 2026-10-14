@@ -10,9 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import gui_logic as logic  # noqa: E402
-import litterbox_engine as eng  # noqa: E402
-import vault_clone  # noqa: E402
+from litterbox.gui.logic import gui_logic as logic  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.vault import clone as vault_clone  # noqa: E402
 
 
 def git(cwd, *args):
@@ -105,7 +105,7 @@ class Cloning(unittest.TestCase):
 
 class Wiring(unittest.TestCase):
     def test_add_org_asks_for_a_url_and_clones_in_the_background(self):
-        source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parent.parent / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
         for text in ("class CloneDialog", "CloneDialog(self, settings.ROOT).show()", "vault_clone.clone(url.strip(), target)",
                      'label="Cloning the vault', "self.add_org()"):
             self.assertIn(text, source)

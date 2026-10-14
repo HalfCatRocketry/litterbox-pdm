@@ -20,14 +20,14 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git, is_writable  # noqa: E402
 
-import config  # noqa: E402
-import create  # noqa: E402
-import importer  # noqa: E402
-import litterbox_engine as eng  # noqa: E402
-import manifest  # noqa: E402
-import registry  # noqa: E402
-import scan  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.vault import config  # noqa: E402
+from litterbox.parts import create  # noqa: E402
+from litterbox.importing import importer  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.importing import manifest  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.importing import scan  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 
 class FakeSolidWorks:

@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import config  # noqa: E402
-import version  # noqa: E402
+from litterbox.vault import config  # noqa: E402
+from litterbox import version  # noqa: E402
 
 
 class Versions(unittest.TestCase):

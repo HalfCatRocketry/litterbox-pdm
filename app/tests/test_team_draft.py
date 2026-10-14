@@ -8,10 +8,10 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import people  # noqa: E402
-import workflow as wf  # noqa: E402
-from team_draft import TeamDraft  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.team import people  # noqa: E402
+from litterbox.workflows import workflow as wf  # noqa: E402
+from litterbox.team.draft import TeamDraft  # noqa: E402
 
 ENGINEER, QUALITY = "Responsible Engineer", "Quality"
 

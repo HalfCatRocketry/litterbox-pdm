@@ -16,9 +16,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import registry  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 COUNT = 5
 
@@ -302,7 +302,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
 
     # -- commit style ----------------------------------------------------------
     def use_style(self, style):
-        import vault_settings
+        from litterbox.vault import settings_admin as vault_settings
         with self.user("Alex"):
             vault_settings.edit(self.a, commit_style=style)
 
@@ -374,7 +374,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
         return eng.watch_files(self.a, {pn: "A" for pn in pns})
 
     def test_a_part_saved_after_the_click_is_refused_and_stays_checked_out(self):
-        import file_snapshot
+        from litterbox.jobs import file_snapshot
         with self.user("Alex"):
             eng.checkout_many(self.a, self.pns)
             self.change(self.pns)
@@ -405,7 +405,7 @@ class BatchActions(TwoUserVault, unittest.TestCase):
             self.assertEqual(self.locks(self.a), {})
 
     def test_a_snapshot_with_no_change_lets_everything_through(self):
-        import file_snapshot
+        from litterbox.jobs import file_snapshot
         with self.user("Alex"):
             eng.checkout_many(self.a, self.pns)
             self.change(self.pns)

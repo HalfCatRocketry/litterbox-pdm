@@ -17,13 +17,13 @@ sys.path.insert(0, str(Path(__file__).parent))
 from test_importer import ImportFixture  # noqa: E402
 from vault_fixture import SKIP_ON_WINDOWS  # noqa: E402
 
-import gui_logic as logic  # noqa: E402
-import config  # noqa: E402
-import import_session  # noqa: E402
-import importer  # noqa: E402
-import manifest  # noqa: E402
-import registry  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.gui.logic import gui_logic as logic  # noqa: E402
+from litterbox.vault import config  # noqa: E402
+from litterbox.importing import session as import_session  # noqa: E402
+from litterbox.importing import importer  # noqa: E402
+from litterbox.importing import manifest  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 
 @SKIP_ON_WINDOWS

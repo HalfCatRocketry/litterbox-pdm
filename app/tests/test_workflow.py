@@ -13,11 +13,11 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 from vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git  # noqa: E402
 
-import litterbox_engine as eng  # noqa: E402
-import people  # noqa: E402
-import registry  # noqa: E402
-import workflow as wf  # noqa: E402
-from pn import PN  # noqa: E402
+from litterbox.parts import engine as eng  # noqa: E402
+from litterbox.team import people  # noqa: E402
+from litterbox.records import registry  # noqa: E402
+from litterbox.workflows import workflow as wf  # noqa: E402
+from litterbox.core.pn import PN  # noqa: E402
 
 ENGINEER, QUALITY, MANAGER, CHIEF = "Responsible Engineer", "Quality", "Manager", "Chief"
 PART2 = PN("HCR", 2, 1)
@@ -104,8 +104,8 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertEqual(eng.get_locks(self.a), {})
 
     def test_a_vault_with_a_workflow_asks_for_the_new_version(self):
-        import config
-        import version
+        from litterbox.vault import config
+        from litterbox import version
         self.set_template()
         for repo in (self.a, self.b):
             self.assertEqual(config.load(repo)["min_litterbox_version"], wf.MIN_VERSION)
@@ -115,7 +115,7 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertIn("needs Litterbox 0.3.0", str(ctx.exception))
 
     def test_removing_every_workflow_does_not_lower_the_minimum(self):
-        import config
+        from litterbox.vault import config
         self.set_template()
         with self.user("Alex"):
             wf.edit_templates(self.a, lambda t, d: wf.remove_template(t, wf.RELEASE, "T"), "Remove")

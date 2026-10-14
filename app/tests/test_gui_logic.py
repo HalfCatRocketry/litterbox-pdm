@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import gui_logic as logic
-import registry
-import settings
-from litterbox_engine import ChangeReport, LitterboxError, PartStatus
-from pn import PN
+from litterbox.gui.logic import gui_logic as logic
+from litterbox.records import registry
+from litterbox.user import settings
+from litterbox.parts.engine import ChangeReport, LitterboxError, PartStatus
+from litterbox.core.pn import PN
 
 
 def row(base, state="Available", kind="ok", description="", files=(), name="", import_path=""):
@@ -474,7 +474,7 @@ class TestTypedNumbers(unittest.TestCase):
                 logic.parse_digit_count(bad, "part number digits", 1, 9)
 
     def test_in_use_text_names_the_part(self):
-        from create import NumberCheck
+        from litterbox.parts.create import NumberCheck
         self.assertEqual(logic.in_use_text(NumberCheck(PN("HCR", 1, 1), True, "Front upright", "in_work")),
                          "Front upright")
         self.assertEqual(logic.in_use_text(NumberCheck(PN("HCR", 1, 1), True, "Old bracket", "void")),
@@ -503,7 +503,7 @@ class TestNewNumberHelpers(unittest.TestCase):
                 logic.parse_optional_number(bad, "variant number", maximum=999)
 
     def test_variant_lines(self):
-        import registry
+        from litterbox.records import registry
         with tempfile.TemporaryDirectory() as tmp:
             registry.create_record(tmp, PN("HCR", 5, 1), "Left", "Alex")
             registry.create_record(tmp, PN("HCR", 5, 2), "Right", "Alex")
@@ -572,7 +572,7 @@ class TestReferenceText(unittest.TestCase):
 
     def test_stale_open_text_and_replace_summary(self):
         self.assertIn("Rev B is released", logic.stale_open_text(PN("HCR", 2, 1), [self.use()]))
-        from references import ReplaceResult
+        from litterbox.references.references import ReplaceResult
         text, problems = logic.replace_summary([ReplaceResult(PN("HCR", 2, 1), "done", "ok"),
                                                 ReplaceResult(PN("HCR", 3, 1), "skipped", "Checked out by Bea.")])
         self.assertTrue(problems)
@@ -601,7 +601,7 @@ class TestReferenceText(unittest.TestCase):
 
 class TestTeamText(unittest.TestCase):
     def setUp(self):
-        import people
+        from litterbox.team import people
         self.people = people
         self.d = people.Directory([people.Person("alex", "Alex Smith", "a@x.com", ["alexs"], people.OWNER, ["Quality"]),
                                    people.Person("bea", "Bea", "", [], people.MEMBER, [], False, ["ssh-ed25519 AAAA"])],
@@ -712,7 +712,7 @@ class TestVaultCreatedText(unittest.TestCase):
 
 class TestWorkflowText(unittest.TestCase):
     def template(self):
-        import workflow
+        from litterbox.workflows import workflow
         return workflow.Template("release", "T1", [workflow.Row(["Quality"]), workflow.Row(["Manager", "Chief"])])
 
     def slots(self):
@@ -771,7 +771,7 @@ class TestWorkflowText(unittest.TestCase):
         self.assertIn("HCR-00001-001: offline", text)
 
     def test_people_drop_downs(self):
-        import people
+        from litterbox.team import people
         directory = people.Directory(
             [people.Person("a", "Alex", "", [], "owner", ["Quality"]), people.Person("b", "Alex", "", [], "member",
                                                                                       ["Manager"]),
@@ -785,7 +785,7 @@ class TestWorkflowEditor(unittest.TestCase):
     ROLES = ["Responsible Engineer", "Quality", "Manager", "Chief"]
 
     def templates(self):
-        import workflow
+        from litterbox.workflows import workflow
         t = {}
         workflow.set_template(t, "release", "T1", [["Responsible Engineer"], ["Quality"]])
         workflow.set_template(t, "release", "T2", [["Responsible Engineer"]])
@@ -821,7 +821,7 @@ class TestWorkflowEditor(unittest.TestCase):
         self.assertEqual((op["name"], op["old"]), ("Flight", "T1"))
 
     def test_the_ops_replay_on_newer_files(self):
-        import workflow
+        from litterbox.workflows import workflow
         editor = logic.WorkflowEditor(self.templates())
         editor.items["release"][0]["name"] = "Flight"
         editor.delete("release", 1)
@@ -866,8 +866,8 @@ class TestWorkflowEditor(unittest.TestCase):
 
 class TestWorkflowHistory(unittest.TestCase):
     def history(self, *events):
-        import registry
-        from pn import parse
+        from litterbox.records import registry
+        from litterbox.core.pn import parse
         record = registry.Record(parse("HCR-00001-001"), "Upright", "Alex", "2026-10-11T00:00:00Z")
         for event in events:
             record.history.append(dict({"by": "Bea", "at": "2026-10-11T01:00:00Z", "revision": "A"}, **event))
@@ -917,7 +917,7 @@ class TestTicks(unittest.TestCase):
         self.assertTrue(text.endswith("Continue?"))
 
     def test_the_banner_shows_only_the_name(self):
-        import people
+        from litterbox.team import people
         who = people.Person("bea", "Bea Jones", "", ["Bea"], "member", ["Quality"])
         self.assertEqual(people.Identity.describe(type("I", (), {"state": people.OK, "person": who})()),
                          "Bea Jones")
@@ -928,7 +928,7 @@ class TestTicks(unittest.TestCase):
         self.assertTrue(logic.tick_text(3).startswith("3 parts selected."))
 
     def test_person_unchanged(self):
-        import people
+        from litterbox.team import people
         who = people.Person("bea", "Bea", "b@x.com", ["Bea"], "member", ["Quality"])
         same = {"name": "Bea", "email": "b@x.com", "host_names": ["Bea"], "access": "member", "roles": ["Quality"]}
         self.assertTrue(logic.person_unchanged(who, same))
@@ -1053,12 +1053,12 @@ class InspectVaultFolder(unittest.TestCase):
 
 class AddOrgWiring(unittest.TestCase):
     def test_add_org_no_longer_opens_the_org_setup_dialog(self):
-        source = (Path(__file__).resolve().parent.parent / "litterbox_gui.py").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parent.parent / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
         self.assertIn("self.add_org()", source)
         self.assertNotIn("self._org_setup(None)", source)
         self.assertIn("pnmod.NEW_VAULT_BASE_DIGITS", source)
 
     def test_new_vaults_suggest_six_digits_but_existing_vaults_keep_their_default(self):
-        import pn
+        from litterbox.core import pn
         self.assertEqual(pn.NEW_VAULT_BASE_DIGITS, 6)
         self.assertEqual(pn.DEFAULT_BASE_DIGITS, 5)

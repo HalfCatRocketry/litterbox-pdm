@@ -23,9 +23,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import litterbox_engine as eng
-import registry
-from pn import PN
+from litterbox.parts import engine as eng
+from litterbox.records import registry
+from litterbox.core.pn import PN
 
 SHIM = Path(__file__).with_name("fake_git_lfs.py")
 PART = PN("HCR", 1, 1)

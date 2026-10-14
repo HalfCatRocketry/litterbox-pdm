@@ -8,13 +8,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import config
-import create
-import init_vault as iv
-import litterbox_engine as eng
-import people
-import pn as pn_module
-import registry
+from litterbox.vault import config
+from litterbox.parts import create
+from litterbox.vault import create_vault as iv
+from litterbox.parts import engine as eng
+from litterbox.team import people
+from litterbox.core import pn as pn_module
+from litterbox.records import registry
 from vault_fixture import SHIM, SKIP_ON_WINDOWS, git
 
 
