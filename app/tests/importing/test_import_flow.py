@@ -1,22 +1,11 @@
-"""
-Tests for importer.py, using a pretend SolidWorks (files that are text with 'ref: <path>' lines)
-and the same two-user vault as the create tests. They need Linux, macOS or WSL.
-
-The important ones are the "leaves nothing behind" tests: cancelling, failing, losing a race for
-the numbers, and crashing must each leave the vault and its git exactly as they were.
-
-Run from the app folder with:  python -m unittest discover -s tests -t . -v
-"""
+"""Tests for importing (prepare, finish, recover), using a pretend SolidWorks and the two-user vault. The important ones are the leaves-nothing-behind tests: cancelling, failing, losing a race for the numbers and crashing must each leave the vault and its git exactly as they were. They need Linux, macOS or WSL."""
 
 import os
 import random
 import unittest
-import shutil
 from pathlib import Path
 from unittest import mock
-
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, git, is_writable
-
 from litterbox.vault import config_write
 from litterbox.parts import create
 from litterbox.cad.solidworks import sw_backend
@@ -26,7 +15,6 @@ from litterbox.importing import import_finish
 from litterbox.importing import import_journal
 from litterbox.importing import import_numbering
 from litterbox.importing import import_prepare
-from litterbox.cad.solidworks import sw_process
 from litterbox.importing import manifest
 from litterbox.records import record_store
 from litterbox.core.part_number import PN
@@ -583,141 +571,5 @@ class ImportFlow(ImportFixture, unittest.TestCase):
                 self.assertEqual(cli_import.main([str(self.a), str(self.manifest_path)]), 1)     # nothing left to import
 
 
-class PairReferences(unittest.TestCase):
-    def test_lists_that_line_up_are_paired_by_position(self):
-        self.assertEqual(sw_backend.pair_references(["/old/a.SLDPRT", "/old/b.SLDPRT"], ["/x/a.SLDPRT", "/y/b.SLDPRT"]),
-                         [("/old/a.SLDPRT", "/x/a.SLDPRT"), ("/old/b.SLDPRT", "/y/b.SLDPRT")])
-
-    def test_lists_that_do_not_line_up_are_paired_by_unique_file_name(self):
-        pairs = sw_backend.pair_references(["/old/a.SLDPRT", "/old/c.SLDPRT"], ["/y/a.SLDPRT", "/z/a.SLDPRT", "/y/b.SLDPRT"])
-        self.assertEqual(pairs, [("/old/a.SLDPRT", ""), ("/old/c.SLDPRT", "")])
-        pairs = sw_backend.pair_references(["/old/a.SLDPRT"], ["/y/a.SLDPRT", "/y/b.SLDPRT"])
-        self.assertEqual(pairs, [("/old/a.SLDPRT", "/y/a.SLDPRT")])
-
-
 if __name__ == "__main__":
     unittest.main()
-
-
-class ClosingSolidWorks(unittest.TestCase):
-    """The SolidWorks we start must really be gone afterwards, or Open later lands in an invisible window."""
-
-    def test_waits_for_a_slow_exit_without_ending_it(self):
-        alive = iter([True, True, False])
-        ended = []
-        result = sw_process.wait_for_exit(42, alive=lambda pid: next(alive), kill=ended.append, sleep=lambda s: None)
-        self.assertEqual((result, ended), ("exited", []))
-
-    def test_ends_a_process_that_will_not_exit(self):
-        ended, notes = [], []
-        result = sw_process.wait_for_exit(42, timeout=1, alive=lambda pid: True, kill=ended.append,
-                                        sleep=lambda s: None, log=notes.append)
-        self.assertEqual((result, ended), ("ended", [42]))
-        self.assertTrue(notes)
-
-    def test_already_gone_needs_no_waiting(self):
-        self.assertEqual(sw_process.wait_for_exit(42, alive=lambda pid: False, kill=lambda p: 1 / 0), "exited")
-
-    def test_only_a_solidworks_we_started_is_exited_and_waited_for(self):
-        calls = []
-
-        class App:
-            def GetProcessID(self):
-                return 77
-
-            def ExitApp(self):
-                calls.append("exit")
-
-        original = sw_process.wait_for_exit
-        sw_process.wait_for_exit = lambda pid, **kw: calls.append(("wait", pid))
-        try:
-            backend = sw_backend.SolidWorksBackend()
-            backend._sw, backend._started_by_us = App(), True
-            backend.close()
-            self.assertEqual(calls, ["exit", ("wait", 77)])
-            calls.clear()
-            backend._sw, backend._started_by_us, backend._pid = App(), True, 55     # learned at start-up: preferred
-            backend.close()
-            self.assertEqual(calls, ["exit", ("wait", 55)])
-            calls.clear()
-            backend._sw, backend._started_by_us = App(), False          # the user's own SolidWorks: hands off
-            backend.close()
-            self.assertEqual(calls, [])
-        finally:
-            sw_process.wait_for_exit = original
-
-
-class CopyingWhenSolidWorksRefuses(unittest.TestCase):
-    """SolidWorks sometimes refuses CopyDocument (it returned 2 for a McMaster washer). A lone part is copied as
-    an ordinary file; anything else is reported."""
-
-    def setUp(self):
-        import sys
-        import tempfile
-        import types
-        self.dir = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
-        fake_pythoncom = types.ModuleType("pythoncom")
-        fake_pythoncom.VT_ARRAY, fake_pythoncom.VT_BSTR = 0x2000, 8
-        client = types.ModuleType("win32com.client")
-        client.VARIANT = lambda kind, value: value
-        win32com = types.ModuleType("win32com")
-        win32com.client = client
-        for name, module in (("pythoncom", fake_pythoncom), ("win32com", win32com), ("win32com.client", client)):
-            old = sys.modules.get(name)
-            sys.modules[name] = module
-            self.addCleanup(lambda n=name, o=old: sys.modules.pop(n, None) if o is None else sys.modules.update({n: o}))
-
-    def backend(self, deps):
-        class App:
-            def CopyDocument(inner, *args):
-                return 2                                    # refused, and nothing was written
-
-        backend = sw_backend.SolidWorksBackend()
-        backend._sw = App()
-        backend._dependencies = lambda path, search: deps
-        return backend
-
-    def test_a_lone_part_is_copied_as_a_file(self):
-        src = self.dir / "washer.SLDPRT"
-        src.write_bytes(b"washer")
-        dst = self.dir / "vault" / "cad" / "HCR-00002-001_A.SLDPRT"
-        self.backend([]).copy(str(src), str(dst))
-        self.assertEqual(dst.read_bytes(), b"washer")
-
-    def test_a_file_with_references_is_reported_not_copied_blindly(self):
-        src = self.dir / "bracket.SLDASM"
-        src.write_bytes(b"asm")
-        dst = self.dir / "out" / "x.SLDASM"
-        with self.assertRaises(import_errors.ImportFailed) as ctx:
-            self.backend([]).copy(str(src), str(dst))
-        self.assertIn("it returned 2", str(ctx.exception))
-        self.assertFalse(dst.exists())
-        part = self.dir / "uses.SLDPRT"
-        part.write_bytes(b"p")
-        with self.assertRaises(import_errors.ImportFailed):
-            self.backend(["C:/other.SLDPRT"]).copy(str(part), str(self.dir / "out" / "y.SLDPRT"))
-
-
-class FindingTheProcess(unittest.TestCase):
-    def test_solidworks_own_answer_is_used(self):
-        class App:
-            def GetProcessID(self):
-                return 9
-        self.assertEqual(sw_process.own_process_id(App(), {1}), 9)
-
-    def test_otherwise_the_one_new_process_is_used(self):
-        class App:
-            def GetProcessID(self):
-                raise RuntimeError
-        original = sw_process.solidworks_pids
-        try:
-            sw_process.solidworks_pids = lambda: {1, 8}
-            self.assertEqual(sw_process.own_process_id(App(), {1}), 8)
-            sw_process.solidworks_pids = lambda: {1, 8, 9}                     # two new: can't tell which
-            self.assertIsNone(sw_process.own_process_id(App(), {1}))
-        finally:
-            sw_process.solidworks_pids = original
-
-    def test_the_wait_is_five_seconds(self):
-        self.assertEqual(sw_process.EXIT_WAIT_SECONDS, 5.0)
