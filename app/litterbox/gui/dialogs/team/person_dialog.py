@@ -11,15 +11,17 @@ from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.logic import team_text
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class PersonDialog(ctk.CTkToplevel):
+class PersonDialog(modal_dialog.ModalDialog):
     """Add or edit one person on the team.
 
         PersonDialog(parent, person_or_None, roles, existing_ids, can_set_access, host_name_hint).show()
         # None if cancelled, else (problem-free) dict of fields; for a new person it includes 'id'
     """
+    FOCUS = "name_entry"
 
     ADD_ROLE = "Add a role..."
 
@@ -111,14 +113,6 @@ class PersonDialog(ctk.CTkToplevel):
             return
         self.destroy()
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-            self.name_entry.focus_set()
-        except tk.TclError:
-            pass
-
     def _show_roles(self):
         self.role_tree.delete(*self.role_tree.get_children())
         for role in self.chosen_roles:
@@ -154,7 +148,3 @@ class PersonDialog(ctk.CTkToplevel):
                 return
         self.result = fields
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

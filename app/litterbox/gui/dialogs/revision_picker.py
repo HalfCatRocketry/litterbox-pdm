@@ -2,16 +2,16 @@
 revision_picker.py - choosing which revision of a part to open.
 """
 
-import tkinter as tk
 
 import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class RevisionPickerDialog(ctk.CTkToplevel):
+class RevisionPickerDialog(modal_dialog.ModalDialog):
     """Ask which revision of a part to open. Click a button; the first one is also the Enter key.
 
         rev = RevisionPickerDialog(parent, pn, [("Rev B (working)", "B"), ("Rev A (released)", "A")]).show()
@@ -44,17 +44,6 @@ class RevisionPickerDialog(ctk.CTkToplevel):
         self.bind("<Return>", lambda event: self._choose(self.first))
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
-
     def _choose(self, rev):
         self.result = rev
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

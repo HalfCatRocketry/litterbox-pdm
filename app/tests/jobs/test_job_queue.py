@@ -5,7 +5,6 @@ labels, the busy marks, and the advice shown for an error.
 
 import threading
 import unittest
-from pathlib import Path
 
 
 from litterbox.gui.logic import action_rules

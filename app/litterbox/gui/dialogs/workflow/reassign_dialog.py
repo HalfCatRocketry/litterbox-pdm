@@ -9,10 +9,11 @@ import customtkinter as ctk
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import task_text
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class ReassignDialog(ctk.CTkToplevel):
+class ReassignDialog(modal_dialog.ModalDialog):
     """Change who signs a sign-off that hasn't been given. show() gives (slot index, person id) or None."""
 
     def __init__(self, parent, task, directory, requester_may_sign=True):
@@ -53,13 +54,6 @@ class ReassignDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
-
     def _people(self):
         index = self.slot_labels[self.slot_var.get()]
         choices = task_text.row_choices(self.directory, self.task.slots[index]["roles"])
@@ -74,7 +68,3 @@ class ReassignDialog(ctk.CTkToplevel):
             return
         self.result = (self.slot_labels[self.slot_var.get()], pid)
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

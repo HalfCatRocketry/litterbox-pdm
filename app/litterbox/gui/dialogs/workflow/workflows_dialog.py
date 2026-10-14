@@ -12,11 +12,12 @@ from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.logic import workflow_editor
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.workflows import workflow_templates
 
 
-class WorkflowsDialog(ctk.CTkToplevel):
+class WorkflowsDialog(modal_dialog.ModalDialog):
     """Team > Workflows: the sign-off templates for each action, one tab per action.
 
         WorkflowsDialog(parent, roles, templates, apply=callback).show()
@@ -71,13 +72,6 @@ class WorkflowsDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self._cancel)
         self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)
-
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
 
     def _cancel(self):
         if self.editor.dirty and not confirm_dialogs.ask_discard(self, "your changes to the workflows"):
@@ -234,7 +228,3 @@ class WorkflowsDialog(ctk.CTkToplevel):
                 return
         self.result = ops
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

@@ -3,16 +3,16 @@ confirm_dialogs.py - "Are you sure?" windows: ConfirmDialog (a heading and lines
 ahead) and DiscardDialog (discard unsaved changes?).
 """
 
-import tkinter as tk
 
 import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class DiscardDialog(ctk.CTkToplevel):
+class DiscardDialog(modal_dialog.ModalDialog):
     """'Discard changes?' with Discard and Keep editing. Use ask_discard(parent, what)."""
 
     def __init__(self, parent, what):
@@ -40,13 +40,6 @@ class DiscardDialog(ctk.CTkToplevel):
         self.bind("<Escape>", lambda event: self.destroy())
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
-
     def _discard(self):
         self.discard = True
         self.destroy()
@@ -61,7 +54,7 @@ def ask_discard(parent, what="these changes"):
     return DiscardDialog(parent, what).show()
 
 
-class ConfirmDialog(ctk.CTkToplevel):
+class ConfirmDialog(modal_dialog.ModalDialog):
     """A small pop-up: a heading, a list of lines, an optional note, and Cancel / Continue buttons.
 
         dialog = ConfirmDialog(parent, "Title", "Heading", ["line 1", "line 2"], note="...")
@@ -108,21 +101,9 @@ class ConfirmDialog(ctk.CTkToplevel):
         self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)         # make the pop-up modal once it is on screen
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
-
     def _confirm(self):
         self.result = True
         self.destroy()
 
     def _cancel(self):
         self.destroy()
-
-    def show(self):
-        """Wait for the user to answer. Returns True for the confirm button, False otherwise."""
-        self.wait_window(self)
-        return self.result

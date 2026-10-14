@@ -8,12 +8,14 @@ import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.vault import clone as vault_clone
 
 
-class CloneDialog(ctk.CTkToplevel):
+class CloneDialog(modal_dialog.ModalDialog):
     """Add org...: the URL of a vault on the Git host. show() gives the URL typed, or None."""
+    FOCUS = "entry"
 
     def __init__(self, parent, root):
         super().__init__(parent)
@@ -50,14 +52,6 @@ class CloneDialog(ctk.CTkToplevel):
         self.bind("<Escape>", lambda event: self.destroy())
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-            self.entry.focus_set()
-        except tk.TclError:
-            pass
-
     def _preview(self):
         name, problem = vault_clone.parse_url(self.url_var.get())
         if self.url_var.get().strip() and not problem:
@@ -73,7 +67,3 @@ class CloneDialog(ctk.CTkToplevel):
             return
         self.result = self.url_var.get().strip()
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

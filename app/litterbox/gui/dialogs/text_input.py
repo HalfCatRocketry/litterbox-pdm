@@ -2,12 +2,12 @@
 text_input.py - asking for one line of text (InputDialog) or a reason (ReasonDialog).
 """
 
-import tkinter as tk
 
 import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
@@ -19,12 +19,13 @@ class InputDialog(ctk.CTkInputDialog):
         window_chrome.set_window_icon(self)
 
 
-class ReasonDialog(ctk.CTkToplevel):
+class ReasonDialog(modal_dialog.ModalDialog):
     """A question with a message and a required one-line reason.
 
         reason = ReasonDialog(parent, "Revise HCR-00001-001", "text...", "Why is it being revised?", "Revise").show()
         # None if cancelled, else the reason (never blank)
     """
+    FOCUS = "entry"
 
     def __init__(self, parent, title, message, label, confirm_text="OK"):
         super().__init__(parent)
@@ -60,14 +61,6 @@ class ReasonDialog(ctk.CTkToplevel):
         self.bind("<Return>", lambda event: self._confirm())
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-            self.entry.focus_set()
-        except tk.TclError:
-            pass
-
     def _confirm(self):
         reason = " ".join(self.entry.get().split())
         if not reason:
@@ -75,7 +68,3 @@ class ReasonDialog(ctk.CTkToplevel):
             return
         self.result = reason
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

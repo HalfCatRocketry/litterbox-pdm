@@ -2,17 +2,17 @@
 filename_dialog.py - shows the file name a part's CAD file must have (to copy into Save As).
 """
 
-import tkinter as tk
 
 import customtkinter as ctk
 
 from litterbox.core import filenames
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class FilenameDialog(ctk.CTkToplevel):
+class FilenameDialog(modal_dialog.ModalDialog):
     """Shown after New Part: the exact file name to save the CAD file as, with a Copy button."""
 
     def __init__(self, parent, pn, revision="A"):
@@ -46,13 +46,6 @@ class FilenameDialog(ctk.CTkToplevel):
         self.bind("<Escape>", lambda event: self.destroy())
         self.bind("<Return>", lambda event: self._copy())
         self.after(150, self._grab)
-
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
 
     def _copy(self):
         self.clipboard_clear()

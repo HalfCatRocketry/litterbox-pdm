@@ -13,12 +13,13 @@ from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import number_input
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.parts import number_suggestions
 from litterbox.vault import config
 
 
-class NewPartDialog(ctk.CTkToplevel):
+class NewPartDialog(modal_dialog.ModalDialog):
     """The New Part pop-up: a name, an optional description, and the part number.
 
         NewPartDialog(parent, repo, org).show()
@@ -36,6 +37,7 @@ class NewPartDialog(ctk.CTkToplevel):
     otherwise, leaving this window open. Everything here reads your local copy
     of the vault only.
     """
+    FOCUS = "name_entry"
 
     def __init__(self, parent, repo, org):
         super().__init__(parent)
@@ -103,14 +105,6 @@ class NewPartDialog(ctk.CTkToplevel):
         else:
             self._refresh(first_time=True)
         self.after(150, self._grab)
-
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-            self.name_entry.focus_set()
-        except tk.TclError:
-            pass
 
     def _say(self, text="", color=theme.MUTED, detail=""):
         self.verdict.configure(text=text, text_color=color)
@@ -194,7 +188,3 @@ class NewPartDialog(ctk.CTkToplevel):
         self.result = {"name": name, "description": self.desc_var.get().strip(),
                        "base": base, "variant": variant}
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

@@ -14,10 +14,11 @@ from litterbox.core.part_number import PNError, check_org
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import number_input
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class OrgDialog(ctk.CTkToplevel):
+class OrgDialog(modal_dialog.ModalDialog):
     """Set up an org: its code, its vault folder, and the first part number it hands out.
 
         result = OrgDialog(parent, org="HCR", folder=r"C:\\...", start=1, base_digits=5, variant_digits=3).show()
@@ -84,13 +85,6 @@ class OrgDialog(ctk.CTkToplevel):
         self.bind("<Escape>", lambda event: self.destroy())
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
-
     def _browse(self):
         folder = filedialog.askdirectory(parent=self, initialdir=self.folder_var.get() or "C:\\")
         if folder:
@@ -120,7 +114,3 @@ class OrgDialog(ctk.CTkToplevel):
             return
         self.result = (org, folder, int(text), base_digits, variant_digits)
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

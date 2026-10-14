@@ -2,7 +2,6 @@
 roles_dialog.py - the team's list of roles.
 """
 
-import tkinter as tk
 from tkinter import messagebox, ttk
 
 import customtkinter as ctk
@@ -11,16 +10,18 @@ from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.logic import team_text
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.team import team_model
 
 
-class RolesDialog(ctk.CTkToplevel):
+class RolesDialog(modal_dialog.ModalDialog):
     """The list of roles this org uses. Type a role and press Add; select one and press Remove.
 
         RolesDialog(parent, roles, holders_of).show()      # holders_of(role) -> names of people who have it
         # None if cancelled, else the new list of roles. Nothing is saved until the caller saves it.
     """
+    FOCUS = "entry"
 
     def __init__(self, parent, roles, holders_of, apply=None):
         super().__init__(parent)
@@ -84,14 +85,6 @@ class RolesDialog(ctk.CTkToplevel):
             return
         self.destroy()
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-            self.entry.focus_set()
-        except tk.TclError:
-            pass
-
     def _show(self):
         self.tree.delete(*self.tree.get_children())
         for role in self.roles:
@@ -135,7 +128,3 @@ class RolesDialog(ctk.CTkToplevel):
                 return
         self.result = list(self.roles)
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

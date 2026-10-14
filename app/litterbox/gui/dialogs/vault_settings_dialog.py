@@ -8,10 +8,11 @@ import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class VaultSettingsDialog(ctk.CTkToplevel):
+class VaultSettingsDialog(modal_dialog.ModalDialog):
     """The vault's shared settings, as one dict: commit_style, release_rule, require_signatures (see config.py).
     show() gives the chosen values (all three) or None."""
 
@@ -67,17 +68,6 @@ class VaultSettingsDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
-
     def _ok(self):
         self.result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

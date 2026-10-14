@@ -11,13 +11,14 @@ from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import task_text
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_editing
 from litterbox.workflows import workflow_templates
 
 
-class WorkflowRequestDialog(ctk.CTkToplevel):
+class WorkflowRequestDialog(modal_dialog.ModalDialog):
     """Start a workflow on some parts: pick a template, name a person for each sign-off, add optional extras.
 
         result = WorkflowRequestDialog(parent, action, parts, templates, directory, my_id).show()
@@ -90,13 +91,6 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.bind("<Escape>", lambda event: self.destroy())
         self.after(150, self._grab)
-
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
 
     @property
     def template(self):
@@ -185,7 +179,3 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
         self.result = {"template": self.template.name, "assignments": assignments, "extras": extras,
                        "reason": reason}
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result

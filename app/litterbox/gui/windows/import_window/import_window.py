@@ -10,6 +10,7 @@ import customtkinter as ctk
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.gui.windows.import_window.cell_editing import CellEditing
 from litterbox.gui.windows.import_window.finishing import Finishing
@@ -22,7 +23,7 @@ from litterbox.user import settings
 from litterbox.vault import config
 
 
-class ImportWindow(PickPage, TablePage, CellEditing, Finishing, ctk.CTkToplevel):
+class ImportWindow(PickPage, TablePage, CellEditing, Finishing, modal_dialog.ModalDialog):
     """The Import window: choose folders, review the table, Finish & Import.
 
         ImportWindow(parent, repo, org, on_imported=callback, log=function)
@@ -123,12 +124,6 @@ class ImportWindow(PickPage, TablePage, CellEditing, Finishing, ctk.CTkToplevel)
     # ------------------------------------------------------------------
     # Pages, status, background results
     # ------------------------------------------------------------------
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-        except tk.TclError:
-            pass
 
     def _show(self, mode):
         """mode: 'pick' (choose folders), 'table' (review), or 'working' (a job is running)."""

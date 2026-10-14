@@ -2,22 +2,23 @@
 edit_details_dialog.py - Edit Details: a part's name and description.
 """
 
-import tkinter as tk
 
 import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import confirmations
+from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
 
-class EditDetailsDialog(ctk.CTkToplevel):
+class EditDetailsDialog(modal_dialog.ModalDialog):
     """Change a part's name and description.
 
         EditDetailsDialog(parent, pn, name, description).show()
         # None if cancelled or nothing changed, else (name, description)
     """
+    FOCUS = "name_entry"
 
     def __init__(self, parent, pn, name, description):
         super().__init__(parent)
@@ -60,14 +61,6 @@ class EditDetailsDialog(ctk.CTkToplevel):
         self.bind("<Return>", lambda event: self._save())
         self.after(150, self._grab)
 
-    def _grab(self):
-        try:
-            self.grab_set()
-            self.focus_force()
-            self.name_entry.focus_set()
-        except tk.TclError:
-            pass
-
     def _save(self):
         name, description = self.name_entry.get(), self.desc_entry.get()
         problem, changed = confirmations.edit_details_result(*self.old, name, description)
@@ -77,7 +70,3 @@ class EditDetailsDialog(ctk.CTkToplevel):
         if changed:
             self.result = (name, description)
         self.destroy()
-
-    def show(self):
-        self.wait_window(self)
-        return self.result
