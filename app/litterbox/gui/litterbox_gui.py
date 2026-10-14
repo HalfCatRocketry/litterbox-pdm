@@ -32,6 +32,7 @@ from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.team import team_store
 from litterbox.references import references
+from litterbox.parts import cancel_revision
 from litterbox.parts import revise
 from litterbox.team import commit_signing as signing
 from litterbox.parts import create
@@ -4761,7 +4762,7 @@ class App(ctk.CTk):
         if not plan:
             return
         repo, pn = self.repo(), plan.targets[0]
-        self.run_task(lambda: revise.cancel_revision_plan(repo, pn), "Checked what cancelling would do",
+        self.run_task(lambda: cancel_revision.cancel_revision_plan(repo, pn), "Checked what cancelling would do",
                       on_success=lambda cancel_plan: self._confirm_cancel_revision(repo, cancel_plan),
                       refresh=False)
 
@@ -4776,7 +4777,7 @@ class App(ctk.CTk):
         if not reason:
             return
         self.pending_select = str(pn)
-        self.run_task(lambda: revise.cancel_revision(repo, pn, reason, log=lambda text: self.queue.put(("log", text))),
+        self.run_task(lambda: cancel_revision.cancel_revision(repo, pn, reason, log=lambda text: self.queue.put(("log", text))),
                       f"Cancelled Rev {cancel_plan.revision} of {pn.short}")
 
     def make_cots(self):

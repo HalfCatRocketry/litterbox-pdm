@@ -17,6 +17,8 @@ from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, Tw
 
 from litterbox.records import record_revisions
 from litterbox.records import record_store
+from litterbox.parts import cancel_revision
+from litterbox.parts import revision_files
 from litterbox.parts import revise
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
@@ -65,7 +67,7 @@ class ReviseFixture(TwoUserVault):
 
     def cancel(self, repo=None, user="Alex", reason="Started by mistake", **kwargs):
         with self.user(user):
-            return revise.cancel_revision(repo or self.a, PART, reason, backend=self.fake, log=lambda *_: None,
+            return cancel_revision.cancel_revision(repo or self.a, PART, reason, backend=self.fake, log=lambda *_: None,
                                           **kwargs)
 
     def assert_untouched(self, repo):
@@ -78,7 +80,7 @@ class ReviseFixture(TwoUserVault):
         self.assertEqual(git(repo, "status", "--porcelain"), "")
         self.assertEqual(git(repo, "rev-list", "--count", "@{u}..HEAD"), "0")
         self.assertEqual(self.locks(repo), {})
-        self.assertFalse(revise._journal_path(repo).exists())
+        self.assertFalse(revision_files._journal_path(repo).exists())
 
 
 class TestRevise(ReviseFixture, unittest.TestCase):
@@ -106,7 +108,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
         self.assertEqual((self.a / PRT).read_text(), "model A\n")
         self.assertIn("HCR-00001-001: Revised to Rev B - Bore too small", self.remote_log())
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
-        self.assertFalse(revise._journal_path(self.a).exists())
+        self.assertFalse(revision_files._journal_path(self.a).exists())
         with self.user("Alex"):
             row = self.status_of(self.a)
         self.assertEqual((row.kind, row.revision, row.released_revision), ("mine", "B", "A"))
@@ -208,29 +210,29 @@ class TestRevise(ReviseFixture, unittest.TestCase):
         self.assertIn("Bea", str(ctx.exception))
         self.assertFalse((self.a / PRT_B).exists())
         self.assertEqual({v[1] for v in self.locks(self.a).values()}, {"Bea"})
-        self.assertFalse(revise._journal_path(self.a).exists())
+        self.assertFalse(revision_files._journal_path(self.a).exists())
 
     def test_a_crash_is_cleaned_up_from_the_note_left_behind(self):
         self.a.joinpath(PRT_B).write_text("half copied")
-        revise._write_journal(self.a, {"op": "revise", "token": "tok1", "record": REC, "added": [PRT_B, DRW_B],
+        revision_files.write_journal(self.a, {"op": "revise", "token": "tok1", "record": REC, "added": [PRT_B, DRW_B],
                                        "removed": [], "locked": []})
         with self.user("Alex"):
-            self.assertEqual(revise.recover(self.a, log=lambda *_: None), "cleaned")
-            self.assertEqual(revise.recover(self.a, log=lambda *_: None), "nothing")
+            self.assertEqual(revision_files.recover(self.a, log=lambda *_: None), "cleaned")
+            self.assertEqual(revision_files.recover(self.a, log=lambda *_: None), "nothing")
         self.assert_untouched(self.a)
 
     def test_recovery_never_deletes_files_the_vault_owns(self):
-        revise._write_journal(self.a, {"op": "revise", "token": "tok2", "record": REC, "added": [PRT, PRT_B],
+        revision_files.write_journal(self.a, {"op": "revise", "token": "tok2", "record": REC, "added": [PRT, PRT_B],
                                        "removed": [], "locked": []})
         with self.user("Alex"):
-            revise.recover(self.a, log=lambda *_: None)
+            revision_files.recover(self.a, log=lambda *_: None)
         self.assertTrue((self.a / PRT).exists())                # tracked in the latest commit: left alone
 
     def test_a_note_that_points_outside_the_vault_is_refused(self):
-        revise._write_journal(self.a, {"op": "revise", "token": "tok3", "record": REC,
+        revision_files.write_journal(self.a, {"op": "revise", "token": "tok3", "record": REC,
                                        "added": ["../elsewhere/file"], "removed": [], "locked": []})
         with self.assertRaises(LitterboxError):
-            revise.recover(self.a, log=lambda *_: None)
+            revision_files.recover(self.a, log=lambda *_: None)
 
 
 class TestCancelRevision(ReviseFixture, unittest.TestCase):
@@ -238,7 +240,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.revise()
         with self.user("Alex"):
             (self.a / PRT_B).write_text("unsaved edits\n", encoding="utf-8")            # work that must not be lost
-            plan = revise.cancel_revision_plan(self.a, PART)
+            plan = cancel_revision.cancel_revision_plan(self.a, PART)
             self.assertTrue(plan.ok, plan.problems)
             self.assertEqual((plan.revision, plan.back_to), ("B", "A"))
         kept = self.cancel()
@@ -285,18 +287,18 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.revise()
         with self.user("Bea"):
             get_latest.get_latest(self.b)
-            plan = revise.cancel_revision_plan(self.b, PART)
+            plan = cancel_revision.cancel_revision_plan(self.b, PART)
             self.assertFalse(plan.ok)
             self.assertTrue(any("Alex" in p for p in plan.problems), plan.problems)
             with self.assertRaises(LitterboxError):
-                revise.cancel_revision(self.b, PART, "No", backend=self.fake, log=lambda *_: None)
+                cancel_revision.cancel_revision(self.b, PART, "No", backend=self.fake, log=lambda *_: None)
         self.assertTrue((self.a / PRT_B).exists())
         self.assertEqual(record_store.load(self.a, PART).revision, "B")
 
     def test_a_part_that_was_never_released_uses_void_instead(self):
         pn = self.add_created_part(2)
         with self.user("Alex"):
-            plan = revise.cancel_revision_plan(self.a, pn)
+            plan = cancel_revision.cancel_revision_plan(self.a, pn)
         self.assertFalse(plan.ok)
         self.assertTrue(any("Void" in p for p in plan.problems), plan.problems)
 
@@ -319,7 +321,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.assertTrue((self.a / DRW_B).exists())
         self.assertFalse((self.a / "cancelled-revs").exists())
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
-        self.assertFalse(revise._journal_path(self.a).exists())
+        self.assertFalse(revision_files._journal_path(self.a).exists())
         self.assertEqual(self.locks(self.a), {})               # nobody is left holding half a lock
 
     def test_a_failed_copy_while_cancelling_changes_nothing(self):
