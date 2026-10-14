@@ -17,7 +17,10 @@ from unittest import mock
 from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable
 
 from litterbox.records import record_store
+from litterbox.cli import new_part as cli_new_part
+from litterbox.parts import create_batch
 from litterbox.parts import create
+from litterbox.parts import number_suggestions
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
@@ -67,7 +70,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             numbers = [create.new_part(self.a, f"Part {n}").base for n in range(4)]
             self.assertEqual(numbers, [99998, 99999, 2, 3])      # 1 is already in use; zero is never used
-            self.assertEqual(create.suggest_part_number(self.a), 4)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 4)
 
     def test_a_vault_with_no_numbers_left_says_so_plainly(self):
         with self.user("Alex"):
@@ -76,7 +79,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
                     create.new_part(self.a, "One too many")
                 self.assertIn("no part numbers left", str(caught.exception))
                 with self.assertRaises(create.CreateError):
-                    create.suggest_part_number(self.a)
+                    number_suggestions.suggest_part_number(self.a)
             self.assertEqual(sorted(p.name for p in (self.a / "PN-logs").iterdir()), ["HCR-00001-001.yaml"])
 
     def test_part_number_in_use_gets_its_lowest_free_variant(self):
@@ -95,38 +98,38 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     def test_suggested_numbers_for_the_empty_boxes(self):
         with self.user("Alex"):
-            self.assertEqual(create.suggest_numbers(self.a), (2, 1))
-            self.assertEqual(create.suggest_numbers(self.a, 1), (1, 2))        # in use: lowest free variant
-            self.assertEqual(create.suggest_numbers(self.a, 77), (77, 1))      # unused: 001
+            self.assertEqual(number_suggestions.suggest_numbers(self.a), (2, 1))
+            self.assertEqual(number_suggestions.suggest_numbers(self.a, 1), (1, 2))        # in use: lowest free variant
+            self.assertEqual(number_suggestions.suggest_numbers(self.a, 77), (77, 1))      # unused: 001
             create.new_part(self.a, "Right hand", base=1)
-            self.assertEqual(create.suggest_numbers(self.a, 1), (1, 3))
+            self.assertEqual(number_suggestions.suggest_numbers(self.a, 1), (1, 3))
             from litterbox.vault import config_write
             config_write.save(self.a, start_number=10001)
-            self.assertEqual(create.suggest_numbers(self.a), (10001, 1))
+            self.assertEqual(number_suggestions.suggest_numbers(self.a), (10001, 1))
             with self.assertRaises(create.CreateError):
-                create.suggest_numbers(self.a, 0)
+                number_suggestions.suggest_numbers(self.a, 0)
 
     def test_check_numbers_says_what_would_be_created_and_whether_it_is_free(self):
         with self.user("Alex"):
-            check = create.check_numbers(self.a)
+            check = number_suggestions.check_numbers(self.a)
             self.assertEqual((check.pn, check.taken), (PN("HCR", 2, 1), False))
-            check = create.check_numbers(self.a, 1, 1)
+            check = number_suggestions.check_numbers(self.a, 1, 1)
             self.assertEqual((check.pn, check.taken, check.name, check.status),
                              (PN("HCR", 1, 1), True, "Front upright", "in_work"))
-            check = create.check_numbers(self.a, 1)                       # variant left empty
+            check = number_suggestions.check_numbers(self.a, 1)                       # variant left empty
             self.assertEqual((check.pn, check.taken), (PN("HCR", 1, 2), False))
-            check = create.check_numbers(self.a, None, 501)               # base left empty
+            check = number_suggestions.check_numbers(self.a, None, 501)               # base left empty
             self.assertEqual((check.pn, check.taken), (PN("HCR", 2, 501), False))
-            self.assertFalse(create.check_numbers(self.a, 1, 2).taken)
+            self.assertFalse(number_suggestions.check_numbers(self.a, 1, 2).taken)
             for bad in ((0, None), (None, 0), (None, 1000), (100000, None)):
                 with self.subTest(bad=bad), self.assertRaises(create.CreateError):
-                    create.check_numbers(self.a, *bad)
+                    number_suggestions.check_numbers(self.a, *bad)
 
     def test_void_parts_still_count_as_in_use(self):
         with self.user("Alex"):
             pn = create.new_part(self.a, "Scrapped idea", base=50, variant=1)
             lifecycle.void(self.a, pn, "Not needed")
-            check = create.check_numbers(self.a, 50, 1)
+            check = number_suggestions.check_numbers(self.a, 50, 1)
             self.assertEqual((check.taken, check.name, check.status), (True, "Scrapped idea", "void"))
             with self.assertRaises(create.CreateError):
                 create.new_part(self.a, "Reuse attempt", base=50, variant=1)
@@ -135,15 +138,15 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         from litterbox.vault import config_write
         with self.user("Alex"):
             config_write.save(self.a, start_number=10001)             # HCR-00001-001 already exists
-            self.assertEqual(create.suggest_part_number(self.a), 10001)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 10001)
             self.assertEqual(create.new_part(self.a, "First of the range"), PN("HCR", 10001, 1))
-            self.assertEqual(create.suggest_part_number(self.a), 10002)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 10002)
             self.assertEqual(create.new_part(self.a, "Typed higher", base=10004, variant=1), PN("HCR", 10004, 1))
             self.assertEqual(create.new_part(self.a, "Second"), PN("HCR", 10002, 1))
             self.assertEqual(create.new_part(self.a, "Third"), PN("HCR", 10003, 1))
             self.assertEqual(create.new_part(self.a, "Fifth"), PN("HCR", 10005, 1))
             self.assertEqual(create.new_part(self.a, "Typed below", base=2, variant=1), PN("HCR", 2, 1))
-            self.assertEqual(create.suggest_part_number(self.a), 10006)       # a part at 00002 changes nothing
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 10006)       # a part at 00002 changes nothing
 
     def test_explicit_part_number_and_variant_that_are_taken_are_refused(self):
         commits = len(self.remote_log())
@@ -217,10 +220,10 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         from litterbox.vault import config_write
         with self.user("Alex"):
             config_write.save(self.a, start_number=10001)
-            self.assertEqual(create.suggest_part_number(self.a), 10001)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 10001)
             self.assertEqual(create.new_part(self.a, "First of the range"), PN("HCR", 10001, 1))
             self.assertEqual(create.new_part(self.a, "Second"), PN("HCR", 10002, 1))
-            self.assertEqual(create.suggest_part_number(self.a), 10003)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 10003)
 
     def test_new_variant_refuses_taken_numbers(self):
         with self.user("Alex"):
@@ -237,13 +240,13 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
     def test_suggestions_and_listing(self):
         with self.user("Alex"):
             create.new_variant(self.a, 1, "Right hand")
-            self.assertEqual(create.suggest_part_number(self.a), 2)
-            self.assertEqual(create.suggest_variant_number(self.a, 1), 3)
-            self.assertEqual(create.suggest_variant_number(self.a, 50), 1)
-            rows = create.list_variants(self.a, 1)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 2)
+            self.assertEqual(number_suggestions.suggest_variant_number(self.a, 1), 3)
+            self.assertEqual(number_suggestions.suggest_variant_number(self.a, 50), 1)
+            rows = number_suggestions.list_variants(self.a, 1)
             self.assertEqual([(str(r.pn), r.name) for r in rows],
                              [("HCR-00001-001", "Front upright"), ("HCR-00001-002", "Right hand")])
-            self.assertEqual(create.list_variants(self.a, 50), [])
+            self.assertEqual(number_suggestions.list_variants(self.a, 50), [])
 
     # -- Two people at the same moment --------------------------------------
     def rival_pushes_first(self, rival_call, results):
@@ -313,15 +316,15 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     # -- Many at once ------------------------------------------------------
     def specs(self, count, **fields):
-        return [create.PartSpec(name=f"Part {n}", **fields) for n in range(1, count + 1)]
+        return [create_batch.PartSpec(name=f"Part {n}", **fields) for n in range(1, count + 1)]
 
     def test_create_many_makes_every_record_with_one_commit_and_one_push(self):
         commits = len(self.remote_log())
         with self.user("Alex"):
-            specs = [create.PartSpec("Valve body", "valve_body.SLDPRT", imported=True, import_path="D:/Old/valve_body.SLDPRT"),
-                     create.PartSpec("Bolt", "91251A540.SLDPRT", cots=True, imported=True, import_path="D:/Old/bolt.SLDPRT"),
-                     create.PartSpec("Hand made")]
-            pns = create.create_many(self.a, specs)
+            specs = [create_batch.PartSpec("Valve body", "valve_body.SLDPRT", imported=True, import_path="D:/Old/valve_body.SLDPRT"),
+                     create_batch.PartSpec("Bolt", "91251A540.SLDPRT", cots=True, imported=True, import_path="D:/Old/bolt.SLDPRT"),
+                     create_batch.PartSpec("Hand made")]
+            pns = create_batch.create_many(self.a, specs)
             self.assertEqual(pns, [PN("HCR", 2, 1), PN("HCR", 3, 1), PN("HCR", 4, 1)])
             valve, bolt, hand = (record_store.load(self.a, pn) for pn in pns)
             self.assertEqual((valve.name, valve.description, valve.imported, valve.import_path, valve.cots),
@@ -342,33 +345,33 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         from litterbox.vault import config_write
         with self.user("Alex"):
             config_write.save(self.a, start_number=10001)
-            specs = [create.PartSpec("A"), create.PartSpec("Wants 10002", base=10002),
-                     create.PartSpec("B"), create.PartSpec("Wants a variant", base=10002),
-                     create.PartSpec("Exact", base=7, variant=5), create.PartSpec("C")]
-            pns = create.create_many(self.a, specs)
+            specs = [create_batch.PartSpec("A"), create_batch.PartSpec("Wants 10002", base=10002),
+                     create_batch.PartSpec("B"), create_batch.PartSpec("Wants a variant", base=10002),
+                     create_batch.PartSpec("Exact", base=7, variant=5), create_batch.PartSpec("C")]
+            pns = create_batch.create_many(self.a, specs)
             self.assertEqual([str(pn) for pn in pns], [
                 "HCR-10001-001", "HCR-10002-001", "HCR-10003-001", "HCR-10002-002", "HCR-00007-005", "HCR-10004-001"])
-            self.assertEqual(create.suggest_part_number(self.a), 10005)
+            self.assertEqual(number_suggestions.suggest_part_number(self.a), 10005)
 
     def test_create_many_with_nothing_to_do(self):
         with self.user("Alex"):
-            self.assertEqual(create.create_many(self.a, []), [])
+            self.assertEqual(create_batch.create_many(self.a, []), [])
         self.assertEqual(len(self.remote_log()), 1)
 
     def test_one_bad_entry_stops_the_whole_batch_with_nothing_changed(self):
         commits = len(self.remote_log())
         bad_batches = [
-            ("Item 3", self.specs(2) + [create.PartSpec("  ")] + self.specs(2)),
-            ("Item 2", [create.PartSpec("Fine"), create.PartSpec("x" * 101)]),
-            ("Item 2", [create.PartSpec("Fine"), create.PartSpec("Taken", base=1, variant=1)]),
-            ("Item 2", [create.PartSpec("Fine", base=9, variant=1), create.PartSpec("Same again", base=9, variant=1)]),
-            ("Item 1", [create.PartSpec("Too big", base=100000)]),
+            ("Item 3", self.specs(2) + [create_batch.PartSpec("  ")] + self.specs(2)),
+            ("Item 2", [create_batch.PartSpec("Fine"), create_batch.PartSpec("x" * 101)]),
+            ("Item 2", [create_batch.PartSpec("Fine"), create_batch.PartSpec("Taken", base=1, variant=1)]),
+            ("Item 2", [create_batch.PartSpec("Fine", base=9, variant=1), create_batch.PartSpec("Same again", base=9, variant=1)]),
+            ("Item 1", [create_batch.PartSpec("Too big", base=100000)]),
         ]
         with self.user("Alex"):
             for expected, specs in bad_batches:
                 with self.subTest(expected=expected, first=specs[0].name):
                     with self.assertRaises(create.CreateError) as ctx:
-                        create.create_many(self.a, specs)
+                        create_batch.create_many(self.a, specs)
                     self.assertIn(expected, str(ctx.exception))
                     self.assertEqual(self.record_names(self.a), ["HCR-00001-001.yaml"])
                     self.assert_clean(self.a)
@@ -379,7 +382,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         rival = self.rival_pushes_first(lambda: create.new_part(self.b, "Bea's part"), results)
         with self.user("Alex"):
             with mock.patch.object(runner, "run", rival):
-                pns = create.create_many(self.a, self.specs(3))
+                pns = create_batch.create_many(self.a, self.specs(3))
             self.assertEqual(results["bea"], PN("HCR", 2, 1))
             self.assertEqual(pns, [PN("HCR", 3, 1), PN("HCR", 4, 1), PN("HCR", 5, 1)])
             self.assertEqual(record_store.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")
@@ -392,7 +395,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             with mock.patch.object(runner, "run", rival):
                 with self.assertRaises(create.CreateError) as ctx:
-                    create.create_many(self.a, [create.PartSpec("Fine"), create.PartSpec("Alex's seven", base=7, variant=1)])
+                    create_batch.create_many(self.a, [create_batch.PartSpec("Fine"), create_batch.PartSpec("Alex's seven", base=7, variant=1)])
             self.assertIn("Item 2", str(ctx.exception))
             self.assertEqual(self.record_names(self.a), ["HCR-00001-001.yaml", "HCR-00007-001.yaml"])
             self.assert_clean(self.a)
@@ -409,25 +412,25 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         with self.user("Alex"):
             with mock.patch.object(runner, "run", broken):
                 with self.assertRaises(create.CreateError) as ctx:
-                    create.create_many(self.a, self.specs(4))
+                    create_batch.create_many(self.a, self.specs(4))
             self.assertIn("simulated network failure", str(ctx.exception))
             self.assertEqual(self.record_names(self.a), ["HCR-00001-001.yaml"])
             self.assert_clean(self.a)
-            self.assertEqual(len(create.create_many(self.a, self.specs(2))), 2)       # the numbers are still free
+            self.assertEqual(len(create_batch.create_many(self.a, self.specs(2))), 2)       # the numbers are still free
         self.assertEqual(len(self.remote_log()), commits + 1)
 
     def test_a_batch_does_not_disturb_a_checked_out_part(self):
         with self.user("Alex"):
             checkout.checkout(self.a, PART)
             (self.a / PRT).write_bytes(b"half-finished edit")
-            create.create_many(self.a, self.specs(3))
+            create_batch.create_many(self.a, self.specs(3))
             self.assertEqual((self.a / PRT).read_bytes(), b"half-finished edit")
             self.assertEqual(len(self.locks(self.a)), 3)
 
     def test_a_big_batch_is_still_one_commit(self):
         commits = len(self.remote_log())
         with self.user("Alex"):
-            pns = create.create_many(self.a, self.specs(400))
+            pns = create_batch.create_many(self.a, self.specs(400))
             self.assertEqual(len(set(pns)), 400)
             self.assertEqual(len(record_store.list_pns(self.a)), 401)
             self.assert_clean(self.a)
@@ -457,7 +460,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
                     i.cots = True                                   # the user marks it by hand
             items, specs = manifest.specs(reviewed)
             self.assertEqual(len(specs), 2)
-            pns = create.create_many(self.a, specs, message="Imported 2 parts")
+            pns = create_batch.create_many(self.a, specs, message="Imported 2 parts")
             manifest.record_assignments(reviewed, items, pns)
             manifest.save(reviewed, path)
 
@@ -585,7 +588,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
     def run_cli(self, *args):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            code = create.main([str(self.a), *args])
+            code = cli_new_part.main([str(self.a), *args])
         return code, out.getvalue()
 
     def test_command_line(self):

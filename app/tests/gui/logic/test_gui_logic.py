@@ -479,7 +479,7 @@ class TestTypedNumbers(unittest.TestCase):
                 logic.parse_digit_count(bad, "part number digits", 1, 9)
 
     def test_in_use_text_names_the_part(self):
-        from litterbox.parts.create import NumberCheck
+        from litterbox.parts.number_suggestions import NumberCheck
         self.assertEqual(logic.in_use_text(NumberCheck(PN("HCR", 1, 1), True, "Front upright", "in_work")),
                          "Front upright")
         self.assertEqual(logic.in_use_text(NumberCheck(PN("HCR", 1, 1), True, "Old bracket", "void")),

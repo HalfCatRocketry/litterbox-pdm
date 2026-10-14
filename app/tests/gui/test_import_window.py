@@ -27,6 +27,7 @@ from litterbox.user import settings
 from litterbox.errors import NothingToSaveError
 from litterbox.team import team_identity
 from litterbox.team import team_model
+from litterbox.parts import create_batch
 
 
 REAL_SESSION = import_session.ImportSession
@@ -1362,7 +1363,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
         self.scan()
         before = [r["values"][1] for r in self.rows()]
         with mock.patch.object(importer.pn_module, "MAX_VARIANT", 3), \
-                mock.patch.object(importer.create, "sync_latest", lambda repo: None):      # a sync resets the digit limits
+                mock.patch.object(create_batch, "sync_latest", lambda repo: None):      # a sync resets the digit limits
             self.use_family("500")
         self.assertEqual([r["values"][1] for r in self.rows()], before)
         self.assertFalse(self.window.family_var.get())

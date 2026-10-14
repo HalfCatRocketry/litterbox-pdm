@@ -43,6 +43,7 @@ from pathlib import Path
 
 import yaml
 
+from litterbox.parts import create_batch
 from litterbox.parts import create
 
 VERSION = 1
@@ -255,10 +256,10 @@ def problems(manifest):
 
 
 def specs(manifest):
-    """(items, PartSpecs) for create.create_many, in the same order. Imported parts get their old path recorded."""
+    """(items, PartSpecs) for create_batch.create_many, in the same order. Imported parts get their old path recorded."""
     chosen = pending_items(manifest)
     return chosen, [
-        create.PartSpec(name=item.name, description=item.description, cots=item.cots,
+        create_batch.PartSpec(name=item.name, description=item.description, cots=item.cots,
                         imported=True, import_path=item.main_path)
         for item in chosen
     ]

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 
-from litterbox.parts import create
+from litterbox.parts import create_batch
 from litterbox.importing import importer
 from litterbox.core import part_number
 from litterbox.records import record_store
@@ -19,7 +19,7 @@ def entry(base, variant=1, manual=False):
 class FamilyNumbering(unittest.TestCase):
     def setUp(self):
         self.existing = []
-        for target, value in ((record_store, "list_pns"), (create, "sync_latest")):
+        for target, value in ((record_store, "list_pns"), (create_batch, "sync_latest")):
             patcher = mock.patch.object(target, value, side_effect=self._fake(value))
             patcher.start()
             self.addCleanup(patcher.stop)

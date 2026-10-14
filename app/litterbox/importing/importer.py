@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.vault import config
+from litterbox.parts import create_batch
 from litterbox.parts import create
 from litterbox.importing import manifest as manifest_module
 from litterbox.core import filenames
@@ -739,7 +740,7 @@ def set_family(repo, proposal, base, sync=True):
             return
         if sync:
             try:
-                create.sync_latest(repo)
+                create_batch.sync_latest(repo)
             except create.CreateError as e:
                 raise ImportFailed(str(e)) from None
         proposal.family = None
@@ -753,7 +754,7 @@ def set_family(repo, proposal, base, sync=True):
         raise ImportFailed(str(e)) from None
     if sync:
         try:
-            create.sync_latest(repo)
+            create_batch.sync_latest(repo)
         except create.CreateError as e:
             raise ImportFailed(str(e)) from None
     previous = proposal.family
@@ -838,7 +839,7 @@ def refresh(repo, proposal, log=print):
     (the table shows those rows in red) and the user decides what to do.
     """
     try:
-        create.sync_latest(repo)
+        create_batch.sync_latest(repo)
     except create.CreateError as e:
         raise ImportFailed(str(e)) from None
     renumbered = []
@@ -965,8 +966,8 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
                 "needs a SolidWorks at least as new as the originals.)")
         refs = read_references(readable, backend, progress, cancel)
         try:
-            create.sync_latest(repo)                               # the newest list of part numbers
-            org = create._org(repo, org)
+            create_batch.sync_latest(repo)                               # the newest list of part numbers
+            org = create.resolve_org(repo, org)
             block = pick_block(repo, len(items), org, gap, jitter, rng)
         except (create.CreateError, config.ConfigError, record_model.RegistryError) as e:
             raise ImportFailed(str(e)) from None
@@ -1012,8 +1013,8 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
         if state.conflicts:
             raise PNConflict(_conflict_message(state.conflicts), state.conflicts, renumbered)
         try:
-            specs = create.clean_specs([
-                create.PartSpec(name=e.name, description=e.description, cots=prepared.cots or e.item.cots,
+            specs = create_batch.clean_specs([
+                create_batch.PartSpec(name=e.name, description=e.description, cots=prepared.cots or e.item.cots,
                                 imported=True, import_path=e.item.main_path) for e in proposal.entries])
         except create.CreateError as e:
             raise ImportFailed(str(e)) from None
@@ -1038,8 +1039,8 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
             if progress:
                 progress(len(plan.order), len(plan.order), "Adding to the vault...")
             _write_journal(repo, "committing", token, new_files, record_paths)
-            create.create_planned(repo, specs, pns, extra_paths=new_files, message=message)
-        except create.NumbersTaken as e:
+            create_batch.create_planned(repo, specs, pns, extra_paths=new_files, message=message)
+        except create_batch.NumbersTaken as e:
             last_error = e
             recover(repo, log)
             log(f"Someone else used one of the part numbers just now (try {attempt} of {ATTEMPTS}); checking again.")

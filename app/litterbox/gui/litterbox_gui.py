@@ -35,6 +35,7 @@ from litterbox.references import references
 from litterbox.parts import revise
 from litterbox.team import commit_signing as signing
 from litterbox.parts import create
+from litterbox.parts import number_suggestions
 from litterbox.vault import create_vault as init_vault
 from litterbox.importing import session as import_session
 from litterbox.jobs import job_queue as jobs
@@ -1014,7 +1015,7 @@ class NewPartDialog(ctk.CTkToplevel):
             problem = str(e)
         if first_time or from_base:
             try:
-                suggested_base, suggested_variant = create.suggest_numbers(self.repo, base, self.org)
+                suggested_base, suggested_variant = number_suggestions.suggest_numbers(self.repo, base, self.org)
             except LitterboxError as e:
                 self._say(str(e), ERROR)
                 return
@@ -1032,7 +1033,7 @@ class NewPartDialog(ctk.CTkToplevel):
             self._say()                                    # nothing typed: nothing to report
         else:
             try:
-                check = create.check_numbers(self.repo, base, variant, self.org)
+                check = number_suggestions.check_numbers(self.repo, base, variant, self.org)
             except LitterboxError as e:
                 self._say(str(e), ERROR)
                 return
@@ -1056,7 +1057,7 @@ class NewPartDialog(ctk.CTkToplevel):
                        f"for example {self.org}-{part_number.format_base(2)}-{part_number.format_variant(1)}.")
             return
         try:
-            check = create.check_numbers(self.repo, base, variant, self.org)
+            check = number_suggestions.check_numbers(self.repo, base, variant, self.org)
         except LitterboxError as e:
             self._warn(str(e))
             return

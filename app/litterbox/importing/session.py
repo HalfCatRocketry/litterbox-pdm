@@ -29,6 +29,7 @@ from pathlib import Path
 from litterbox.importing import importer
 from litterbox.importing import manifest as manifest_module
 from litterbox.importing import scan as scan_module
+from litterbox.parts import create_batch
 
 
 def default_manifest_path(root, now=None):
@@ -160,7 +161,7 @@ class ImportSession:
     def check_duplicates(self, on_done):
         """Look for rows that duplicate parts already in the vault. on_done({row: [warnings]}, error)."""
         def work():
-            importer.create.sync_latest(self.repo)
+            create_batch.sync_latest(self.repo)
             return importer.find_duplicates(self.repo, self.prepared)
         self._submit(work, on_done)
 
