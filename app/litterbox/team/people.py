@@ -42,10 +42,13 @@ from pathlib import Path
 import yaml
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from litterbox import layout
+from litterbox.git import lfs_locks
+from litterbox.git import remote
+from litterbox.git import repository
+from litterbox.git import runner
 
 IDENTITY_CACHE = "litterbox-identity.json"
 IDENTITY_MAX_AGE = 24 * 3600
@@ -317,7 +320,7 @@ def probe_host_name(repo, attempts=5):
     last = None
     for attempt in range(attempts):
         try:
-            eng.run(["git", "lfs", "lock", layout.WHOAMI_FILE], repo, quiet=True)
+            runner.run(["git", "lfs", "lock", layout.WHOAMI_FILE], repo, quiet=True)
             break
         except LitterboxError as e:             # someone else is probing at this moment: wait and retry
             last = e
@@ -325,14 +328,14 @@ def probe_host_name(repo, attempts=5):
     else:
         raise PeopleError(f"Could not ask the host who you are. {last}")
     try:
-        locks = eng.get_locks(repo, strict=True)
+        locks = lfs_locks.get_locks(repo, strict=True)
         mine = locks.get(layout.WHOAMI_FILE.lower())
         if not mine or mine[0] != "you":
             raise PeopleError("The host did not say whose lock that was.")
         return mine[1]
     finally:
         try:
-            eng.run(["git", "lfs", "unlock", "--force", layout.WHOAMI_FILE], repo, quiet=True)
+            runner.run(["git", "lfs", "unlock", "--force", layout.WHOAMI_FILE], repo, quiet=True)
         except LitterboxError:
             pass
         try:
@@ -527,28 +530,20 @@ def _write_allowed_signers(repo, directory):
     return layout.ALLOWED_SIGNERS_FILE
 
 
-def _tracked(repo, rel):
-    try:
-        eng.run(["git", "ls-files", "--error-unmatch", "--", rel], repo, quiet=True)
-        return True
-    except LitterboxError:
-        return False
-
-
 def edit_directory(repo, change, message, action="manage_people"):
     """Apply `change(directory, actor_person)` to the people file for everyone: lock it, get the latest,
     change it, commit, push, unlock. If anything fails the file is put back as it was.
     Returns whatever change() returns."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     identity = require(repo, action)
     if identity.state == LEGACY:
         raise PeopleError("The team has not been set up yet. Use Set Up Team first.")
     rel = layout.PEOPLE_FILE
-    eng._lock(repo, rel, "the people file")
+    lfs_locks.lock(repo, rel, "the people file")
     committed, added_signers, result = False, False, None
-    signers_before_tracked = _tracked(repo, layout.ALLOWED_SIGNERS_FILE)
+    signers_before_tracked = repository.in_index(repo, layout.ALLOWED_SIGNERS_FILE)
     try:
-        eng._pull(repo)
+        remote.pull(repo)
         directory = load(repo)
         actor = directory.find_by_host_name(identity.host_name)
         if actor is None or not actor.active:
@@ -560,19 +555,19 @@ def edit_directory(repo, change, message, action="manage_people"):
         if signers:
             paths.append(signers)
             added_signers = not signers_before_tracked
-        eng.run(["git", "add", "--"] + paths, repo)
-        eng.run(["git", "commit", "-m", message, "--"] + paths, repo)
+        runner.run(["git", "add", "--"] + paths, repo)
+        runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
         committed = True
-        eng._push_with_retry(repo)
+        remote.push_with_retry(repo)
     except BaseException:
         try:
             if committed:
-                eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
-            eng.run(["git", "restore", "--staged", "--worktree", "--", rel], repo)
+                runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
+            runner.run(["git", "restore", "--staged", "--worktree", "--", rel], repo)
             if signers_before_tracked:
-                eng.run(["git", "restore", "--staged", "--worktree", "--", layout.ALLOWED_SIGNERS_FILE], repo)
+                runner.run(["git", "restore", "--staged", "--worktree", "--", layout.ALLOWED_SIGNERS_FILE], repo)
             elif added_signers or (Path(repo) / layout.ALLOWED_SIGNERS_FILE).exists():
-                eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.ALLOWED_SIGNERS_FILE], repo,
+                runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.ALLOWED_SIGNERS_FILE], repo,
                         quiet=True)
                 try:
                     (Path(repo) / layout.ALLOWED_SIGNERS_FILE).unlink()
@@ -580,11 +575,11 @@ def edit_directory(repo, change, message, action="manage_people"):
                     pass
         except LitterboxError as e:
             diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
-        eng._force_unlock_quietly(repo, [rel])
+        lfs_locks.force_unlock_quietly(repo, [rel])
         raise
-    failed = eng._unlock_mine(repo, [rel])
+    failed = lfs_locks.unlock_mine(repo, [rel])
     if failed:
-        raise LitterboxError(eng._unlock_failure_message(failed))
+        raise LitterboxError(lfs_locks.unlock_failure_message(failed))
     return result
 
 
@@ -593,26 +588,26 @@ def setup_team(repo, name=None, email=None, roles=None):
 
     Needs the internet (the host has to tell Litterbox who you are). Two commits: the whoami file, then the
     people file. Returns the new Person."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     if load(repo) is not None:
         raise PeopleError("This vault already has a team.")
-    name = " ".join((name or eng.get_user(repo)).split())
+    name = " ".join((name or repository.get_user(repo)).split())
     if not name:
         raise PeopleError("A name is required.")
     if email is None:
         try:
-            email = eng.run(["git", "config", "user.email"], repo, quiet=True)
+            email = runner.run(["git", "config", "user.email"], repo, quiet=True)
         except LitterboxError:
             email = ""
-    eng._pull(repo)
+    remote.pull(repo)
     whoami = Path(repo) / layout.WHOAMI_FILE
     if not whoami.exists():
         whoami.parent.mkdir(parents=True, exist_ok=True)
         whoami.write_text("Litterbox takes a lock on this file to ask the host who you are. Leave it empty.\n",
                           encoding="utf-8")
-        eng.run(["git", "add", "--", layout.WHOAMI_FILE], repo)
-        eng.run(["git", "commit", "-m", "Team: add whoami file", "--", layout.WHOAMI_FILE], repo)
-        eng._push_with_retry(repo)
+        runner.run(["git", "add", "--", layout.WHOAMI_FILE], repo)
+        runner.run(["git", "commit", "-m", "Team: add whoami file", "--", layout.WHOAMI_FILE], repo)
+        remote.push_with_retry(repo)
     host_name = probe_host_name(repo)
     person_id = re.sub(r"[^a-z0-9._-]+", "-", host_name.lower()).strip("-.")[:40] or "owner"
     if not _ID_RE.match(person_id):
@@ -621,13 +616,13 @@ def setup_team(repo, name=None, email=None, roles=None):
                           list(roles if roles is not None else STANDARD_ROLES))
     save(repo, directory)
     try:
-        eng.run(["git", "add", "--", layout.PEOPLE_FILE], repo)
-        eng.run(["git", "commit", "-m", f"Team: set up with {name} as Owner", "--", layout.PEOPLE_FILE], repo)
-        eng._push_with_retry(repo)
+        runner.run(["git", "add", "--", layout.PEOPLE_FILE], repo)
+        runner.run(["git", "commit", "-m", f"Team: set up with {name} as Owner", "--", layout.PEOPLE_FILE], repo)
+        remote.push_with_retry(repo)
     except BaseException:
         try:
-            eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
-            eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.PEOPLE_FILE], repo, quiet=True)
+            runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
+            runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.PEOPLE_FILE], repo, quiet=True)
             (Path(repo) / layout.PEOPLE_FILE).unlink()
         except (LitterboxError, OSError):
             pass
@@ -649,8 +644,8 @@ def check_before_push(repo):
     if load(repo) is None:
         return
     try:
-        eng.run(["git", "fetch"], repo, quiet=True)
-        text = eng.run(["git", "show", f"@{{u}}:{layout.PEOPLE_FILE}"], repo, quiet=True)
+        runner.run(["git", "fetch"], repo, quiet=True)
+        text = runner.run(["git", "show", f"@{{u}}:{layout.PEOPLE_FILE}"], repo, quiet=True)
     except LitterboxError:
         return                                  # offline, or the vault has no people file yet: git will say if the push fails
     try:

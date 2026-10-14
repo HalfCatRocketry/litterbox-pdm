@@ -9,7 +9,6 @@ from pathlib import Path
 
 
 from litterbox.gui.logic import gui_logic as logic
-from litterbox.parts import engine as eng
 from litterbox.vault import clone as vault_clone
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
@@ -81,7 +80,7 @@ class Cloning(unittest.TestCase):
         self.lines = []
         old = diagnostics.LOG
         diagnostics.LOG = self.lines.append
-        self.addCleanup(setattr, eng, "LOG", old)
+        self.addCleanup(setattr, diagnostics, "LOG", old)
 
     def test_a_clone_lands_in_the_target_and_is_a_vault(self):
         target = self.root / "Litterbox" / "remote"                    # parent folder does not exist yet

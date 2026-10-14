@@ -23,9 +23,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from litterbox.parts import engine as eng
 from litterbox.records import registry
 from litterbox.core.pn import PN
+from litterbox.git import lfs_locks
+from litterbox.parts import part_status
+from litterbox.git import read_only
 
 SHIM = Path(__file__).with_name("fake_git_lfs.py")
 PART = PN("HCR", 1, 1)
@@ -93,9 +95,9 @@ class TwoUserVault:
         self.config(self.b, "Bea")
 
         with self.user("Alex"):
-            eng.enforce_read_only(self.a)
+            read_only.enforce_read_only(self.a)
         with self.user("Bea"):
-            eng.enforce_read_only(self.b)
+            read_only.enforce_read_only(self.b)
 
     # -- helpers -----------------------------------------------------------
     @staticmethod
@@ -116,13 +118,13 @@ class TwoUserVault:
                 os.environ["LFS_USER"] = previous
 
     def status_of(self, repo, pn=PART):
-        return next(row for row in eng.get_status(repo) if row.pn == pn)
+        return next(row for row in part_status.get_status(repo) if row.pn == pn)
 
     def remote_log(self):
         return git(self.remote, "log", "--format=%s", "main").splitlines()
 
     def locks(self, repo):
-        return eng.get_locks(repo, strict=True)
+        return lfs_locks.get_locks(repo, strict=True)
 
     def add_created_part(self, base, description="Created"):
         """Alex creates a new PN (record only, no CAD files yet) and pushes it."""
@@ -132,5 +134,5 @@ class TwoUserVault:
         git(self.a, "commit", "-m", f"Create {pn}")
         git(self.a, "push")
         with self.user("Alex"):
-            eng.enforce_read_only(self.a)
+            read_only.enforce_read_only(self.a)
         return pn

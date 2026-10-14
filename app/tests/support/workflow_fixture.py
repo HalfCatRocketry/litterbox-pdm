@@ -4,12 +4,13 @@ from unittest import mock
 
 from tests.support.vault_fixture import PART, SKIP_ON_WINDOWS, TwoUserVault, git
 
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.records import registry
 from litterbox.workflows import workflow as wf
 from litterbox.core.pn import PN
 from litterbox import diagnostics
+from litterbox.parts import get_latest
+from litterbox.git import read_only
 
 
 ENGINEER, QUALITY, MANAGER, CHIEF = "Responsible Engineer", "Quality", "Manager", "Chief"
@@ -35,7 +36,7 @@ class Fixture(TwoUserVault):
 
     def get_latest(self, user):
         with self.user(user):
-            eng.get_latest(self.repo_of(user))
+            get_latest.get_latest(self.repo_of(user))
 
     def repo_of(self, user):
         if user == "Cy":                       # Cy has a copy of his own, so Litterbox knows who is acting
@@ -44,7 +45,7 @@ class Fixture(TwoUserVault):
                 self.c = self.root / "c"
                 self.config(self.c, "Cy")
                 with self.user("Cy"):
-                    eng.enforce_read_only(self.c)
+                    read_only.enforce_read_only(self.c)
             return self.c
         return self.a if user == "Alex" else self.b
 
@@ -55,7 +56,7 @@ class Fixture(TwoUserVault):
         git(self.a, "commit", "-m", "Second part")
         git(self.a, "push")
         with self.user("Alex"):
-            eng.enforce_read_only(self.a)
+            read_only.enforce_read_only(self.a)
         self.get_latest("Bea")
 
     def set_template(self, action=wf.RELEASE, name="T", rows=((QUALITY,), (ENGINEER,)), same=False, requester=True):

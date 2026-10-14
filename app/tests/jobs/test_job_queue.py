@@ -184,7 +184,7 @@ class Logic(unittest.TestCase):
             self.assertIn(part, text)
 
     def test_parts_with_a_job_in_progress_are_skipped_but_can_still_be_looked_at(self):
-        from litterbox.parts.engine import PartStatus
+        from litterbox.parts.part_status import PartStatus
         pn1, pn2 = PN("HCR", 1, 1), PN("HCR", 2, 1)
         rows = {pn1: PartStatus(pn1, "a", "in_work", "mine", "mine"), pn2: PartStatus(pn2, "b", "in_work", "mine", "mine")}
         pending = {str(pn1): "Checking in 1 part"}

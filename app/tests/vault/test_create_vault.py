@@ -10,12 +10,12 @@ from pathlib import Path
 from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.vault import create_vault as iv
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from tests.support.vault_fixture import SHIM, SKIP_ON_WINDOWS, git
 from litterbox.errors import LitterboxError
+from litterbox.parts import part_status
 
 
 class EmptyRepo(unittest.TestCase):
@@ -91,7 +91,7 @@ class CreatingAVault(EmptyRepo):
         pn = create.new_part(str(self.vault), "Front upright")
         self.assertEqual(str(pn), "HCR-00100-001")
         self.assertTrue(registry.list_pns(self.vault))
-        rows = eng.get_status(str(self.vault))
+        rows = part_status.get_status(str(self.vault))
         self.assertEqual([str(r.pn) for r in rows], ["HCR-00100-001"])
 
     def test_existing_ignore_and_attribute_files_only_gain_missing_lines(self):

@@ -304,6 +304,11 @@ def record_path(repo, pn):
 # Reading, creating, saving
 # ---------------------------------------------------------------------------
 
+def record_relpath(pn):
+    """Where a PN's record lives, relative to the repo, with forward slashes."""
+    return f"{layout.LOG_DIR_NAME}/{pn}.yaml"
+
+
 def _read(path, expected_pn):
     try:
         with open(path, encoding="utf-8") as f:

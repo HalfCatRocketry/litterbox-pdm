@@ -16,11 +16,15 @@ from unittest import mock
 
 from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable
 
-from litterbox.parts import engine as eng
 from litterbox.records import registry
 from litterbox.parts import create
 from litterbox.core.pn import PN
 from litterbox.errors import LitterboxError
+from litterbox.parts import checkin
+from litterbox.parts import checkout
+from litterbox.parts import get_latest
+from litterbox.parts import lifecycle
+from litterbox.git import runner
 
 
 @SKIP_ON_WINDOWS
@@ -48,7 +52,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertEqual(self.status_of(self.a, pn).state, "Created, no CAD files yet")
             self.assert_clean(self.a)
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             self.assertEqual(registry.load(self.b, pn).created_by, "Alex")
 
     def test_gaps_are_filled_and_manual_numbers_are_skipped(self):
@@ -121,7 +125,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
     def test_void_parts_still_count_as_in_use(self):
         with self.user("Alex"):
             pn = create.new_part(self.a, "Scrapped idea", base=50, variant=1)
-            eng.void(self.a, pn, "Not needed")
+            lifecycle.void(self.a, pn, "Not needed")
             check = create.check_numbers(self.a, 50, 1)
             self.assertEqual((check.taken, check.name, check.status), (True, "Scrapped idea", "void"))
             with self.assertRaises(create.CreateError):
@@ -163,7 +167,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     def test_description_is_checked_before_any_git_work(self):
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", side_effect=AssertionError("git should not run")):
+            with mock.patch.object(runner, "run", side_effect=AssertionError("git should not run")):
                 for bad in ("", "   \n ", "x" * 201):
                     with self.subTest(bad=bad[:10]):
                         with self.assertRaises(create.CreateError):
@@ -173,7 +177,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
     def test_void_numbers_are_never_reused(self):
         with self.user("Alex"):
             pn = create.new_part(self.a, "Never built")
-            eng.void(self.a, pn, "Not needed")
+            lifecycle.void(self.a, pn, "Not needed")
             self.assertEqual(create.new_part(self.a, "Next one"), PN("HCR", 3, 1))
 
     # -- New Variant -------------------------------------------------------
@@ -243,8 +247,8 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     # -- Two people at the same moment --------------------------------------
     def rival_pushes_first(self, rival_call, results):
-        """A replacement for eng.run that lets Bea's creation land just before Alex's push."""
-        real_run = eng.run
+        """A replacement for runner.run that lets Bea's creation land just before Alex's push."""
+        real_run = runner.run
         state = {"done": False}
 
         def run(command, repo, quiet=False):
@@ -260,7 +264,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         results = {}
         rival = self.rival_pushes_first(lambda: create.new_part(self.b, "Bea's part"), results)
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", rival):
+            with mock.patch.object(runner, "run", rival):
                 pn = create.new_part(self.a, "Alex's part")
             self.assertEqual(results["bea"], PN("HCR", 2, 1))        # Bea pushed first and got 2
             self.assertEqual(pn, PN("HCR", 3, 1))                    # Alex quietly moved on to 3
@@ -278,7 +282,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         results = {}
         rival = self.rival_pushes_first(lambda: create.new_part(self.b, "Bea's seven", base=7, variant=1), results)
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", rival):
+            with mock.patch.object(runner, "run", rival):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.new_part(self.a, "Alex's seven", base=7, variant=1)
             self.assertIn("00007", str(ctx.exception))
@@ -292,7 +296,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         results = {}
         rival = self.rival_pushes_first(lambda: create.new_part(self.b, "Bea's seven", base=7), results)
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", rival):
+            with mock.patch.object(runner, "run", rival):
                 pn = create.new_part(self.a, "Alex's seven", base=7)
             self.assertEqual((results["bea"], pn), (PN("HCR", 7, 1), PN("HCR", 7, 2)))
             self.assert_clean(self.a)
@@ -301,7 +305,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         results = {}
         rival = self.rival_pushes_first(lambda: create.new_variant(self.b, 1, "Bea's variant"), results)
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", rival):
+            with mock.patch.object(runner, "run", rival):
                 pn = create.new_variant(self.a, 1, "Alex's variant")
             self.assertEqual(results["bea"], PN("HCR", 1, 2))
             self.assertEqual(pn, PN("HCR", 1, 3))
@@ -331,7 +335,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         self.assertEqual(len(self.remote_log()), commits + 1)
         self.assertIn("Created 3 parts: HCR-00002-001 to HCR-00004-001", self.remote_log()[0])
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             self.assertEqual(len(registry.list_pns(self.b)), 4)
 
     def test_create_many_numbers_from_the_start_number_and_respects_requested_numbers(self):
@@ -374,7 +378,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         results = {}
         rival = self.rival_pushes_first(lambda: create.new_part(self.b, "Bea's part"), results)
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", rival):
+            with mock.patch.object(runner, "run", rival):
                 pns = create.create_many(self.a, self.specs(3))
             self.assertEqual(results["bea"], PN("HCR", 2, 1))
             self.assertEqual(pns, [PN("HCR", 3, 1), PN("HCR", 4, 1), PN("HCR", 5, 1)])
@@ -386,7 +390,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         results = {}
         rival = self.rival_pushes_first(lambda: create.new_part(self.b, "Bea's seven", base=7, variant=1), results)
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", rival):
+            with mock.patch.object(runner, "run", rival):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.create_many(self.a, [create.PartSpec("Fine"), create.PartSpec("Alex's seven", base=7, variant=1)])
             self.assertIn("Item 2", str(ctx.exception))
@@ -394,7 +398,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assert_clean(self.a)
 
     def test_a_batch_whose_push_always_fails_leaves_nothing_behind(self):
-        real_run = eng.run
+        real_run = runner.run
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
@@ -403,7 +407,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
         commits = len(self.remote_log())
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", broken):
+            with mock.patch.object(runner, "run", broken):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.create_many(self.a, self.specs(4))
             self.assertIn("simulated network failure", str(ctx.exception))
@@ -414,7 +418,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     def test_a_batch_does_not_disturb_a_checked_out_part(self):
         with self.user("Alex"):
-            eng.checkout(self.a, PART)
+            checkout.checkout(self.a, PART)
             (self.a / PRT).write_bytes(b"half-finished edit")
             create.create_many(self.a, self.specs(3))
             self.assertEqual((self.a / PRT).read_bytes(), b"half-finished edit")
@@ -475,7 +479,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     # -- When things go wrong ----------------------------------------------
     def test_a_push_that_always_fails_leaves_nothing_behind(self):
-        real_run = eng.run
+        real_run = runner.run
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
@@ -484,7 +488,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
         commits = len(self.remote_log())
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", broken):
+            with mock.patch.object(runner, "run", broken):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.new_part(self.a, "Doomed")
             self.assertIn(f"{create.ATTEMPTS} tries", str(ctx.exception))
@@ -495,7 +499,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
         self.assertEqual(len(self.remote_log()), commits + 1)
 
     def test_offline_at_the_start_changes_nothing(self):
-        real_run = eng.run
+        real_run = runner.run
 
         def offline(command, repo, quiet=False):
             if command[:2] == ["git", "pull"]:
@@ -503,7 +507,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", offline):
+            with mock.patch.object(runner, "run", offline):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.new_part(self.a, "No network")
             self.assertIn("online", str(ctx.exception))
@@ -511,7 +515,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assert_clean(self.a)
 
     def test_connection_lost_after_a_failed_push_changes_nothing(self):
-        real_run = eng.run
+        real_run = runner.run
         pulls = {"count": 0}
 
         def flaky(command, repo, quiet=False):
@@ -524,7 +528,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", flaky):
+            with mock.patch.object(runner, "run", flaky):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.new_part(self.a, "Lost connection")
             self.assertIn("can't be reached", str(ctx.exception))
@@ -533,7 +537,7 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
 
     def test_a_checked_out_part_is_not_disturbed_by_a_creation(self):
         with self.user("Alex"):
-            eng.checkout(self.a, PART)
+            checkout.checkout(self.a, PART)
             (self.a / PRT).write_bytes(b"half-finished edit")
             pn = create.new_part(self.a, "Another part")
             self.assertEqual(pn, PN("HCR", 2, 1))
@@ -542,10 +546,10 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             self.assertTrue(is_writable(self.a / PRT))
             self.assertEqual(git(self.remote, "show", f"main:{PRT}"), "version 1")     # edit was not uploaded
             self.assertEqual(sum(1 for line in self.remote_log() if "Created" in line), 1)
-            self.assertTrue(eng.checkin(self.a, PART, "Finished my edit").uploaded)   # and it can still be checked in
+            self.assertTrue(checkin.checkin(self.a, PART, "Finished my edit").uploaded)   # and it can still be checked in
 
     def test_a_failed_push_does_not_disturb_a_checked_out_part_either(self):
-        real_run = eng.run
+        real_run = runner.run
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
@@ -553,9 +557,9 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
-            eng.checkout(self.a, PART)
+            checkout.checkout(self.a, PART)
             (self.a / PRT).write_bytes(b"half-finished edit")
-            with mock.patch.object(eng, "run", broken):
+            with mock.patch.object(runner, "run", broken):
                 with self.assertRaises(create.CreateError):
                     create.new_part(self.a, "Doomed")
             self.assertEqual((self.a / PRT).read_bytes(), b"half-finished edit")
@@ -567,14 +571,14 @@ class CreateFlow(TwoUserVault, unittest.TestCase):
     def test_a_created_part_can_be_checked_out_and_given_files(self):
         with self.user("Alex"):
             pn = create.new_part(self.a, "Rear upright")
-            self.assertEqual(eng.checkout(self.a, pn).files, [])
+            self.assertEqual(checkout.checkout(self.a, pn).files, [])
             prt = "cad/HCR-00002-001_A.SLDPRT"
             (self.a / prt).write_bytes(b"brand new part")
-            self.assertEqual(eng.checkin(self.a, pn, "First version").files, [prt])
+            self.assertEqual(checkin.checkin(self.a, pn, "First version").files, [prt])
             self.assertEqual(self.locks(self.a), {})
             self.assertEqual(self.status_of(self.a, pn).state, "Available")
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             self.assertEqual((self.b / prt).read_bytes(), b"brand new part")
 
     # -- Command line --------------------------------------------------------

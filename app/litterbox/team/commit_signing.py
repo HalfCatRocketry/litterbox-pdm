@@ -24,8 +24,9 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from litterbox.parts import engine as eng
 from litterbox.errors import LitterboxError
+from litterbox.git import repository
+from litterbox.git import runner
 
 KEY_NAME = "litterbox_signing_ed25519"
 # Git's one-letter signature results (%G?)
@@ -59,7 +60,7 @@ class SigningStatus:
 
 def _git_config(repo, key):
     try:
-        return eng.run(["git", "config", "--get", key], repo, quiet=True).strip()
+        return runner.run(["git", "config", "--get", key], repo, quiet=True).strip()
     except LitterboxError:
         return ""
 
@@ -107,17 +108,17 @@ def create_key(key_path=None, comment="litterbox"):
 
 def enable(repo, key_path=None, comment=None):
     """Sign every commit in THIS vault with the key (made if needed). Returns the public key to give an Admin."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     key_path = Path(key_path or default_key_path())
-    public = create_key(key_path, comment or eng.get_user(repo))
+    public = create_key(key_path, comment or repository.get_user(repo))
     pub_path = key_path.with_name(key_path.name + ".pub")
     for key, value in (("gpg.format", "ssh"), ("user.signingkey", str(pub_path)), ("commit.gpgsign", "true")):
-        eng.run(["git", "config", "--local", key, value], repo, quiet=True)
+        runner.run(["git", "config", "--local", key, value], repo, quiet=True)
     return public
 
 
 def disable(repo):
-    eng.run(["git", "config", "--local", "commit.gpgsign", "false"], repo, quiet=True)
+    runner.run(["git", "config", "--local", "commit.gpgsign", "false"], repo, quiet=True)
 
 
 @dataclass
@@ -141,7 +142,7 @@ class CommitSignature:
 def verify(repo, rev_range, allowed_signers_path):
     """Check the signature of each commit in `rev_range` against an allowed_signers file.
     Returns a list of CommitSignature, newest first."""
-    out = eng.run(["git", "-c", f"gpg.ssh.allowedSignersFile={allowed_signers_path}", "log",
+    out = runner.run(["git", "-c", f"gpg.ssh.allowedSignersFile={allowed_signers_path}", "log",
                    "--format=%H%x1f%G?%x1f%GS%x1f%s", rev_range], repo, quiet=True)
     found = []
     for line in out.splitlines():
@@ -154,7 +155,7 @@ def verify(repo, rev_range, allowed_signers_path):
 def untrusted_unpushed(repo):
     """Unpushed commits not signed by a key on the vault's (latest) team list: [CommitSignature]."""
     try:
-        text = eng.run(["git", "show", f"@{{u}}:{'.litterbox/allowed_signers'}"], repo, quiet=True)
+        text = runner.run(["git", "show", f"@{{u}}:{'.litterbox/allowed_signers'}"], repo, quiet=True)
     except LitterboxError:
         text = ""                                   # nobody has a key yet
     with tempfile.TemporaryDirectory() as tmp:

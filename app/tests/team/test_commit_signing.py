@@ -15,9 +15,12 @@ from tests.support.team_fixture import TeamFixture
 from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, git
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.team import commit_signing as signing
 from litterbox.errors import LitterboxError
+from litterbox.parts import checkin
+from litterbox.parts import checkout
+from litterbox.parts import get_latest
+from litterbox.git import remote
 
 
 @SKIP_ON_WINDOWS
@@ -72,13 +75,13 @@ class RequireSignatures(TeamFixture, unittest.TestCase):
         git(self.a, "commit", "-m", "require signatures")
         git(self.a, "push")
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
 
     def work(self):
         with self.user("Bea"):
-            eng.checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
             (self.b / PRT).write_bytes(b"signed work?")
-            eng.checkin(self.b, PART, "Bea's work")
+            checkin.checkin(self.b, PART, "Bea's work")
 
     def test_unsigned_commits_are_not_uploaded(self):
         with self.assertRaises(LitterboxError) as ctx:
@@ -107,10 +110,10 @@ class RequireSignatures(TeamFixture, unittest.TestCase):
 
     def test_untrusted_unpushed_lists_the_unsigned_commits(self):
         with self.user("Bea"):
-            eng.checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
             (self.b / PRT).write_bytes(b"x")
-            with mock.patch.object(eng, "_push_with_retry"):               # commit but do not upload
-                eng.checkin(self.b, PART, "Local only")
+            with mock.patch.object(remote, "push_with_retry"):               # commit but do not upload
+                checkin.checkin(self.b, PART, "Local only")
         bad = signing.untrusted_unpushed(self.b)
         self.assertEqual([(s.result, s.subject) for s in bad], [(signing.NONE, f"{PART}: Local only")])
 

@@ -26,7 +26,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.importing import importer
-from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.errors import LitterboxError
@@ -36,6 +35,14 @@ from litterbox import layout
 from litterbox.cad import file_types
 from litterbox.cad.solidworks import com
 from litterbox.util import journal as journal_file
+from litterbox.parts import batch_core
+from litterbox.git import lfs_locks
+from litterbox.parts import permission_check
+from litterbox.parts import planning
+from litterbox.git import read_only
+from litterbox.git import remote
+from litterbox.git import repository
+from litterbox.git import runner
 
 JOURNAL_NAME = "litterbox-revise.json"
 JOURNAL_VERSION = 1
@@ -100,25 +107,25 @@ def _undo(repo, journal, log=print):
     if commit:
         if importer._unpushed(repo) == 0:
             return "finished"                           # the attempt had reached the vault: keep it
-        if importer._git_out(repo, "rev-parse", "HEAD") != commit:
+        if repository.quiet_output(repo, "rev-parse", "HEAD") != commit:
             raise RevisionFailed("An unfinished revise left a commit that has not been pushed, but it is no "
                                  "longer the latest commit, so Litterbox will not undo it. Ask for help.")
-        eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
+        runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
     record, added, removed = journal["record"], journal["added"], journal["removed"]
     # put back anything the attempt took out of the vault, and the record
-    gone = [rel for rel in removed if importer._tracked(repo, rel)]
+    gone = [rel for rel in removed if repository.in_head(repo, rel)]
     try:
         if gone:
-            eng.run(["git", "reset", "-q", "HEAD", "--"] + gone, repo)
-            eng.run(["git", "checkout", "HEAD", "--"] + gone, repo)
-        eng.run(["git", "restore", "--staged", "--worktree", "--", record], repo)
+            runner.run(["git", "reset", "-q", "HEAD", "--"] + gone, repo)
+            runner.run(["git", "checkout", "HEAD", "--"] + gone, repo)
+        runner.run(["git", "restore", "--staged", "--worktree", "--", record], repo)
     except LitterboxError as e:
         log(f"WARNING: could not fully restore the vault's files: {e}")
     # remove the new files, but only ones the vault does not own
-    ours = [rel for rel in added if not importer._tracked(repo, rel)]
+    ours = [rel for rel in added if not repository.in_head(repo, rel)]
     if ours:
         try:
-            eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--"] + ours, repo)
+            runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--"] + ours, repo)
         except LitterboxError as e:
             log(f"WARNING: could not fully clean git's index: {e}")
     problems = []
@@ -137,14 +144,14 @@ def _undo(repo, journal, log=print):
         (Path(repo) / layout.CANCELLED_DIR_NAME).rmdir()        # only succeeds if it is empty
     except OSError:
         pass
-    eng._force_unlock_quietly(repo, journal["locked"] + [record])
-    eng.enforce_read_only(repo)
+    lfs_locks.force_unlock_quietly(repo, journal["locked"] + [record])
+    read_only.enforce_read_only(repo)
     return "cleaned"
 
 
 def recover(repo, log=print):
     """Clean up after a revise or cancel that was interrupted. Returns 'nothing', 'cleaned' or 'finished'."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     journal = _read_journal(repo)
     if journal is None:
         return "nothing"
@@ -200,10 +207,10 @@ def _copy_list(repo, record, files):
 @converts_errors
 def revise_plan(repo, pn, fetch=True):
     """What a revise would create, and anything that blocks it. Changes nothing."""
-    eng.validate_repo(repo)
-    pn = eng._as_pn(pn)
+    repository.validate_repo(repo)
+    pn = batch_core.as_pn(pn)
     record = registry.load(repo, pn)
-    files, problems = eng._blockers(repo, pn, record, "revised", fetch,
+    files, problems = planning.blockers(repo, pn, record, "revised", fetch,
                                     required=registry.STATUS_RELEASED, required_label="released")
     if record.cots:
         problems.insert(0, registry.can_revise(record))
@@ -235,8 +242,8 @@ def _cancelled_name(rel):
 @converts_errors
 def cancel_revision_plan(repo, pn, fetch=True):
     """What Cancel Revision would move, and anything that blocks it. Changes nothing."""
-    eng.validate_repo(repo)
-    pn = eng._as_pn(pn)
+    repository.validate_repo(repo)
+    pn = batch_core.as_pn(pn)
     record = registry.load(repo, pn)
     files = registry.cad_files(repo, pn, record.revision)
     problems = []
@@ -245,11 +252,11 @@ def cancel_revision_plan(repo, pn, fetch=True):
         problems.append(problem)
     if fetch:
         try:
-            eng.run(["git", "fetch"], repo, quiet=True)
+            runner.run(["git", "fetch"], repo, quiet=True)
         except LitterboxError as e:
             diagnostics.LOG(f"WARNING: could not check the vault for newer changes. {e}")
-    locks = eng.get_locks(repo, strict=True)
-    group = files + [eng.record_relpath(pn)]
+    locks = lfs_locks.get_locks(repo, strict=True)
+    group = files + [registry.record_relpath(pn)]
     others = sorted({locks[p.lower()][1] for p in group if p.lower() in locks and locks[p.lower()][0] != "you"})
     if others:
         problems.append("It is checked out by " + ", ".join(others) + ".")
@@ -308,10 +315,10 @@ def _commit_and_push(repo, message, add, remove, record_path):
                 os.chmod(Path(repo) / rel, 0o644)
             except OSError:
                 pass
-        eng.run(["git", "rm", "-q", "-f", "--"] + remove, repo)
-    eng.run(["git", "add", "--"] + add + [record_path], repo)
-    eng.run(["git", "commit", "-m", message, "--"] + add + remove + [record_path], repo)
-    eng._push_with_retry(repo)
+        runner.run(["git", "rm", "-q", "-f", "--"] + remove, repo)
+    runner.run(["git", "add", "--"] + add + [record_path], repo)
+    runner.run(["git", "commit", "-m", message, "--"] + add + remove + [record_path], repo)
+    remote.push_with_retry(repo)
 
 
 @converts_errors
@@ -320,10 +327,10 @@ def revise(repo, pn, reason, backend=None, log=print):
 
     Returns the list of the new revision's files. The new revision is checked out to you.
     """
-    eng.validate_repo(repo)
-    pn = eng._as_pn(pn)
-    user = eng.get_user(repo)
-    eng._check_permission(repo, user, "revise")
+    repository.validate_repo(repo)
+    pn = batch_core.as_pn(pn)
+    user = repository.get_user(repo)
+    permission_check.check_permission(repo, user, "revise")
     reason = " ".join((reason or "").split())
     if not reason:
         raise RevisionFailed("A reason is required to revise a part.")
@@ -332,7 +339,7 @@ def revise(repo, pn, reason, backend=None, log=print):
     if not plan.ok:
         raise RevisionFailed(f"{pn} can't be revised yet:\n- " + "\n- ".join(plan.problems))
 
-    record_path = eng.record_relpath(pn)
+    record_path = registry.record_relpath(pn)
     token = uuid.uuid4().hex[:12]
     locked, new_files, journal = [], [], None
     owns_backend = backend is None
@@ -341,9 +348,9 @@ def revise(repo, pn, reason, backend=None, log=print):
     pushed = False
     try:
         with com.com_thread():
-            eng._lock(repo, record_path, pn)                  # whoever gets this lock gets the revision
+            lfs_locks.lock(repo, record_path, pn)                  # whoever gets this lock gets the revision
             locked.append(record_path)
-            eng._pull(repo)                                   # lock first, THEN pull
+            remote.pull(repo)                                   # lock first, THEN pull
             record = registry.load(repo, pn)
             files = registry.cad_files(repo, pn, record.revision)
             if registry.can_revise(record) or record.revision != plan.revision:
@@ -365,14 +372,14 @@ def revise(repo, pn, reason, backend=None, log=print):
             pushed = True
 
             for rel in new_files:                             # the new revision is yours to work on
-                eng._lock(repo, rel, pn)
+                lfs_locks.lock(repo, rel, pn)
                 locked.append(rel)
     except BaseException:
         if pushed:
             # The revision exists in the vault. Do not undo it; just say what is left to do.
-            eng._force_unlock_quietly(repo, locked)
+            lfs_locks.force_unlock_quietly(repo, locked)
             _clear_journal(repo)
-            eng.enforce_read_only(repo)
+            read_only.enforce_read_only(repo)
             raise RevisionFailed(f"Rev {registry.load(repo, pn).revision} of {pn} was created, but it could not be "
                                  "checked out to you. Click Check Out to continue.") from None
         try:
@@ -380,7 +387,7 @@ def revise(repo, pn, reason, backend=None, log=print):
                 journal["locked"] = locked
                 _undo(repo, journal, log)
             else:
-                eng._force_unlock_quietly(repo, locked)
+                lfs_locks.force_unlock_quietly(repo, locked)
         finally:
             _clear_journal(repo)
         raise
@@ -388,7 +395,7 @@ def revise(repo, pn, reason, backend=None, log=print):
         if owns_backend:
             backend.close()
     _clear_journal(repo)
-    eng.enforce_read_only(repo)
+    read_only.enforce_read_only(repo)
     return new_files
 
 
@@ -402,10 +409,10 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
 
     Call cancel_revision_plan() first and show it to the user. The part goes back to its latest
     released revision, and the cancelled letter is never used again."""
-    eng.validate_repo(repo)
-    pn = eng._as_pn(pn)
-    user = eng.get_user(repo)
-    eng._check_permission(repo, user, "cancel_revision")
+    repository.validate_repo(repo)
+    pn = batch_core.as_pn(pn)
+    user = repository.get_user(repo)
+    permission_check.check_permission(repo, user, "cancel_revision")
     reason = " ".join((reason or "").split())
     if not reason:
         raise RevisionFailed("A reason is required to cancel a revision.")
@@ -414,7 +421,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     if not plan.ok:
         raise RevisionFailed(f"The revision of {pn} can't be cancelled yet:\n- " + "\n- ".join(plan.problems))
 
-    record_path = eng.record_relpath(pn)
+    record_path = registry.record_relpath(pn)
     token = uuid.uuid4().hex[:12]
     locked, journal = [], None
     owns_backend = backend is None
@@ -424,15 +431,15 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     kept = []
     try:
         with com.com_thread():
-            eng._lock(repo, record_path, pn)
+            lfs_locks.lock(repo, record_path, pn)
             locked.append(record_path)
-            eng._pull(repo)
+            remote.pull(repo)
             record = registry.load(repo, pn)
             if registry.can_cancel_revision(record) or record.revision != plan.revision:
                 raise RevisionFailed(f"{pn} was changed by someone else a moment ago. Run Get Latest and try again.")
             files = registry.cad_files(repo, pn, record.revision)
             for rel in files:                                 # nobody else may pick the files up meanwhile
-                eng._lock(repo, rel, pn)
+                lfs_locks.lock(repo, rel, pn)
                 locked.append(rel)
             moves = [(rel, _cancelled_name(rel)) for rel in files]
             clashes = [new for _old, new in moves if (Path(repo) / new).exists()]
@@ -458,7 +465,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
                 journal["locked"] = locked
                 _undo(repo, journal, log)
             else:
-                eng._force_unlock_quietly(repo, locked)
+                lfs_locks.force_unlock_quietly(repo, locked)
         finally:
             _clear_journal(repo)
         raise
@@ -467,9 +474,9 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
             backend.close()
     _clear_journal(repo)
     # the cancelled files are gone from cad, so their locks (and the record's) can go
-    eng._force_unlock_quietly(repo, [rel for rel in locked if rel != record_path])
-    failed = eng._unlock_mine(repo, [record_path])
-    eng.enforce_read_only(repo)
+    lfs_locks.force_unlock_quietly(repo, [rel for rel in locked if rel != record_path])
+    failed = lfs_locks.unlock_mine(repo, [record_path])
+    read_only.enforce_read_only(repo)
     if failed:
-        raise RevisionFailed(eng._unlock_failure_message(failed))
+        raise RevisionFailed(lfs_locks.unlock_failure_message(failed))
     return kept

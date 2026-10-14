@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 
-from litterbox.jobs import file_snapshot as fs
+from litterbox.util import file_snapshot as fs
 
 PART = "HCR-00002-001"
 FILES = ["cad/HCR-00002-001_A.SLDPRT", "cad/HCR-00002-001_A.SLDDRW"]
@@ -109,7 +109,7 @@ class Wiring(unittest.TestCase):
         source = (Path(__file__).resolve().parents[2] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
         self.assertIn("snapshot = self._watch_files(plan.targets)", source)
         self.assertIn("snapshot=snapshot))", source)
-        self.assertIn("engine.watch_files(", source)
+        self.assertIn("checkin.watch_files(", source)
 
 
 if __name__ == "__main__":

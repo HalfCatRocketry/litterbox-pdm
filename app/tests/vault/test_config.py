@@ -6,11 +6,11 @@ import unittest
 from pathlib import Path
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.core.pn import PN
 from litterbox.errors import LitterboxError
+from litterbox.git import repository
 
 
 class TestConfig(unittest.TestCase):
@@ -135,14 +135,14 @@ class TestConfig(unittest.TestCase):
         self.addCleanup(pn_module.configure)
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.write_config("org: HCR\npn_base_digits: 6\npn_variant_digits: 2\n")
-        eng.validate_repo(self.repo)
+        repository.validate_repo(self.repo)
         self.assertEqual((pn_module.BASE_DIGITS, pn_module.VARIANT_DIGITS), (6, 2))
         self.write_config("org: HCR\n")
-        eng.validate_repo(self.repo)
+        repository.validate_repo(self.repo)
         self.assertEqual((pn_module.BASE_DIGITS, pn_module.VARIANT_DIGITS), (5, 3))
         self.write_config("org: HCR\npn_base_digits: 0\n")
         with self.assertRaises(LitterboxError):
-            eng.validate_repo(self.repo)
+            repository.validate_repo(self.repo)
 
 
 if __name__ == "__main__":

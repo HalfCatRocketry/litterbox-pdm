@@ -1,0 +1,105 @@
+"""
+part_status.py - the status of every part: one row per record in
+PN-logs, with its lock, its files and whether they are modified.
+
+Rows come from records, not files: a CAD file with no record has no row.
+"""
+
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from litterbox.core import pn as pn_module
+from litterbox.core.pn import PN
+from litterbox.git import lfs_locks
+from litterbox.git import read_only
+from litterbox.git import repository
+from litterbox.records import registry
+
+
+@dataclass
+class PartStatus:
+    pn: PN
+    name: str
+    record_status: str          # in_work / released / void
+    state: str                  # text to show the user
+    kind: str                   # ok, mine, theirs, unclaimed, stray, missing, released, void, error
+    locked_by: str = ""
+    files: list = field(default_factory=list)   # CAD files, relative to the repo
+    description: str = ""
+    cots: bool = False
+    import_path: str = ""
+    revision: str = "A"                 # the working (latest) revision; `files` are this revision's files
+    released_revision: str = ""         # the latest released revision, if any
+    revisions: dict = field(default_factory=dict)   # {revision: [files]} for every revision that has files
+    refs_outdated: bool = False         # an assembly whose list of parts used is missing or out of date
+    pending: dict = field(default_factory=dict)     # a release request waiting for sign-offs (see workflow.py)
+
+
+def get_status(repo):
+    """One PartStatus per part number that has a record."""
+    repository.validate_repo(repo)
+    index = registry.cad_index(repo)
+    with ThreadPoolExecutor(max_workers=2) as pool:      # two independent git calls: do them at the same time
+        locks_job = pool.submit(lfs_locks.get_locks, repo)
+        modified_job = pool.submit(repository.get_modified, repo)
+        locks, modified = locks_job.result(), modified_job.result()
+
+    rows = []
+    for pn in registry.list_pns(repo):
+        revisions = index.get(pn, {})
+        try:
+            record = registry.load(repo, pn)
+        except registry.RegistryError as e:
+            rows.append(PartStatus(pn, "", "", f"Unreadable record: {e}", "error",
+                                   files=sorted(f for fs in revisions.values() for f in fs), revisions=revisions))
+            continue
+        files = revisions.get(record.revision, [])
+        every_file = [f for fs in revisions.values() for f in fs]
+
+        # The record lock is the one that counts; fall back to any file lock.
+        lock = locks.get(registry.record_relpath(pn).lower())
+        if lock is None:
+            lock = next((locks[f.lower()] for f in files if f.lower() in locks), None)
+        changed = any(f.lower() in modified for f in every_file)
+        not_downloaded = any(read_only.is_pointer(Path(repo) / f) for f in files)
+        owner = lock[1] if lock else ""
+
+        if record.status == registry.STATUS_VOID:
+            state, kind = "Void", "void"
+        elif not_downloaded:
+            state, kind = "Not downloaded", "missing"
+        elif record.pending:
+            from litterbox.workflows import workflow
+            state, kind = workflow.describe_pending(record.pending), "pending"
+        elif record.status == registry.STATUS_RELEASED:
+            if changed:
+                state, kind = "Released, but its files were modified", "stray"
+            else:
+                state, kind = "Released", "released"
+        elif lock and lock[0] == "you":
+            state, kind = "Checked out by you" + (" (modified)" if changed else ""), "mine"
+        elif lock:
+            state, kind = f"Checked out by {owner}", "theirs"
+        elif changed:
+            state, kind = "Modified but not checked out", "unclaimed"
+        elif record.cots:
+            state, kind = "COTS part", "cots"
+        elif not files and every_file:
+            others = ", ".join(sorted(revisions, key=pn_module.revision_number))
+            state, kind = f"No files for Rev {record.revision} (found Rev {others})", "stray"
+        elif not files:
+            state, kind = "Created, no CAD files yet", "ok"
+        else:
+            state, kind = "Available", "ok"
+
+        if record.released_revision and record.status != registry.STATUS_RELEASED:
+            state += f" (Rev {record.released_revision} released)"
+        outdated = any(registry.references_need_update(record, rev, fs) for rev, fs in revisions.items())
+        if outdated and kind not in ("error", "missing"):
+            state += " (references need updating)"
+
+        rows.append(PartStatus(pn, record.name, record.status, state, kind, owner, files,
+                               record.description, record.cots, record.import_path,
+                               record.revision, record.released_revision, revisions, outdated, record.pending))
+    return rows

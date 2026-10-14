@@ -15,10 +15,17 @@ from unittest import mock
 from tests.support.import_fixture import FakeSolidWorks
 from tests.support.vault_fixture import DRW, PART, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault, git, is_writable
 
-from litterbox.parts import engine as eng
 from litterbox.records import registry
 from litterbox.parts import revise
 from litterbox.errors import LitterboxError
+from litterbox.parts import checkin
+from litterbox.parts import checkout
+from litterbox.parts import get_latest
+from litterbox.git import lfs_locks
+from litterbox.parts import lifecycle
+from litterbox.parts import planning
+from litterbox.git import read_only
+from litterbox.git import remote
 
 PRT_B = PRT.replace("_A.", "_B.")
 DRW_B = DRW.replace("_A.", "_B.")
@@ -42,14 +49,14 @@ class ReviseFixture(TwoUserVault):
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "Make the files text")
             git(self.a, "push")
-            eng.enforce_read_only(self.a)
-            eng.release(self.a, PART)
+            read_only.enforce_read_only(self.a)
+            lifecycle.release(self.a, PART)
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
 
     def locks(self, repo):
         with self.user("Alex" if repo == self.a else "Bea"):
-            return eng.get_locks(repo, strict=True)
+            return lfs_locks.get_locks(repo, strict=True)
 
     def revise(self, repo=None, user="Alex", reason="Bore too small", **kwargs):
         with self.user(user):
@@ -107,20 +114,20 @@ class TestRevise(ReviseFixture, unittest.TestCase):
     def test_everyone_else_sees_the_new_revision_as_checked_out_by_the_reviser(self):
         self.revise()
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             row = self.status_of(self.b)
             self.assertEqual((row.kind, row.locked_by, row.revision), ("theirs", "Alex", "B"))
             self.assertEqual(row.files, [DRW_B, PRT_B])
             self.assertEqual(sorted(row.revisions), ["A", "B"])
             with self.assertRaises(LitterboxError):
-                eng.checkout(self.b, PART)
+                checkout.checkout(self.b, PART)
 
     def test_the_revision_can_be_worked_on_and_released_like_any_other(self):
         self.revise()
         with self.user("Alex"):
             (self.a / PRT_B).write_text("model B\n", encoding="utf-8")
-            eng.checkin(self.a, PART, "Bigger bore")
-            eng.release(self.a, PART)
+            checkin.checkin(self.a, PART, "Bigger bore")
+            lifecycle.release(self.a, PART)
             record = registry.load(self.a, PART)
         self.assertEqual((record.revision, record.released_revision, record.status), ("B", "B", "released"))
         self.assertEqual((self.a / PRT).read_text(), "model A\n")                    # Rev A never changed
@@ -147,7 +154,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "bolt")
             git(self.a, "push")
-            eng.make_cots(self.a, pn)
+            lifecycle.make_cots(self.a, pn)
             plan = revise.revise_plan(self.a, pn)
         self.assertFalse(plan.ok)
         self.assertTrue(any("COTS" in p for p in plan.problems), plan.problems)
@@ -177,7 +184,7 @@ class TestRevise(ReviseFixture, unittest.TestCase):
         self.assert_untouched(self.a)
 
     def test_a_failed_push_takes_back_the_commit_and_the_files(self):
-        with mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("network down")):
+        with mock.patch.object(remote, "push_with_retry", side_effect=LitterboxError("network down")):
             with self.assertRaises(LitterboxError):
                 self.revise()
         self.assert_untouched(self.a)
@@ -252,7 +259,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         with self.user("Alex"):
             self.assertEqual(self.status_of(self.a).kind, "released")
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             self.assertFalse((self.b / PRT_B).exists())
             self.assertTrue((self.b / CANCELLED_PRT).exists())
 
@@ -266,9 +273,9 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
     def test_someone_else_can_cancel_a_revision_nobody_is_holding(self):
         self.revise()
         with self.user("Alex"):
-            eng.checkin(self.a, PART, "Save", allow_unchanged=True)         # Alex lets go of it
+            checkin.checkin(self.a, PART, "Save", allow_unchanged=True)         # Alex lets go of it
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
         self.cancel(repo=self.b, user="Bea")
         self.assertEqual(registry.load(self.b, PART).revision, "A")
         self.assertTrue((self.b / CANCELLED_PRT).exists())
@@ -276,7 +283,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
     def test_it_is_refused_while_someone_else_has_the_revision_checked_out(self):
         self.revise()
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             plan = revise.cancel_revision_plan(self.b, PART)
             self.assertFalse(plan.ok)
             self.assertTrue(any("Alex" in p for p in plan.problems), plan.problems)
@@ -302,7 +309,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.revise()
         with self.user("Alex"):
             (self.a / PRT_B).write_text("my edits\n", encoding="utf-8")
-        with mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("network down")):
+        with mock.patch.object(remote, "push_with_retry", side_effect=LitterboxError("network down")):
             with self.assertRaises(LitterboxError):
                 self.cancel()
         record = registry.load(self.a, PART)
@@ -328,18 +335,18 @@ class TestRulesAroundRevisions(ReviseFixture, unittest.TestCase):
     def test_a_part_with_a_released_revision_cannot_be_voided_or_made_cots(self):
         self.revise()
         with self.user("Alex"):
-            eng.checkin(self.a, PART, "Save", allow_unchanged=True)
+            checkin.checkin(self.a, PART, "Save", allow_unchanged=True)
             with self.assertRaises(LitterboxError) as ctx:
-                eng.void(self.a, PART, "No longer needed")
+                lifecycle.void(self.a, PART, "No longer needed")
             self.assertIn("Cancel Revision", str(ctx.exception))
-            plan = eng.make_cots_plan(self.a, PART)
+            plan = planning.make_cots_plan(self.a, PART)
             self.assertFalse(plan.ok)
             self.assertTrue(any("revised" in p for p in plan.problems), plan.problems)
 
     def test_a_never_released_part_can_still_be_voided(self):
         pn = self.add_created_part(2)
         with self.user("Alex"):
-            eng.void(self.a, pn, "Never needed")
+            lifecycle.void(self.a, pn, "Never needed")
             self.assertEqual(self.status_of(self.a, pn).kind, "void")
 
 

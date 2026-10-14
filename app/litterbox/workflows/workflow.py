@@ -40,7 +40,7 @@ THE TRAIL     A finished action adds an entry to the record's `approvals`: who a
     (with roles and times), the file hashes, and any override with its reason. Every step is in the history too.
 
 Everything here that changes a record uses the same lock, pull, change, commit, push, unlock routine as the rest
-of Litterbox (litterbox_engine._edit_record). A batch is done one part at a time; if a step fails part-way, the
+of Litterbox (parts/batch_core.edit_record). A batch is done one part at a time; if a step fails part-way, the
 parts already done stay done, and the message says which.
 """
 
@@ -53,13 +53,19 @@ from pathlib import Path
 import yaml
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.records import registry
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
 from litterbox import layout
+from litterbox.parts import batch_core
+from litterbox.git import lfs_locks
+from litterbox.parts import planning
+from litterbox.git import read_only
+from litterbox.git import remote
+from litterbox.git import repository
+from litterbox.git import runner
 
 RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
 ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)          # the actions that can have templates
@@ -260,20 +266,20 @@ def role_warnings(template, directory):
 def edit_templates(repo, change, message):
     """Change the workflow file for everyone: lock it, get the latest, `change(templates, directory)`, check,
     commit, push, unlock. If anything fails the file is put back. Admins only. Returns what change() returns."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     identity = people.require(repo, "manage_workflows")
     if identity.state != people.OK:
         raise WorkflowError("Set up the team first (Team... > Set Up Team): workflows are about people's roles.")
     rel = layout.WORKFLOWS_FILE
     config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
-    existed = people._tracked(repo, rel)
-    config_tracked = people._tracked(repo, config_rel)
+    existed = repository.in_index(repo, rel)
+    config_tracked = repository.in_index(repo, config_rel)
     config_before = (Path(repo) / config_rel).read_bytes() if (Path(repo) / config_rel).is_file() else None
     if existed:
-        eng._lock(repo, rel, "the workflows file")
+        lfs_locks.lock(repo, rel, "the workflows file")
     committed, result = False, None
     try:
-        eng._pull(repo)
+        remote.pull(repo)
         templates = load(repo)
         directory = people.load(repo)
         result = change(templates, directory)
@@ -285,18 +291,18 @@ def edit_templates(repo, change, message):
             # the vault now asks everyone to update before working in it.
             config.stamp(repo, min_version=MIN_VERSION)
             paths.append(config_rel)
-        eng.run(["git", "add", "--"] + paths, repo)
-        eng.run(["git", "commit", "-m", message, "--"] + paths, repo)
+        runner.run(["git", "add", "--"] + paths, repo)
+        runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
         committed = True
-        eng._push_with_retry(repo)
+        remote.push_with_retry(repo)
     except BaseException:
         try:
             if committed:
-                eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
+                runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
             if config_tracked:
-                eng.run(["git", "restore", "--staged", "--worktree", "--", config_rel], repo)
+                runner.run(["git", "restore", "--staged", "--worktree", "--", config_rel], repo)
             else:
-                eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", config_rel], repo, quiet=True)
+                runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", config_rel], repo, quiet=True)
                 try:
                     if config_before is None:
                         (Path(repo) / config_rel).unlink()
@@ -305,9 +311,9 @@ def edit_templates(repo, change, message):
                 except OSError:
                     pass
             if existed:
-                eng.run(["git", "restore", "--staged", "--worktree", "--", rel], repo)
+                runner.run(["git", "restore", "--staged", "--worktree", "--", rel], repo)
             else:
-                eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", rel], repo, quiet=True)
+                runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", rel], repo, quiet=True)
                 try:
                     (Path(repo) / rel).unlink()
                 except OSError:
@@ -315,12 +321,12 @@ def edit_templates(repo, change, message):
         except LitterboxError as e:
             diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
         if existed:
-            eng._force_unlock_quietly(repo, [rel])
+            lfs_locks.force_unlock_quietly(repo, [rel])
         raise
     if existed:
-        failed = eng._unlock_mine(repo, [rel])
+        failed = lfs_locks.unlock_mine(repo, [rel])
         if failed:
-            raise LitterboxError(eng._unlock_failure_message(failed))
+            raise LitterboxError(lfs_locks.unlock_failure_message(failed))
     return result
 
 
@@ -450,7 +456,7 @@ def file_hashes(repo, files):
     result = {}
     for rel in files:
         path = Path(repo) / rel
-        if eng.is_pointer(path):
+        if read_only.is_pointer(path):
             raise WorkflowError(f"{rel} hasn't been downloaded. Run Get Latest.")
         digest = hashlib.sha256()
         try:
@@ -496,16 +502,16 @@ def _check_files_unchanged(repo, pending):
 def _as_pns(pns):
     if not isinstance(pns, (list, tuple, set)):
         pns = [pns]
-    return [eng._as_pn(p) for p in pns]
+    return [batch_core.as_pn(p) for p in pns]
 
 
 def _problems(repo, pn, action, reason, fetch, ctx=None):
     """(problems, files) for starting `action` on this part."""
     if action == RELEASE:
-        plan = eng.release_plan(repo, pn, fetch=fetch, ctx=ctx)
+        plan = planning.release_plan(repo, pn, fetch=fetch, ctx=ctx)
         return list(plan.problems), list(plan.files)
     if action == MAKE_COTS:
-        plan = eng.make_cots_plan(repo, pn, fetch=fetch, ctx=ctx)
+        plan = planning.make_cots_plan(repo, pn, fetch=fetch, ctx=ctx)
         return list(plan.problems), list(plan.files)
     record = registry.load(repo, pn)
     if record.pending:
@@ -573,7 +579,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
     if not pns:
         raise WorkflowError("Choose at least one part.")
 
-    problems, files, ctx = {}, {}, eng._Context(repo)         # the vault is looked at once for all the parts
+    problems, files, ctx = {}, {}, planning.PlanContext(repo)         # the vault is looked at once for all the parts
     for pn in pns:
         found, cad = _problems(repo, pn, action, reason, True, ctx)
         if found:
@@ -604,7 +610,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
                                reason=reason or None)
         items.append((pn, action, edit, f"{pn}: {label_of(action)} requested"))
     try:
-        batch = eng._edit_records(repo, items, atomic=True)      # all or nothing: one download, one upload
+        batch = batch_core.edit_records(repo, items, atomic=True)      # all or nothing: one download, one upload
     except (LitterboxError, registry.RegistryError) as e:
         raise WorkflowError(f"Could not start the workflow, so nothing was changed:\n\n{e}")
     if batch.notice:
@@ -655,7 +661,7 @@ def sign_off(repo, pns, comment=""):
 
         items.append((pn, "signoff", edit, f"{pn}: signed off"))
     if items:
-        batch = eng._edit_records(repo, items)
+        batch = batch_core.edit_records(repo, items)
         result.signed = list(batch.results)
         result.errors.update({pn: str(e) for pn, e in batch.errors.items()})
         if batch.notice:
@@ -738,7 +744,7 @@ def _finish_edit(repo, action, plan, override_reason):
 def _finish_many(repo, pns, override_reason=None, override_action=None):
     """Do the action now on several parts, with one download and one upload (the vault is checked once).
     Returns (done, failed, files): done is [pn], failed is {pn: error}, files is {pn: [files released]}."""
-    ctx, failed, items, files = eng._Context(repo), {}, [], {}
+    ctx, failed, items, files = planning.PlanContext(repo), {}, [], {}
     for pn in _as_pns(pns):
         try:
             record0 = registry.load(repo, pn)
@@ -747,9 +753,9 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
                 raise WorkflowError(f"{pn} has no request to complete.")
             plan = None
             if action == RELEASE:
-                plan = eng.release_plan(repo, pn, allow_pending=True, ctx=ctx)
+                plan = planning.release_plan(repo, pn, allow_pending=True, ctx=ctx)
             elif action == MAKE_COTS:
-                plan = eng.make_cots_plan(repo, pn, allow_pending=True, ctx=ctx)
+                plan = planning.make_cots_plan(repo, pn, allow_pending=True, ctx=ctx)
             if plan is not None and not plan.ok:
                 what = "released" if action == RELEASE else "made COTS"
                 raise LitterboxError(f"{pn} can't be {what} yet:\n- " + "\n- ".join(plan.problems))
@@ -762,7 +768,7 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
         files[pn] = list(plan.files) if plan is not None else []
     done = []
     if items:
-        batch = eng._edit_records(repo, items)
+        batch = batch_core.edit_records(repo, items)
         done = list(batch.results)
         failed.update(batch.errors)
         if batch.notice:
@@ -823,7 +829,7 @@ def _each(repo, pns, edit_for, action_name, message):
             items.append((pn, action_name, edit_for(record.pending.get("id")), message.replace("{pn}", str(pn))))
     done = []
     if items:
-        batch = eng._edit_records(repo, items)
+        batch = batch_core.edit_records(repo, items)
         done = list(batch.results)
         failed.update({pn: str(e) for pn, e in batch.errors.items()})
         if batch.notice:

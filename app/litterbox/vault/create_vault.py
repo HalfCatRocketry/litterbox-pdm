@@ -35,7 +35,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.core import pn as pn_module
 from litterbox import version
@@ -43,6 +42,7 @@ from litterbox.core.pn import PNError, check_org
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from litterbox import layout
+from litterbox.git import runner
 
 GITATTRIBUTES = ".gitattributes"
 GITIGNORE = ".gitignore"
@@ -127,7 +127,7 @@ def numbering_warnings(start_number, base_digits, variant_digits):
 
 
 def _git(repo, *args, quiet=True):
-    return eng.run(["git", *args], repo, quiet=quiet)
+    return runner.run(["git", *args], repo, quiet=quiet)
 
 
 def _has_commits(repo):
@@ -175,7 +175,7 @@ def plan(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
         return result
 
     try:
-        eng.run(["git", "lfs", "version"], folder, quiet=True)
+        runner.run(["git", "lfs", "version"], folder, quiet=True)
     except LitterboxError:
         result.problems.append("Git LFS isn't installed. It comes with Git for Windows: reinstall Git for "
                                "Windows, or install Git LFS from git-lfs.com.")
@@ -252,11 +252,11 @@ class _Writer:
         try:
             if self.committed:
                 if self.old_head:
-                    eng.run(["git", "reset", "--soft", self.old_head], repo, quiet=True)
+                    runner.run(["git", "reset", "--soft", self.old_head], repo, quiet=True)
                 else:
-                    eng.run(["git", "update-ref", "-d", "HEAD"], repo, quiet=True)
+                    runner.run(["git", "update-ref", "-d", "HEAD"], repo, quiet=True)
             for rel in self.created:
-                eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "-q", "--", rel], repo, quiet=True)
+                runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "-q", "--", rel], repo, quiet=True)
                 try:
                     (repo / rel).unlink()
                 except OSError:
@@ -264,9 +264,9 @@ class _Writer:
             for rel, original in self.modified.items():
                 (repo / rel).write_bytes(original)
                 if self.old_head:
-                    eng.run(["git", "reset", "-q", "HEAD", "--", rel], repo, quiet=True)
+                    runner.run(["git", "reset", "-q", "HEAD", "--", rel], repo, quiet=True)
                 else:
-                    eng.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "-q", "--", rel], repo, quiet=True)
+                    runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "-q", "--", rel], repo, quiet=True)
             for folder in self.made_folders:
                 try:
                     (repo / folder).rmdir()
@@ -293,7 +293,7 @@ def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGIT
 
     try:
         try:                                                # makes sure the upload hooks are in this repository
-            eng.run(["git", "lfs", "install", "--local"], repo, quiet=True)
+            runner.run(["git", "lfs", "install", "--local"], repo, quiet=True)
         except LitterboxError as e:
             warnings.append(f"Could not switch on Git LFS for this repository ({e}). If uploads fail, run "
                             "'git lfs install' once.")
@@ -317,11 +317,11 @@ def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGIT
         config.stamp(repo, min_version=min_version)
 
         paths = writer.paths
-        eng.run(["git", "add", "--"] + paths, repo)
-        eng.run(["git", "commit", "-m", f"Litterbox: set up the {org} vault", "--"] + paths, repo)
+        runner.run(["git", "add", "--"] + paths, repo)
+        runner.run(["git", "commit", "-m", f"Litterbox: set up the {org} vault", "--"] + paths, repo)
         writer.committed = True
         if push:
-            eng.run(["git", "push", "-u", "origin", "HEAD"], repo)
+            runner.run(["git", "push", "-u", "origin", "HEAD"], repo)
     except BaseException:
         writer.undo()
         raise
@@ -331,7 +331,7 @@ def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGIT
     result = InitResult(org=org, files=paths, pushed=push, warnings=warnings)
     if push:
         try:
-            eng.run(["git", "lfs", "locks"], repo, quiet=True)
+            runner.run(["git", "lfs", "locks"], repo, quiet=True)
         except LitterboxError as e:
             warnings.append("The host did not answer a request about file locks. Check that Git LFS and file "
                             f"locking are available on this repository.\n{e}")

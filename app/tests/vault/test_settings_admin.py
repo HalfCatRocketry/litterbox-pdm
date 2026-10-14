@@ -11,11 +11,11 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS, git
 from tests.support.workflow_fixture import Fixture
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.vault import settings_admin as vault_settings
 from litterbox.errors import LitterboxError
 from litterbox import layout
+from litterbox.git import remote
 
 
 class ConfigValues(unittest.TestCase):
@@ -92,7 +92,7 @@ class EditingTheSetting(Fixture, unittest.TestCase):
     def test_a_failed_upload_puts_everything_back(self):
         before = git(self.a, "rev-parse", "HEAD")
         with self.user("Alex"):
-            with mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("no network")):
+            with mock.patch.object(remote, "push_with_retry", side_effect=LitterboxError("no network")):
                 with self.assertRaises(LitterboxError):
                     vault_settings.edit(self.a, commit_style="per_batch")
             self.assertEqual(git(self.a, "rev-parse", "HEAD"), before)

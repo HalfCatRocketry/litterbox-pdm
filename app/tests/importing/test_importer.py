@@ -20,12 +20,13 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS, git, is_writable
 from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.importing import importer
-from litterbox.parts import engine as eng
 from litterbox.importing import manifest
 from litterbox.records import registry
 from litterbox.core.pn import PN
 from tests.support.import_fixture import ImportFixture
 from litterbox.errors import LitterboxError
+from litterbox.parts import get_latest
+from litterbox.git import runner
 
 
 @SKIP_ON_WINDOWS
@@ -70,7 +71,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             # the status list shows them as ordinary parts with files
             self.assertEqual(self.status_of(self.a, top).kind, "ok")
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
             self.assertTrue((self.b / "cad" / f"{top}_A.SLDASM").exists())
 
     def test_running_it_again_has_nothing_to_do(self):
@@ -177,7 +178,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
     def test_a_push_that_always_fails_leaves_nothing_behind(self):
         self.make_manifest()
-        real_run = eng.run
+        real_run = runner.run
 
         def broken(command, repo, quiet=False):
             if command[:2] == ["git", "push"]:
@@ -185,7 +186,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", broken):
+            with mock.patch.object(runner, "run", broken):
                 with self.assertRaises(LitterboxError):
                     self.run_import()
             self.assert_nothing_left()
@@ -193,7 +194,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
     def test_offline_at_the_start_changes_nothing(self):
         self.make_manifest()
-        real_run = eng.run
+        real_run = runner.run
 
         def offline(command, repo, quiet=False):
             if command[:2] == ["git", "pull"]:
@@ -201,7 +202,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", offline):
+            with mock.patch.object(runner, "run", offline):
                 with self.assertRaises(importer.ImportFailed):
                     self.run_import()
             self.assertEqual(self.fake.copied, [])
@@ -210,7 +211,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
     # -- someone else gets the numbers first --------------------------------
     def test_losing_the_race_removes_the_copies_and_starts_again_with_new_numbers(self):
         self.make_manifest()
-        real_run = eng.run
+        real_run = runner.run
         state = {"done": False}
 
         def run(command, repo, quiet=False):
@@ -221,7 +222,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             return real_run(command, repo, quiet)
 
         with self.user("Alex"):
-            with mock.patch.object(eng, "run", run):
+            with mock.patch.object(runner, "run", run):
                 result = self.run_import()
             self.assertEqual(sorted(result.pns), [PN("HCR", n, 1) for n in range(3, 7)])
             names = self.cad_names()
@@ -502,7 +503,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
     def test_a_typed_number_taken_at_the_last_moment_is_reported_and_cleaned_up(self):
         self.make_manifest()
-        real_run = eng.run
+        real_run = runner.run
         state = {"done": False}
 
         def run(command, repo, quiet=False):
@@ -515,7 +516,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         with self.user("Alex"):
             prepared = self.prepare()
             prepared.proposal.set_pn(1, "HCR-00800-001")
-            with mock.patch.object(eng, "run", run):
+            with mock.patch.object(runner, "run", run):
                 with self.assertRaises(importer.PNConflict) as ctx:
                     importer.finish(self.a, prepared, log=lambda *_: None)
             self.assertEqual([c.index for c in ctx.exception.conflicts], [1])

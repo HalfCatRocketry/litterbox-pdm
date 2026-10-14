@@ -12,12 +12,21 @@ from unittest import mock
 
 from tests.support.vault_fixture import DRW, PART, PRT, REC, git
 
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.records import registry
 from tests.support.team_fixture import TeamFixture
 from litterbox.errors import LitterboxError
 from litterbox import layout
+from litterbox.parts import checkin
+from litterbox.parts import checkout
+from litterbox.parts import get_latest
+from litterbox.parts import lifecycle
+from litterbox.parts import part_details
+from litterbox.parts import part_status
+from litterbox.git import remote
+from litterbox.git import repository
+from litterbox.git import runner
+from litterbox.parts import undoing
 
 
 def directory(*extra, roles=("Quality", "Manufacturing")):
@@ -142,7 +151,7 @@ class TestSetup(TeamFixture, unittest.TestCase):
         self.assertEqual(self.who(self.a, "Alex").state, people.LEGACY)
         self.assertEqual(self.who(self.b, "Bea").state, people.LEGACY)
         with self.user("Bea"):
-            eng.checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
 
     def test_setup_makes_the_runner_the_owner_and_uploads_it(self):
         person = self.setup_team()
@@ -159,8 +168,8 @@ class TestSetup(TeamFixture, unittest.TestCase):
     def test_history_uses_the_team_name_once_there_is_a_team(self):
         self.setup_team()
         with self.user("Alex"):
-            self.assertEqual(eng.get_user(self.a), "Alex Smith")
-            eng.checkout(self.a, PART)
+            self.assertEqual(repository.get_user(self.a), "Alex Smith")
+            checkout.checkout(self.a, PART)
         self.assertEqual(registry.load(self.a, PART).history[-1]["by"], "Alex Smith")
 
 
@@ -169,23 +178,23 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         super().setUp()
         self.setup_team()
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
 
     def test_someone_not_listed_can_look_but_not_change(self):
         who = self.who(self.b, "Bea")
         self.assertEqual((who.state, who.host_name), (people.NOT_LISTED, "Bea"))
         with self.user("Bea"):
-            self.assertEqual(len(eng.get_status(self.b)), 1)                      # looking is fine
+            self.assertEqual(len(part_status.get_status(self.b)), 1)                      # looking is fine
             with self.assertRaises(LitterboxError) as ctx:
-                eng.checkout(self.b, PART)
+                checkout.checkout(self.b, PART)
         self.assertIn("not on this vault's team list", str(ctx.exception))
         self.assertEqual(self.locks_of(self.b, "Bea"), {})
 
     def test_every_changing_action_is_refused_for_them(self):
         from litterbox.parts import create
         with self.user("Bea"):
-            for action in (lambda: eng.checkout(self.b, PART), lambda: eng.undo_checkout(self.b, PART),
-                           lambda: eng.edit_details(self.b, PART, "x", ""), lambda: eng.release(self.b, PART),
+            for action in (lambda: checkout.checkout(self.b, PART), lambda: undoing.undo_checkout(self.b, PART),
+                           lambda: part_details.edit_details(self.b, PART, "x", ""), lambda: lifecycle.release(self.b, PART),
                            lambda: create.new_part(self.b, "Nope")):
                 with self.assertRaises(LitterboxError):
                     action()
@@ -195,9 +204,9 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         self.add_bea()
         self.assertEqual(self.who(self.b, "Bea").state, people.OK)
         with self.user("Bea"):
-            eng.checkout(self.b, PART)
-            self.assertEqual(eng.get_user(self.b), "Bea Jones")
-            eng.undo_checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
+            self.assertEqual(repository.get_user(self.b), "Bea Jones")
+            undoing.undo_checkout(self.b, PART)
         self.assertIn("Team: add Bea", self.remote_log()[0])
 
     def test_a_member_cannot_manage_people(self):
@@ -213,7 +222,7 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
             people.edit_directory(self.b, lambda d, who: people.add_person(d, who, "cy", "Cy", host_names=["Cy"]),
                                   "Team: add Cy")
         with self.user("Alex"):
-            eng.get_latest(self.a)
+            get_latest.get_latest(self.a)
         self.assertIsNotNone(people.load(self.a).get("cy"))
 
     def test_switched_off_people_are_read_only(self):
@@ -221,14 +230,14 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
         with self.user("Alex"):
             people.edit_directory(self.a, lambda d, who: people.set_active(d, who, "bea", False), "Team: off")
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
         self.assertEqual(self.who(self.b, "Bea").state, people.INACTIVE)
         with self.user("Bea"), self.assertRaises(LitterboxError):
-            eng.checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
 
     def test_a_change_that_fails_is_rolled_back(self):
         before = (self.a / layout.PEOPLE_FILE).read_text()
-        with self.user("Alex"), mock.patch.object(eng, "_push_with_retry", side_effect=LitterboxError("offline")):
+        with self.user("Alex"), mock.patch.object(remote, "push_with_retry", side_effect=LitterboxError("offline")):
             with self.assertRaises(LitterboxError):
                 people.edit_directory(self.a, lambda d, who: people.add_person(d, who, "cy", "Cy"), "Team: add Cy")
         self.assertEqual((self.a / layout.PEOPLE_FILE).read_text(), before)
@@ -261,14 +270,14 @@ class TestReadOnlyAndRoles(TeamFixture, unittest.TestCase):
             people.edit_directory(self.a, lambda d, who: people.transfer_owner(d, who, "bea"), "Team: new Owner",
                                   action="transfer_owner")
         with self.user("Bea"):
-            eng.get_latest(self.b)
+            get_latest.get_latest(self.b)
         self.assertEqual(self.who(self.b, "Bea").access, people.OWNER)
         self.assertEqual(people.load(self.b).get("alex").access, people.ADMIN)
 
 
 class TestNoTeamNoCheck(TeamFixture, unittest.TestCase):
     def test_a_vault_without_a_team_is_not_checked_before_pushing(self):
-        with mock.patch.object(eng, "run", side_effect=AssertionError("should not run git")):
+        with mock.patch.object(runner, "run", side_effect=AssertionError("should not run git")):
             self.assertIsNone(people.check_before_push(self.a))
 
 
@@ -306,7 +315,7 @@ class TestIdentityCache(TeamFixture, unittest.TestCase):
             who = people.current(self.b)
             self.assertEqual(who.state, people.UNVERIFIED)
             with self.assertRaises(LitterboxError) as ctx:
-                eng.checkout(self.b, PART)
+                checkout.checkout(self.b, PART)
         self.assertIn("could not find out", str(ctx.exception))
 
     def test_refresh_that_fails_does_not_keep_a_stale_name(self):
@@ -330,13 +339,13 @@ class TestCheckBeforePush(TeamFixture, unittest.TestCase):
 
     def test_work_done_offline_is_not_uploaded_after_access_is_removed(self):
         with self.user("Bea"):
-            eng.checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
             (self.b / PRT).write_bytes(b"Bea's offline work")
         with self.user("Alex"):
             people.edit_directory(self.a, lambda d, who: people.set_active(d, who, "bea", False), "Team: Bea off")
         with self.user("Bea"):
             with self.assertRaises(LitterboxError) as ctx:
-                eng.checkin(self.b, PART, "My work")
+                checkin.checkin(self.b, PART, "My work")
         self.assertIn("Nothing was uploaded", str(ctx.exception))
         self.assertIn("switched off", str(ctx.exception))
         self.assertEqual(git(self.b, "rev-list", "--count", "@{u}..HEAD"), "1")     # the commit is still there, locally
@@ -345,9 +354,9 @@ class TestCheckBeforePush(TeamFixture, unittest.TestCase):
 
     def test_allowed_people_push_normally(self):
         with self.user("Bea"):
-            eng.checkout(self.b, PART)
+            checkout.checkout(self.b, PART)
             (self.b / PRT).write_bytes(b"fine")
-            eng.checkin(self.b, PART, "Fine")
+            checkin.checkin(self.b, PART, "Fine")
         self.assertIn(f"{PART}: Fine", self.remote_log())
 
 

@@ -10,13 +10,18 @@ from unittest import mock
 
 from tests.support.vault_fixture import DRW, PART, PRT, git
 
-from litterbox.parts import engine as eng
 from litterbox.team import people
 from litterbox.records import registry
 from litterbox.workflows import workflow as wf
 from tests.support.workflow_fixture import CHIEF, ENGINEER, MANAGER, PART2, PRT2, QUALITY, Fixture
 from litterbox.errors import LitterboxError
 from litterbox import layout
+from litterbox.parts import checkout
+from litterbox.git import lfs_locks
+from litterbox.parts import lifecycle
+from litterbox.parts import part_status
+from litterbox.git import remote
+from litterbox.git import runner
 
 
 class TestTemplates(Fixture, unittest.TestCase):
@@ -33,7 +38,7 @@ class TestTemplates(Fixture, unittest.TestCase):
             self.assertEqual([r.roles for r in t.rows], [[ENGINEER], [ENGINEER], [MANAGER, CHIEF]])
             self.assertEqual((t.allow_same_person, t.requester_may_sign), (True, False))
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
-        self.assertEqual(eng.get_locks(self.a), {})
+        self.assertEqual(lfs_locks.get_locks(self.a), {})
 
     def test_a_vault_with_a_workflow_asks_for_the_new_version(self):
         from litterbox.vault import config
@@ -55,16 +60,16 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertEqual(config.load(self.a)["min_litterbox_version"], wf.MIN_VERSION)
 
     def test_a_failed_save_leaves_things_alone(self):
-        real = eng._push_with_retry
-        eng._push_with_retry = lambda repo, attempts=3: (_ for _ in ()).throw(LitterboxError("offline"))
-        self.addCleanup(setattr, eng, "_push_with_retry", real)
+        real = remote.push_with_retry
+        remote.push_with_retry = lambda repo, attempts=3: (_ for _ in ()).throw(LitterboxError("offline"))
+        self.addCleanup(setattr, remote, "push_with_retry", real)
         with self.assertRaises(LitterboxError):
             with self.user("Alex"):
                 wf.edit_templates(self.a, lambda t, d: wf.set_template(t, wf.RELEASE, "T", [[QUALITY]]), "x")
-        eng._push_with_retry = real
+        remote.push_with_retry = real
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
         self.assertFalse((self.a / layout.WORKFLOWS_FILE).exists())
-        self.assertEqual(eng.get_locks(self.a), {})
+        self.assertEqual(lfs_locks.get_locks(self.a), {})
 
     def test_a_member_cannot_change_workflows(self):
         with self.assertRaises(LitterboxError) as ctx:
@@ -155,14 +160,14 @@ class TestTemplates(Fixture, unittest.TestCase):
 
 class TestWithoutAWorkflowThingsWorkAsBefore(Fixture, unittest.TestCase):
     def test_plain_release(self):
-        self.do("Alex", eng.release, PART)
+        self.do("Alex", lifecycle.release, PART)
         self.assertEqual(self.record().status, registry.STATUS_RELEASED)
 
     def test_direct_actions_are_refused_once_there_are_templates(self):
-        for action, call in ((wf.RELEASE, lambda r: eng.release(r, PART)),
-                             (wf.MAKE_COTS, lambda r: eng.make_cots(r, PART)),
-                             (wf.VOID, lambda r: eng.void(r, PART, "no")),
-                             (wf.REOPEN, lambda r: eng.reopen(r, PART, "no"))):
+        for action, call in ((wf.RELEASE, lambda r: lifecycle.release(r, PART)),
+                             (wf.MAKE_COTS, lambda r: lifecycle.make_cots(r, PART)),
+                             (wf.VOID, lambda r: lifecycle.void(r, PART, "no")),
+                             (wf.REOPEN, lambda r: lifecycle.reopen(r, PART, "no"))):
             with self.subTest(action=action):
                 self.set_template(action)
                 with self.assertRaises(LitterboxError) as ctx:
@@ -189,8 +194,8 @@ class TestRequesting(Fixture, unittest.TestCase):
         self.assertEqual(p["signoffs"], [])
         self.assertEqual(record.history[-1]["event"], "release_requested")
         self.assertEqual(record.history[-1]["action"], "release")
-        self.assertEqual(eng.get_locks(self.a), {})
-        row = next(r for r in self.do("Bea", eng.get_status) if r.pn == PART)
+        self.assertEqual(lfs_locks.get_locks(self.a), {})
+        row = next(r for r in self.do("Bea", part_status.get_status) if r.pn == PART)
         self.assertEqual(row.kind, "pending")
         self.assertEqual(row.state, "Release pending 0/2: waiting on Bea Jones, Alex Smith")
 
@@ -206,7 +211,7 @@ class TestRequesting(Fixture, unittest.TestCase):
         self.second_part()
         self.set_template()
         with self.user("Bea"):
-            eng.checkout(self.b, PART2)
+            checkout.checkout(self.b, PART2)
         with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART, PART2], wf.RELEASE, "T", ["bea", "alex"])
         self.assertIn(str(PART2), str(ctx.exception))
@@ -264,7 +269,7 @@ class TestRequesting(Fixture, unittest.TestCase):
         self.assertIn("Manager or Chief", wf.slot_text(self.record().pending["slots"][0]))
 
     def test_reopen_and_void_need_a_reason(self):
-        self.do("Alex", eng.release, PART)
+        self.do("Alex", lifecycle.release, PART)
         self.set_template(wf.REOPEN, rows=((MANAGER,),))
         with self.assertRaises(LitterboxError) as ctx:
             self.do("Alex", wf.request, [PART], wf.REOPEN, "T", ["cy"])
@@ -281,7 +286,7 @@ class TestRequesting(Fixture, unittest.TestCase):
     def test_a_pending_part_cannot_be_checked_out_or_changed(self):
         self.request()
         self.get_latest("Bea")
-        for user, func in (("Alex", lambda r: eng.checkout(r, PART)), ("Bea", lambda r: eng.checkout(r, PART)),
+        for user, func in (("Alex", lambda r: checkout.checkout(r, PART)), ("Bea", lambda r: checkout.checkout(r, PART)),
                            ("Alex", lambda r: wf.request(r, [PART], wf.RELEASE, "T", ["bea", "alex"]))):
             with self.subTest(user=user):
                 with self.user(user), self.assertRaises(LitterboxError):
@@ -310,7 +315,7 @@ class TestSigning(Fixture, unittest.TestCase):
         self.assertEqual(r.completed, [PART])
         record = self.record()
         self.assertEqual((record.status, record.released_revision, record.pending), (registry.STATUS_RELEASED, "A", {}))
-        self.assertEqual(eng.get_locks(self.a), {})
+        self.assertEqual(lfs_locks.get_locks(self.a), {})
 
     def test_the_trail_is_kept_in_approvals(self):
         self.request()
@@ -328,13 +333,13 @@ class TestSigning(Fixture, unittest.TestCase):
     def test_a_batch_is_uploaded_once_per_step_not_once_per_part(self):
         self.second_part()
         self.set_template()
-        seen, real = [], eng.run
+        seen, real = [], runner.run
 
         def recording(command, repo, quiet=False):
             seen.append(" ".join(command))
             return real(command, repo, quiet)
 
-        replace_run = mock.patch.object(eng, "run", recording)
+        replace_run = mock.patch.object(runner, "run", recording)
         with replace_run:
             self.request(pns=(PART, PART2))                       # one upload for the request
             requested = sum(1 for c in seen if c == "git push")
@@ -384,7 +389,7 @@ class TestSigning(Fixture, unittest.TestCase):
             wf._finish_many = real
         self.assertEqual((r.signed, r.completed, r.errors), ([PART], [], {PART: "offline"}))
         self.get_latest("Alex")
-        row = next(x for x in self.do("Alex", eng.get_status) if x.pn == PART)
+        row = next(x for x in self.do("Alex", part_status.get_status) if x.pn == PART)
         self.assertEqual((row.kind, row.state), ("pending", "Release approved - ready to complete"))
         self.assertEqual(self.do("Alex", wf.complete, PART), [DRW, PRT])
         self.assertEqual(self.record().status, registry.STATUS_RELEASED)
@@ -407,7 +412,7 @@ class TestSigning(Fixture, unittest.TestCase):
         git(self.b, "checkout", "--", str(PRT))
 
     def test_reopen_completes_automatically(self):
-        self.do("Alex", eng.release, PART)
+        self.do("Alex", lifecycle.release, PART)
         self.set_template(wf.REOPEN, rows=((MANAGER, CHIEF),))
         self.do("Alex", wf.request, [PART], wf.REOPEN, "T", ["cy"], reason="Drawing error")
         r = self.do("Cy", wf.sign_off, [PART])
@@ -544,7 +549,7 @@ def identity_for(person_id, directory, access=people.MEMBER):
 
 class TestTasks(Fixture, unittest.TestCase):
     def rows(self, user="Alex"):
-        return self.do(user, eng.get_status)
+        return self.do(user, part_status.get_status)
 
     def tasks(self, who, user="Alex"):
         return wf.tasks_from_rows(self.rows(user), identity_for(who, people.load(self.a)))

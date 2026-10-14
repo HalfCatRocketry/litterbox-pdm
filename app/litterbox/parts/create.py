@@ -33,12 +33,10 @@ Command line:
 import argparse
 import os
 import sys
-import tempfile
 from functools import wraps
 from pathlib import Path
 
 from litterbox.vault import config
-from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from dataclasses import dataclass
@@ -46,6 +44,11 @@ from dataclasses import dataclass
 from litterbox.core.pn import PN, PNError, check_base, check_new_base, check_org, check_variant, format_base, format_variant
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
+from litterbox.parts import permission_check
+from litterbox.git import read_only
+from litterbox.git import repository
+from litterbox.git import committing
+from litterbox.git import runner
 
 MAX_NAME = 100
 MAX_DESCRIPTION = 500
@@ -94,7 +97,7 @@ def _org(repo, org):
 
 def _sync(repo):
     """Download the latest records. Local edits to checked-out files are set aside and put back."""
-    eng.run(["git", "pull", "--rebase", "--autostash"], repo)
+    runner.run(["git", "pull", "--rebase", "--autostash"], repo)
 
 
 def _describe(repo, org, base, variant=None):
@@ -120,8 +123,8 @@ def _undo_creation(repo, record_path, committed):
     """
     try:
         if committed:
-            eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
-        eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", record_path], repo)
+            runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
+        runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", record_path], repo)
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: could not fully undo the creation of {record_path}: {e}")
     path = Path(repo) / record_path
@@ -143,11 +146,11 @@ def _create(repo, name, description, org, choose):
     choose() is called again after every rejected push, so it always works from
     the newest records. It raises CreateError if a number typed in by hand is taken.
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     name = _clean_name(name)
     description = _clean_description(description)
-    user = eng.get_user(repo)
-    eng._check_permission(repo, user, "create")
+    user = repository.get_user(repo)
+    permission_check.check_permission(repo, user, "create")
     try:
         _sync(repo)
     except LitterboxError as e:
@@ -158,7 +161,7 @@ def _create(repo, name, description, org, choose):
     last_error = None
     for _attempt in range(ATTEMPTS):
         pn = choose(org)
-        record_path = eng.record_relpath(pn)
+        record_path = registry.record_relpath(pn)
         try:
             registry.create_record(repo, pn, name, user, description=description)
         except registry.PNExistsError:
@@ -166,10 +169,10 @@ def _create(repo, name, description, org, choose):
 
         committed = False
         try:
-            eng.run(["git", "add", "--", record_path], repo)
-            eng.run(["git", "commit", "-m", f"{pn}: Created - {name}", "--", record_path], repo)
+            runner.run(["git", "add", "--", record_path], repo)
+            runner.run(["git", "commit", "-m", f"{pn}: Created - {name}", "--", record_path], repo)
             committed = True
-            eng.run(["git", "push"], repo)
+            runner.run(["git", "push"], repo)
         except LitterboxError as e:
             _undo_creation(repo, record_path, committed)
             if not committed:
@@ -187,7 +190,7 @@ def _create(repo, name, description, org, choose):
             _undo_creation(repo, record_path, committed)
             raise
 
-        eng.enforce_read_only(repo)          # the new record is read-only until someone checks it out
+        read_only.enforce_read_only(repo)          # the new record is read-only until someone checks it out
         return pn
 
     raise CreateError(f"Could not create a number after {ATTEMPTS} tries. The last error was:\n\n{last_error}")
@@ -266,20 +269,12 @@ def _plan_batch(repo, specs, org):
     return planned
 
 
-def _write_pathspec(paths):
-    """A list of paths in a temporary file, for git's --pathspec-from-file (avoids very long command lines)."""
-    handle = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8", newline="\n")
-    with handle:
-        handle.write("\n".join(paths) + "\n")
-    return handle.name
-
-
 def _undo_batch(repo, record_paths, committed, pathspec):
     """Take back a batch that did not get pushed: our commit and our files. Never raises."""
     try:
         if committed:
-            eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
-        eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
+            runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
+        runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: could not fully undo the batch: {e}")
     for record_path in record_paths:
@@ -312,7 +307,7 @@ class NumbersTaken(CreateError):
 @_friendly
 def sync_latest(repo):
     """Download the latest records (the same step every creation starts with)."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     try:
         _sync(repo)
     except LitterboxError as e:
@@ -324,7 +319,7 @@ def sync_latest(repo):
 def plan_numbers(repo, specs, org=None):
     """The PNs a batch would get right now, in order. Reads the local copy only and writes nothing,
     so nothing is reserved: the numbers become yours only when create_planned pushes them."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     return _plan_batch(repo, list(specs), _org(repo, org))
 
 
@@ -339,12 +334,12 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
     If the push is rejected because the numbers were taken meanwhile, NumbersTaken is raised
     after the newest records have been downloaded, so the caller can plan again.
     """
-    eng.validate_repo(repo)
-    user = eng.get_user(repo)
-    eng._check_permission(repo, user, "create")
-    record_paths = [eng.record_relpath(pn) for pn in planned]
+    repository.validate_repo(repo)
+    user = repository.get_user(repo)
+    permission_check.check_permission(repo, user, "create")
+    record_paths = [registry.record_relpath(pn) for pn in planned]
     extras = list(extra_paths)
-    pathspec = _write_pathspec(record_paths + extras)
+    pathspec = committing.write_pathspec(record_paths + extras)
     written, committed = [], False
     try:
         try:
@@ -354,14 +349,14 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
                                            cots=spec.cots, imported=spec.imported, import_path=spec.import_path)
                 except registry.PNExistsError:
                     raise NumbersTaken(f"{pn} already exists in your copy of the vault.") from None
-                written.append(eng.record_relpath(pn))
+                written.append(registry.record_relpath(pn))
             first, last = min(planned), max(planned)
             text = message or (f"Created {len(planned)} parts: {first} to {last}" if len(planned) > 1
                                else f"{first}: Created - {specs[0].name}")
-            eng.run(["git", "add", f"--pathspec-from-file={pathspec}"], repo)
-            eng.run(["git", "commit", "-m", text, f"--pathspec-from-file={pathspec}"], repo)
+            runner.run(["git", "add", f"--pathspec-from-file={pathspec}"], repo)
+            runner.run(["git", "commit", "-m", text, f"--pathspec-from-file={pathspec}"], repo)
             committed = True
-            eng.run(["git", "push"], repo)
+            runner.run(["git", "push"], repo)
         except NumbersTaken:
             _undo_batch(repo, written, committed, pathspec)
             raise
@@ -383,7 +378,7 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
             os.unlink(pathspec)
         except OSError:
             pass
-    eng.enforce_read_only(repo)
+    read_only.enforce_read_only(repo)
     return list(planned)
 
 
@@ -400,10 +395,10 @@ def create_many(repo, specs, org=None, message=None):
     specs = list(specs)
     if not specs:
         return []
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     cleaned = clean_specs(specs)
-    user = eng.get_user(repo)
-    eng._check_permission(repo, user, "create")
+    user = repository.get_user(repo)
+    permission_check.check_permission(repo, user, "create")
     try:
         _sync(repo)
     except LitterboxError as e:
@@ -414,8 +409,8 @@ def create_many(repo, specs, org=None, message=None):
     last_error = None
     for _attempt in range(ATTEMPTS):
         planned = _plan_batch(repo, cleaned, org)
-        record_paths = [eng.record_relpath(pn) for pn in planned]
-        pathspec = _write_pathspec(record_paths)
+        record_paths = [registry.record_relpath(pn) for pn in planned]
+        pathspec = committing.write_pathspec(record_paths)
         written, committed = [], False
         try:
             for pn, spec in zip(planned, cleaned):
@@ -424,14 +419,14 @@ def create_many(repo, specs, org=None, message=None):
                                            cots=spec.cots, imported=spec.imported, import_path=spec.import_path)
                 except registry.PNExistsError:
                     raise CreateError(f"{pn} already exists in your copy of the vault.") from None
-                written.append(eng.record_relpath(pn))
+                written.append(registry.record_relpath(pn))
             first, last = min(planned), max(planned)
             text = message or (f"Created {len(planned)} parts: {first} to {last}" if len(planned) > 1
                                else f"{first}: Created - {cleaned[0].name}")
-            eng.run(["git", "add", f"--pathspec-from-file={pathspec}"], repo)
-            eng.run(["git", "commit", "-m", text, f"--pathspec-from-file={pathspec}"], repo)
+            runner.run(["git", "add", f"--pathspec-from-file={pathspec}"], repo)
+            runner.run(["git", "commit", "-m", text, f"--pathspec-from-file={pathspec}"], repo)
             committed = True
-            eng.run(["git", "push"], repo)
+            runner.run(["git", "push"], repo)
         except LitterboxError as e:
             _undo_batch(repo, written, committed, pathspec)
             if not committed:
@@ -453,7 +448,7 @@ def create_many(repo, specs, org=None, message=None):
             except OSError:
                 pass
 
-        eng.enforce_read_only(repo)
+        read_only.enforce_read_only(repo)
         return planned
 
     raise CreateError(f"Could not create the parts after {ATTEMPTS} tries. The last error was:\n\n{last_error}")
@@ -505,7 +500,7 @@ def new_variant(repo, base, name, description="", variant=None, org=None):
 @_friendly
 def suggest_part_number(repo, org=None):
     """The part number New Part would use right now if the box were left empty."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     return registry.next_free_base(repo, _org(repo, org), config.get_start_number(repo))
 
 
@@ -516,7 +511,7 @@ def suggest_numbers(repo, base=None, org=None):
     `base` is the part number typed so far, if any. The variant is 1 unless that
     part number is already in use, in which case it is the lowest unused variant.
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     org = _org(repo, org)
     number = check_base(base) if base is not None else registry.next_free_base(
         repo, org, config.get_start_number(repo))
@@ -539,7 +534,7 @@ def check_numbers(repo, base=None, variant=None, org=None):
     Reads your local copy only. New Part does the same check again for real, so
     this is only for telling the user early.
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     org = _org(repo, org)
     number = check_new_base(base) if base is not None else check_new_base(
         registry.next_free_base(repo, org, config.get_start_number(repo)))
@@ -557,14 +552,14 @@ def check_numbers(repo, base=None, variant=None, org=None):
 @_friendly
 def suggest_variant_number(repo, base, org=None):
     """The variant number New Part would use right now for this part number."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     return registry.next_free_variant(repo, check_base(base), _org(repo, org))
 
 
 @_friendly
 def list_variants(repo, base, org=None):
     """The records of every variant of a part number, in order (for showing what already exists)."""
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     return registry.load_variants(repo, check_base(base), _org(repo, org))
 
 

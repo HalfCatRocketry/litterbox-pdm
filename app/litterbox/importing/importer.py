@@ -51,7 +51,6 @@ from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.parts import create
-from litterbox.parts import engine as eng
 from litterbox.importing import manifest as manifest_module
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
@@ -61,6 +60,10 @@ from litterbox import diagnostics
 from litterbox import layout
 from litterbox.cad import file_types
 from litterbox.util import journal as journal_file
+from litterbox.git import read_only
+from litterbox.git import committing
+from litterbox.git import repository
+from litterbox.git import runner
 
 JOURNAL_NAME = "litterbox-import.json"
 JOURNAL_VERSION = 1
@@ -208,30 +211,18 @@ def _clear_journal(repo):
     journal_file.clear(repo, JOURNAL_NAME)
 
 
-def _git_out(repo, *args):
-    try:
-        return eng.run(["git", *args], repo, quiet=True)
-    except LitterboxError:
-        return ""
-
-
 def _unpushed(repo):
     try:
-        return int(_git_out(repo, "rev-list", "--count", "@{u}..HEAD") or 0)
+        return int(repository.quiet_output(repo, "rev-list", "--count", "@{u}..HEAD") or 0)
     except ValueError:
         return 0
-
-
-def _tracked(repo, rel):
-    """True if the latest commit has this file (so it belongs to the vault, not to a half-finished import)."""
-    return bool(_git_out(repo, "ls-tree", "HEAD", "--", rel))
 
 
 def _our_commit(repo, token):
     """The hash of the commit this import made (found by the token in its message), or ''."""
     if not token:
         return ""
-    return _git_out(repo, "log", "-1", "--format=%H", f"--grep={token}", "HEAD")
+    return repository.quiet_output(repo, "log", "-1", "--format=%H", f"--grep={token}", "HEAD")
 
 
 def recover(repo, log=print):
@@ -241,7 +232,7 @@ def recover(repo, log=print):
     vault does not own (nothing that is in the latest commit is ever touched). If the note shows
     the import's commit had in fact reached the vault, the import is kept ('finished').
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     journal = _read_journal(repo)
     if journal is None:
         return "nothing"
@@ -250,20 +241,20 @@ def recover(repo, log=print):
     if commit:
         if _unpushed(repo) == 0:
             _clear_journal(repo)
-            eng.enforce_read_only(repo)
+            read_only.enforce_read_only(repo)
             log("The unfinished import had actually reached the vault, so it was kept. "
                 "Its manifest was not updated.")
             return "finished"
-        if _git_out(repo, "rev-parse", "HEAD") != commit:
+        if repository.quiet_output(repo, "rev-parse", "HEAD") != commit:
             raise ImportFailed("An unfinished import left a commit that has not been pushed, but it is no longer "
                                "the latest commit, so Litterbox will not undo it. Ask for help before continuing.")
-        eng.run(["git", "reset", "--soft", "HEAD~1"], repo)
-    ours = [rel for rel in files + records if not _tracked(repo, rel)]
+        runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
+    ours = [rel for rel in files + records if not repository.in_head(repo, rel)]
     log(f"Removing {len(ours)} file(s) left by an unfinished import...")
     if ours:
-        pathspec = create._write_pathspec(ours)
+        pathspec = committing.write_pathspec(ours)
         try:
-            eng.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
+            runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
         except LitterboxError as e:
             log(f"WARNING: could not fully clean git's index: {e}")
         finally:
@@ -284,7 +275,7 @@ def recover(repo, log=print):
         raise ImportFailed("Some files from an unfinished import could not be deleted (are they open in "
                            "SolidWorks?). Close them and try again:\n" + "\n".join(problems[:8]))
     _clear_journal(repo)
-    eng.enforce_read_only(repo)
+    read_only.enforce_read_only(repo)
     return "cleaned"
 
 
@@ -936,7 +927,7 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
     Writes nothing to the vault. Returns a Prepared with a `proposal` (the table to show).
     Call close() on it when done, whether or not the import went ahead.
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     status = recover(repo, log)
     if status != "nothing":
         log(f"(An earlier import was interrupted; it was dealt with: {status}.)")
@@ -1028,7 +1019,7 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
                           renumbered=renumbered)
 
         new_files = [_relative(repo, plan.copies[p]) for p in plan.order]
-        record_paths = [eng.record_relpath(pn) for pn in pns]
+        record_paths = [registry.record_relpath(pn) for pn in pns]
         token = uuid.uuid4().hex[:12]
         noun = "COTS parts" if prepared.cots else "parts"
         message = ((f"Imported {len(pns)} {noun}: {min(pns)} to {max(pns)}" if len(pns) > 1
@@ -1052,7 +1043,7 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
             recover(repo, log)          # removes exactly what this import copied
             raise
         _clear_journal(repo)
-        eng.enforce_read_only(repo)
+        read_only.enforce_read_only(repo)
         for entry in proposal.entries:                      # the manifest keeps any edits made in the table
             entry.item.name, entry.item.description = entry.name, entry.description
         manifest_module.record_assignments(mf, items, pns)

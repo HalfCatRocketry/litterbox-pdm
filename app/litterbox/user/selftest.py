@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 APP_MODULES = ("litterbox.vault.config", "litterbox.parts.create", "litterbox.gui.logic.gui_logic",
-               "litterbox.importing.session", "litterbox.importing.importer", "litterbox.parts.engine",
+               "litterbox.importing.session", "litterbox.importing.importer", "litterbox.parts.checkin",
                "litterbox.importing.manifest", "litterbox.cad.opener", "litterbox.team.people", "litterbox.core.pn",
                "litterbox.references.references", "litterbox.records.registry", "litterbox.parts.revise",
                "litterbox.importing.scan", "litterbox.user.settings", "litterbox.team.commit_signing",

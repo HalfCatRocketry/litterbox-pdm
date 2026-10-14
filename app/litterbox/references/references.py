@@ -24,13 +24,19 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from litterbox.parts import engine as eng
 from litterbox.core import pn as pn_module
 from litterbox.records import registry
 from litterbox.core.pn import PN
 from litterbox.errors import LitterboxError
 from litterbox.cad import file_types
 from litterbox.cad.solidworks import com
+from litterbox.parts import batch_core
+from litterbox.parts import checkin
+from litterbox.parts import checkout
+from litterbox.git import lfs_locks
+from litterbox.git import read_only
+from litterbox.git import repository
+from litterbox.parts import undoing
 
 
 # Why a reference is flagged
@@ -104,7 +110,7 @@ def read_assembly_references(repo, pn, revision, backend, files=None):
 
 
 def make_reader(backend=None, log=None):
-    """A function to hand to engine.checkin(): reads an assembly's references when its files changed.
+    """A function to hand to checkin.checkin(): reads an assembly's references when its files changed.
 
     reader(repo, pn, revision, changed_files) -> list of stems, or None (nothing to update)
     A SolidWorks that can't be reached gives a warning and None: the check-in still goes ahead.
@@ -235,7 +241,7 @@ def _use(records, parent_record, revision, stem):
 def uses(repo, pn, revision=None, records=None):
     """What the part's assembly (at `revision`, default the working one) uses: a list of Use."""
     records = records if records is not None else LazyRecords(repo)
-    pn = eng._as_pn(pn)
+    pn = batch_core.as_pn(pn)
     record = records.get(pn)
     if record is None:
         raise ReferencesError(f"There is no record for {pn}.")
@@ -247,7 +253,7 @@ def uses(repo, pn, revision=None, records=None):
 def where_used(repo, pn, records=None):
     """Every assembly revision that uses this part (any revision of it): a list of Use."""
     records = records if records is not None else load_records(repo)
-    pn = eng._as_pn(pn)
+    pn = batch_core.as_pn(pn)
     found = []
     for parent_record in records.values():
         for revision, stems in parent_record.references.items():
@@ -296,7 +302,7 @@ def outdated_parts(repo, records=None):
 def release_warnings(repo, pn, records=None):
     """Sentences about references that make a release a bad idea (empty if none)."""
     problems = []
-    record = (records or LazyRecords(repo)).get(eng._as_pn(pn))
+    record = (records or LazyRecords(repo)).get(batch_core.as_pn(pn))
     if record is not None and needs_update(repo, record):
         problems.append("The list of parts it uses is out of date, so these checks may be wrong. "
                         "Use References... then Update references.")
@@ -376,7 +382,7 @@ def replace_references(repo, replacements, comment="Updated to the latest releas
     never leaves it half done. All the check-outs share one download and all the check-ins share one upload.
     Returns a ReplaceResult per assembly.
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     by_parent = {}
     for item in replacements:
         by_parent.setdefault(item.parent, []).append(item)
@@ -402,7 +408,7 @@ def _plan_replacement(repo, parent, items, locks):
         record = registry.load(repo, parent)
         if record.status != registry.STATUS_IN_WORK or record.cots:
             return ReplaceResult(parent, "skipped", f"Rev {record.revision} is {record.status}, so it can't be changed.")
-        lock = locks.get(eng.record_relpath(parent).lower())
+        lock = locks.get(registry.record_relpath(parent).lower())
         if lock and lock[0] != "you":
             return ReplaceResult(parent, "skipped", f"Checked out by {lock[1]}.")
 
@@ -416,7 +422,7 @@ def _plan_replacement(repo, parent, items, locks):
             if new_rel is None:
                 return ReplaceResult(parent, "failed", f"Rev {latest} of {item.child} has no model file here. "
                                                          "Run Get Latest.")
-            if eng.is_pointer(Path(repo) / new_rel):
+            if read_only.is_pointer(Path(repo) / new_rel):
                 return ReplaceResult(parent, "failed", f"{new_rel} has not been downloaded. Run Get Latest.")
             old_name = pn_module.filename(item.child, item.old_revision, file_types.extension(new_rel))
             edits.append((item, old_name, os.path.join(str(repo), new_rel)))
@@ -431,7 +437,7 @@ def _plan_replacement(repo, parent, items, locks):
 def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
     jobs = {}
     try:
-        locks = eng.get_locks(repo, strict=True)
+        locks = lfs_locks.get_locks(repo, strict=True)
     except LitterboxError as e:
         for parent in by_parent:
             results[parent] = ReplaceResult(parent, "failed", str(e))
@@ -447,7 +453,7 @@ def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
     if ours:
         log("Checking out " + ", ".join(map(str, ours)) + " to update their references")
         try:
-            _done, failed = eng.checkout_many(repo, ours)
+            _done, failed = checkout.checkout_many(repo, ours)
         except Exception as e:
             failed = [(parent, str(e)) for parent in ours]
         for parent, why in failed:
@@ -477,7 +483,7 @@ def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
                 ours.remove(parent)
     if undo:
         try:
-            eng.undo_checkout_many(repo, undo)
+            undoing.undo_checkout_many(repo, undo)
         except Exception as e:
             log(f"WARNING: could not undo the check-out of {', '.join(map(str, undo))}: {e}")
 
@@ -487,7 +493,7 @@ def _replace_in_all(repo, by_parent, comment, backend, reader, log, results):
                                             "Changed in your copy. Check it in to save the change.", names)
     if ours:
         try:
-            _done, failed = eng.checkin_many(repo, ours, comment, references_reader=reader)
+            _done, failed = checkin.checkin_many(repo, ours, comment, references_reader=reader)
         except Exception as e:
             failed = [(parent, str(e)) for parent in ours]
         failures = dict(failed)
@@ -516,18 +522,18 @@ def rescan(repo, pns=None, backend=None, log=print):
     whose files have not been downloaded, is skipped (the reason is in the result).
     Returns {PN: 'updated' | 'unchanged' | 'skipped: why'}.
     """
-    eng.validate_repo(repo)
+    repository.validate_repo(repo)
     owns = backend is None
     results, edits = {}, {}
     try:
         index = registry.cad_index(repo)
-        locks = eng.get_locks(repo, strict=True)
+        locks = lfs_locks.get_locks(repo, strict=True)
         for pn in (pns or registry.list_pns(repo)):
-            pn = eng._as_pn(pn)
+            pn = batch_core.as_pn(pn)
             revisions = index.get(pn, {})
             if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for fs in revisions.values() for f in fs):
                 continue
-            lock = locks.get(eng.record_relpath(pn).lower())
+            lock = locks.get(registry.record_relpath(pn).lower())
             if lock:
                 results[pn] = f"skipped: checked out by {'you' if lock[0] == 'you' else lock[1]}. Check it in first."
                 log(f"{pn}: {results[pn]}")
@@ -547,7 +553,7 @@ def rescan(repo, pns=None, backend=None, log=print):
                 log(f"{pn}: {results[pn]}")
         if edits:                                           # one download and one upload for every record
             try:
-                batch = eng._edit_records(repo, [(pn, "checkin", edit, f"{pn}: Updated list of parts used")
+                batch = batch_core.edit_records(repo, [(pn, "checkin", edit, f"{pn}: Updated list of parts used")
                                                  for pn, edit in edits.items()])
                 errors, notice = batch.errors, batch.notice
             except LitterboxError as e:
@@ -570,7 +576,7 @@ def _rescan_one(repo, pn, revisions, backend):
             if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in files):
                 continue
             for f in files:
-                if eng.is_pointer(Path(repo) / f):
+                if read_only.is_pointer(Path(repo) / f):
                     raise ReferencesError(f"{f} has not been downloaded. Run Get Latest.")
             found[revision] = read_assembly_references(repo, pn, revision, backend, files)
     current = registry.load(repo, pn)

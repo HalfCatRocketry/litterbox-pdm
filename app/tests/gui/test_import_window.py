@@ -193,7 +193,7 @@ class TeamWiring(unittest.TestCase):
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
         from litterbox.team import people
-        from litterbox.parts.engine import PartStatus
+        from litterbox.parts.part_status import PartStatus
         from litterbox.core.pn import PN
         self.people = people
         self.pn = PN("HCR", 7, 1)
@@ -485,7 +485,7 @@ class WorkflowWiring(unittest.TestCase):
     def test_without_a_workflow_release_works_as_before(self):
         self.templates = {}
         released = []
-        replace(self, self.gui.engine, "release_many", lambda repo, pns: released.append(pns) or ([], []))
+        replace(self, self.gui.lifecycle, "release_many", lambda repo, pns: released.append(pns) or ([], []))
         self.app._confirm_release("C:/vault", [self.plan(1)])
         self.tasks.pop()[0]()
         self.assertEqual(released, [["HCR-00001-001"]])
@@ -495,14 +495,14 @@ class WorkflowWiring(unittest.TestCase):
         self.targets("HCR-00001-001", "HCR-00002-001")
         self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001")}
         looked = []
-        replace(self, self.gui.engine, "release_plans", lambda repo, pns: looked.append(pns) or "plans")
+        replace(self, self.gui.planning, "release_plans", lambda repo, pns: looked.append(pns) or "plans")
         self.app.release()
         work, _done, on_success = self.tasks.pop()
         self.assertEqual(work(), "plans")
         self.assertEqual(looked, [["HCR-00001-001", "HCR-00002-001"]])
 
         released = []
-        replace(self, self.gui.engine, "release_many", lambda repo, pns: released.append(pns) or ([], []))
+        replace(self, self.gui.lifecycle, "release_many", lambda repo, pns: released.append(pns) or ([], []))
         self.app._confirm_release("C:/vault", [self.plan(1), self.plan(2), self.plan(3, False, ["Checked out by Bea."])])
         question = self.shown("askokcancel")[-1][1]
         self.assertIn("Release these 2 parts", question[1])
@@ -517,7 +517,7 @@ class WorkflowWiring(unittest.TestCase):
         self.app._ask_reason = lambda text, title: "Because"
         got = []
         for name in ("void_many", "reopen_many"):
-            replace(self, self.gui.engine, name, lambda repo, pns, reason, name=name: got.append((name, pns, reason))
+            replace(self, self.gui.lifecycle, name, lambda repo, pns, reason, name=name: got.append((name, pns, reason))
                     or ([], []))
         self.app.void()
         self.tasks.pop()[0]()
@@ -768,7 +768,7 @@ class TickAndSaveWiring(unittest.TestCase):
 
     def _buttons(self):
         from types import SimpleNamespace
-        from litterbox.parts.engine import PartStatus
+        from litterbox.parts.part_status import PartStatus
         app = self.app
         app.jobs = fake_jobs()
         app.rows_by_pn = {self.PN.parse if False else None: None}
@@ -973,7 +973,7 @@ class OpenWiring(unittest.TestCase):
     def setUp(self):
         self.box = FakeBox()
         self.gui = load_gui_with_fakes(self.box)
-        from litterbox.parts.engine import PartStatus
+        from litterbox.parts.part_status import PartStatus
         from litterbox.core.pn import PN
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=list(self.B), revision="B",
@@ -1081,7 +1081,7 @@ class OpenWiring(unittest.TestCase):
 class ListAndFilenameWiring(unittest.TestCase):
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
-        from litterbox.parts.engine import PartStatus
+        from litterbox.parts.part_status import PartStatus
         from litterbox.core.pn import PN
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Bracket", "in_work", "Available (Rev A released)", "ok",
@@ -1103,7 +1103,7 @@ class ListAndFilenameWiring(unittest.TestCase):
                          ["\u2610", "00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
 
     def test_a_voided_part_that_is_hidden_loses_its_tick(self):
-        from litterbox.parts.engine import PartStatus
+        from litterbox.parts.part_status import PartStatus
         voided = PartStatus(self.pn, "Bracket", "void", "Void", "void")
         for shown, expected in ((0, set()), (1, {"HCR-00007-001"})):
             app = self.gui.App.__new__(self.gui.App)

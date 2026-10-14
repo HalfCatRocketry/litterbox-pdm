@@ -4,7 +4,7 @@ litterbox_gui.py - the Litterbox window.
 Run:            python app/main.py
 
 The window is deliberately thin. What the buttons are allowed to do lives in
-gui/logic/gui_logic.py, and the git work lives in parts/engine.py.
+gui/logic/gui_logic.py, the actions on parts in parts/, and the git work in git/.
 """
 
 import os
@@ -22,7 +22,6 @@ import customtkinter as ctk
 
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.cad import opener
-from litterbox.parts import engine
 from litterbox.vault import config
 from litterbox.records import registry
 from litterbox.team import people
@@ -47,6 +46,16 @@ from litterbox.core.pn import PNError, check_org
 from litterbox.core.pn import parse as parse_pn
 from litterbox.errors import LitterboxError, NothingToSaveError
 from litterbox import diagnostics
+from litterbox.parts import checkin
+from litterbox.parts import checkout
+from litterbox.parts import get_latest
+from litterbox.parts import lifecycle
+from litterbox.parts import part_changes
+from litterbox.parts import part_details
+from litterbox.parts import part_status
+from litterbox.parts import planning
+from litterbox.git import read_only
+from litterbox.parts import undoing
 
 # Set to True to download the latest changes every time the app opens.
 # (Off by default: a download can replace files that are open in SolidWorks.)
@@ -3627,7 +3636,7 @@ class App(ctk.CTk):
                                                 "then try again.")
             vault_clone.clone(url.strip(), target)
             try:
-                engine.enforce_read_only(target)
+                read_only.enforce_read_only(target)
             except LitterboxError as e:
                 diagnostics.LOG(f"WARNING: could not set the files read-only: {e}")
             return target
@@ -3974,7 +3983,7 @@ class App(ctk.CTk):
             started = time.monotonic()
             with ThreadPoolExecutor(max_workers=2) as pool:      # the list and "who am I" don't depend on each other
                 who_job = pool.submit(find_out_who)
-                rows = engine.get_status(repo)
+                rows = part_status.get_status(repo)
                 who = who_job.result()
             if diagnostics.DEBUG:
                 diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
@@ -4038,7 +4047,7 @@ class App(ctk.CTk):
     # ------------------------------------------------------------------
     def get_latest(self):
         repo = self.repo()
-        self.run_task(lambda: engine.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
+        self.run_task(lambda: get_latest.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
                       on_success=lambda changed: self._warn_open_files(changed))
 
     def new_part(self):
@@ -4056,7 +4065,7 @@ class App(ctk.CTk):
             pn = create.new_part(repo, request["name"], request["description"],
                                  base=request["base"], variant=request["variant"], org=org)
             try:
-                engine.checkout(repo, pn)            # a new part starts out checked out to its creator
+                checkout.checkout(repo, pn)            # a new part starts out checked out to its creator
             except LitterboxError as e:
                 return pn, str(e)
             return pn, ""
@@ -4475,7 +4484,7 @@ class App(ctk.CTk):
     def check_out(self):
         plan = self._plan("checkout")
         if plan:
-            self._run_batch("checkout", plan, engine.checkout_many)
+            self._run_batch("checkout", plan, checkout.checkout_many)
 
     def _ask_comment_and_check_in(self, action, plan, allow_unchanged=frozenset()):
         """Ask for a comment, then check in (or save progress on) the planned parts."""
@@ -4487,7 +4496,7 @@ class App(ctk.CTk):
         comment = comment.strip() or "Update"
         reader = references.make_reader(log=lambda text: self.queue.put(("log", text)))
         snapshot = self._watch_files(plan.targets)
-        self._run_batch(action, plan, lambda repo, pns: engine.checkin_many(
+        self._run_batch(action, plan, lambda repo, pns: checkin.checkin_many(
             repo, pns, comment, keep_lock=keep_lock, allow_unchanged=allow_unchanged, references_reader=reader,
             snapshot=snapshot))
 
@@ -4495,7 +4504,7 @@ class App(ctk.CTk):
         """Remember the files' sizes and times now, so a part saved after this click is not uploaded half way
         (see file_snapshot.py). Never stops the check-in: if it can't be done, there is just no protection."""
         try:
-            return engine.watch_files(self.repo(), {pn: self.rows_by_pn[pn].revision for pn in targets})
+            return checkin.watch_files(self.repo(), {pn: self.rows_by_pn[pn].revision for pn in targets})
         except Exception as e:
             self._log(f"Could not watch the files for changes: {e!r}")
             return None
@@ -4511,7 +4520,7 @@ class App(ctk.CTk):
         # Check In: first look for parts with nothing to upload, and ask before going ahead.
         repo = self.repo()
         self.run_task(
-            lambda: engine.change_reports(repo, plan.targets), "",
+            lambda: part_changes.change_reports(repo, plan.targets), "",
             on_success=lambda reports: self._confirm_unchanged(plan, reports),
             refresh=False, is_refresh=True)
 
@@ -4541,7 +4550,7 @@ class App(ctk.CTk):
             return
         if not messagebox.askyesno("Undo checkout", logic.undo_prompt(plan.targets)):
             return
-        self._run_batch("undo", plan, engine.undo_checkout_many)
+        self._run_batch("undo", plan, undoing.undo_checkout_many)
 
     def release(self):
         plan = self._plan("release")
@@ -4551,7 +4560,7 @@ class App(ctk.CTk):
             return
         repo, pns = self.repo(), list(plan.targets)
         # Step 1: find out exactly what would be released. Step 2: ask. Step 3: do it.
-        self.run_task(lambda: engine.release_plans(repo, pns), "Checked what a release would include",
+        self.run_task(lambda: planning.release_plans(repo, pns), "Checked what a release would include",
                       on_success=lambda plans: self._confirm_release(repo, plans), refresh=False)
 
     def _confirm_release(self, repo, plans):
@@ -4567,7 +4576,7 @@ class App(ctk.CTk):
             return
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
-        self.run_task(lambda: engine.release_many(repo, pns), "",
+        self.run_task(lambda: lifecycle.release_many(repo, pns), "",
                       on_success=lambda result: self._after_batch("release", logic.ActionPlan(pns, skipped), result),
                       label=logic.job_label("release", len(pns)), parts=pns)
 
@@ -4648,7 +4657,7 @@ class App(ctk.CTk):
         def work():
             try:
                 results = references.rescan(repo, pns, log=lambda text: self.queue.put(("log", text)))
-                return results, engine.get_status(repo), ""
+                return results, part_status.get_status(repo), ""
             except Exception as e:                       # the window must be given back either way
                 return None, None, str(e)
 
@@ -4715,7 +4724,7 @@ class App(ctk.CTk):
             self._say("Nothing was changed.")
             return
         name, description = result
-        self.run_task(lambda: engine.edit_details(repo, pn, name, description),
+        self.run_task(lambda: part_details.edit_details(repo, pn, name, description),
                       f"Updated the details of {pn}. Save Progress or Check In to upload them.")
 
     def revise(self):
@@ -4769,7 +4778,7 @@ class App(ctk.CTk):
         if self._workflow_start("make_cots", plan):
             return
         repo, pns = self.repo(), list(plan.targets)
-        self.run_task(lambda: engine.make_cots_plans(repo, pns), "Checked whether they can be made COTS",
+        self.run_task(lambda: planning.make_cots_plans(repo, pns), "Checked whether they can be made COTS",
                       on_success=lambda plans: self._confirm_make_cots(repo, plans), refresh=False)
 
     def _confirm_make_cots(self, repo, plans):
@@ -4786,7 +4795,7 @@ class App(ctk.CTk):
             return
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
-        self.run_task(lambda: engine.make_cots_many(repo, pns), "",
+        self.run_task(lambda: lifecycle.make_cots_many(repo, pns), "",
                       on_success=lambda result: self._after_batch("make_cots", logic.ActionPlan(pns, skipped), result),
                       label=logic.job_label("make_cots", len(pns)), parts=pns)
 
@@ -4814,7 +4823,7 @@ class App(ctk.CTk):
         what = str(pns[0]) if len(pns) == 1 else f"these {len(pns)} parts"
         reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being unreleased?", "Unrelease")
         if reason:
-            self.run_task(lambda: engine.reopen_many(repo, pns, reason), "",
+            self.run_task(lambda: lifecycle.reopen_many(repo, pns, reason), "",
                           on_success=lambda result: self._after_batch("reopen", plan, result),
                           label=logic.job_label("reopen", len(pns)), parts=pns)
 
@@ -4844,7 +4853,7 @@ class App(ctk.CTk):
                 f"Void {pns[0]}?\n\nIts number will never be used again, and it can't be checked out."
                 if len(pns) == 1 else logic.void_many_confirm_text(pns)):
             return
-        self.run_task(lambda: engine.void_many(repo, pns, reason), "",
+        self.run_task(lambda: lifecycle.void_many(repo, pns, reason), "",
                       on_success=lambda result: self._after_batch("void", logic.ActionPlan(pns, skipped), result),
                       label=logic.job_label("void", len(pns)), parts=pns)
 
