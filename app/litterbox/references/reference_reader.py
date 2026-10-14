@@ -13,8 +13,8 @@ from litterbox.references import reference_model
 
 
 def new_backend(attach_only=False):
-    from litterbox.importing import importer
-    return importer.SolidWorksBackend(attach_only=attach_only)
+    from litterbox.cad.solidworks import sw_backend
+    return sw_backend.SolidWorksBackend(attach_only=attach_only)
 
 
 def read_assembly_references(repo, pn, revision, backend, files=None):

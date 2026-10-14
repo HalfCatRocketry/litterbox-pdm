@@ -11,7 +11,7 @@ from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import remote
 from litterbox.git import repository
-from litterbox.importing import importer
+from litterbox.cad.solidworks import sw_backend
 from litterbox.parts import batch_core
 from litterbox.parts import permission_check
 from litterbox.parts import planning
@@ -78,7 +78,7 @@ def revise(repo, pn, reason, backend=None, log=print):
     locked, new_files, journal = [], [], None
     owns_backend = backend is None
     if owns_backend:
-        backend = importer.SolidWorksBackend()
+        backend = sw_backend.SolidWorksBackend()
     pushed = False
     try:
         with com.com_thread():

@@ -7,7 +7,8 @@ from pathlib import Path
 
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git
 
-from litterbox.importing import importer
+from litterbox.importing import import_finish
+from litterbox.importing import import_journal
 from litterbox.importing import manifest
 from litterbox.importing import scan
 
@@ -101,7 +102,7 @@ class ImportFixture(TwoUserVault):
         kwargs.setdefault("gap", 0)                    # numbers right at the lowest free one, to keep these tests simple
         kwargs.setdefault("backend", self.fake)
         kwargs.setdefault("log", lambda *_: None)
-        return importer.run(self.a, self.manifest_path, **kwargs)
+        return import_finish.run(self.a, self.manifest_path, **kwargs)
 
     def assert_clean(self, repo):
         self.assertEqual(git(repo, "status", "--porcelain"), "")
@@ -114,4 +115,4 @@ class ImportFixture(TwoUserVault):
         self.assertEqual(self.cad_names(), ["HCR-00001-001_A.SLDDRW", "HCR-00001-001_A.SLDPRT"])
         self.assertEqual(sorted(p.name for p in (self.a / "PN-logs").iterdir()), ["HCR-00001-001.yaml"])
         self.assert_clean(self.a)
-        self.assertFalse((self.a / ".git" / importer.JOURNAL_NAME).exists())
+        self.assertFalse((self.a / ".git" / import_journal.JOURNAL_NAME).exists())

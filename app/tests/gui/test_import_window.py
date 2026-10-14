@@ -21,7 +21,6 @@ from tests.support.import_fixture import ImportFixture
 from tests.support.vault_fixture import SKIP_ON_WINDOWS
 
 from litterbox.importing import session as import_session
-from litterbox.importing import importer
 from litterbox.records import record_store
 from litterbox.user import settings
 from litterbox.errors import NothingToSaveError
@@ -1429,7 +1428,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
             self.window._finish()
             self.pump_until_idle()
         self.assertEqual(len(self.imported), 1)
-        self.assertIn(importer.PN("HCR", 900, 1), self.imported[0].pns)
+        self.assertIn(part_number.PN("HCR", 900, 1), self.imported[0].pns)
 
     def test_cancel_button_during_the_import_returns_to_the_table_with_nothing_added(self):
         self.scan()

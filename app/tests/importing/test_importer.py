@@ -19,7 +19,14 @@ from tests.support.vault_fixture import SKIP_ON_WINDOWS, git, is_writable
 
 from litterbox.vault import config_write
 from litterbox.parts import create
-from litterbox.importing import importer
+from litterbox.cad.solidworks import sw_backend
+from litterbox.cli import import_files as cli_import
+from litterbox.importing import import_errors
+from litterbox.importing import import_finish
+from litterbox.importing import import_journal
+from litterbox.importing import import_numbering
+from litterbox.importing import import_prepare
+from litterbox.cad.solidworks import sw_process
 from litterbox.importing import manifest
 from litterbox.records import record_store
 from litterbox.core.part_number import PN
@@ -66,7 +73,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             self.assertIn("Imported 4 parts", self.remote_log()[0])
             self.assert_clean(self.a)
             self.assertFalse(is_writable(cad / f"{top}_A.SLDASM"))
-            self.assertFalse((self.a / ".git" / importer.JOURNAL_NAME).exists())
+            self.assertFalse((self.a / ".git" / import_journal.JOURNAL_NAME).exists())
             self.assertEqual(sorted(i.pn for i in manifest.load(self.manifest_path).items), sorted(map(str, result.pns)))
             # the status list shows them as ordinary parts with files
             self.assertEqual(self.status_of(self.a, top).kind, "ok")
@@ -78,7 +85,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         self.make_manifest()
         with self.user("Alex"):
             self.run_import()
-            with self.assertRaises(importer.ImportFailed) as ctx:
+            with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("nothing left to import", str(ctx.exception))
 
@@ -106,7 +113,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
     def test_cancel_in_the_middle_removes_every_copy_and_frees_the_numbers(self):
         self.make_manifest()
         with self.user("Alex"):
-            with self.assertRaises(importer.ImportCancelled):
+            with self.assertRaises(import_errors.ImportCancelled):
                 self.run_import(cancel=lambda: len(self.fake.copied) >= 3)
             self.assertEqual(len(self.fake.copied), 3)                    # it had really started
             self.assert_nothing_left()
@@ -127,7 +134,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
                 return len(self.fake.copied) >= 5 and calls["n"] > 0 and self.fake.copied and \
                     os.path.exists(self.fake.copied[-1])
 
-            with self.assertRaises(importer.ImportCancelled):
+            with self.assertRaises(import_errors.ImportCancelled):
                 self.run_import(cancel=cancel)
             self.assertEqual(len(self.fake.copied), 5)
             self.assert_nothing_left()
@@ -136,7 +143,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
     def test_cancel_before_anything_starts(self):
         self.make_manifest()
         with self.user("Alex"):
-            with self.assertRaises(importer.ImportCancelled):
+            with self.assertRaises(import_errors.ImportCancelled):
                 self.run_import(cancel=lambda: True)
             self.assertEqual(self.fake.copied, [])
             self.assert_nothing_left()
@@ -156,7 +163,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         self.make_manifest()
         self.fake.refuse_repoint = True
         with self.user("Alex"):
-            with self.assertRaises(importer.ImportFailed) as ctx:
+            with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("would not change the reference", str(ctx.exception))
             self.assert_nothing_left()
@@ -203,7 +210,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
 
         with self.user("Alex"):
             with mock.patch.object(runner, "run", offline):
-                with self.assertRaises(importer.ImportFailed):
+                with self.assertRaises(import_errors.ImportFailed):
                     self.run_import()
             self.assertEqual(self.fake.copied, [])
             self.assert_nothing_left()
@@ -244,7 +251,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         leftovers = ["cad/HCR-00002-001_A.SLDPRT", "cad/HCR-00003-001_A.SLDASM"]
         for rel in leftovers:
             (self.a / rel).write_text("half copied")
-        importer._write_journal(self.a, "copying", "tok1", leftovers, ["PN-logs/HCR-00002-001.yaml"])
+        import_journal.write_journal(self.a, "copying", "tok1", leftovers, ["PN-logs/HCR-00002-001.yaml"])
         with self.user("Alex"):
             result = self.run_import()
             self.assertEqual(sorted(result.pns), [PN("HCR", n, 1) for n in range(2, 6)])
@@ -257,37 +264,37 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             rel_file, rel_record = "cad/HCR-00002-001_A.SLDPRT", "PN-logs/HCR-00002-001.yaml"
             (self.a / rel_file).write_text("copy")
             record_store.create_record(self.a, PN("HCR", 2, 1), "Crashed", "Alex")
-            importer._write_journal(self.a, "committing", "tok2", [rel_file], [rel_record])
+            import_journal.write_journal(self.a, "committing", "tok2", [rel_file], [rel_record])
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "Imported crash\n\nLitterbox-Import: tok2")
-            self.assertEqual(importer.recover(self.a, lambda *_: None), "cleaned")
+            self.assertEqual(import_journal.recover(self.a, lambda *_: None), "cleaned")
             self.assert_nothing_left()
-            self.assertEqual(importer.recover(self.a, lambda *_: None), "nothing")
+            self.assertEqual(import_journal.recover(self.a, lambda *_: None), "nothing")
 
     def test_recover_keeps_an_import_that_was_actually_pushed(self):
         with self.user("Alex"):
             rel_file, rel_record = "cad/HCR-00002-001_A.SLDPRT", "PN-logs/HCR-00002-001.yaml"
             (self.a / rel_file).write_text("copy")
             record_store.create_record(self.a, PN("HCR", 2, 1), "Done", "Alex")
-            importer._write_journal(self.a, "committing", "tok3", [rel_file], [rel_record])
+            import_journal.write_journal(self.a, "committing", "tok3", [rel_file], [rel_record])
             git(self.a, "add", ".")
             git(self.a, "commit", "-m", "Imported done\n\nLitterbox-Import: tok3")
             git(self.a, "push")
-            self.assertEqual(importer.recover(self.a, lambda *_: None), "finished")
+            self.assertEqual(import_journal.recover(self.a, lambda *_: None), "finished")
             self.assertTrue((self.a / rel_file).exists())
             self.assert_clean(self.a)
 
     def test_recover_will_not_delete_outside_the_cad_folder(self):
-        importer._write_journal(self.a, "copying", "x", ["PN-logs/HCR-00001-001.yaml"], [])
-        with self.assertRaises(importer.ImportFailed):
-            importer.recover(self.a, lambda *_: None)
+        import_journal.write_journal(self.a, "copying", "x", ["PN-logs/HCR-00001-001.yaml"], [])
+        with self.assertRaises(import_errors.ImportFailed):
+            import_journal.recover(self.a, lambda *_: None)
         self.assertTrue((self.a / "PN-logs/HCR-00001-001.yaml").exists())
 
     def test_existing_cad_files_are_never_overwritten(self):
         self.make_manifest()
         (self.a / "cad" / "HCR-00002-001_A.SLDASM").write_text("a stray file someone dropped here")
         with self.user("Alex"):
-            with self.assertRaises(importer.ImportFailed) as ctx:
+            with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("will not overwrite", str(ctx.exception))
             self.assertEqual((self.a / "cad" / "HCR-00002-001_A.SLDASM").read_text(), "a stray file someone dropped here")
@@ -301,7 +308,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
                 item.include = False
         manifest.save(mf, self.manifest_path)
         with self.user("Alex"):
-            with self.assertRaises(importer.ImportFailed) as ctx:
+            with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("not part of this import", str(ctx.exception))
             self.assertIn("p1.SLDPRT", str(ctx.exception))
@@ -335,13 +342,13 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         mf.items[0].name = ""
         manifest.save(mf, self.manifest_path)
         with self.user("Alex"):
-            with self.assertRaises(importer.ImportFailed) as ctx:
+            with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("has no name", str(ctx.exception))
             mf.items[0].name = "fixed"
             manifest.save(mf, self.manifest_path)
             (self.src / "parts" / "p3.SLDPRT").unlink()
-            with self.assertRaises(importer.ImportFailed) as ctx:
+            with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("can't be found", str(ctx.exception))
             self.assert_nothing_left()
@@ -358,7 +365,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         kwargs.setdefault("gap", 0)
         kwargs.setdefault("backend", self.fake)
         kwargs.setdefault("log", lambda *_: None)
-        return importer.prepare(self.a, self.manifest_path, **kwargs)
+        return import_prepare.prepare(self.a, self.manifest_path, **kwargs)
 
     def test_proposed_numbers_are_the_lowest_free_ones(self):
         self.make_manifest()
@@ -420,8 +427,8 @@ class ImportFlow(ImportFixture, unittest.TestCase):
     def test_import_with_too_few_numbers_left_is_refused(self):
         self.make_manifest()
         with self.user("Alex"):
-            with mock.patch.object(importer, "_used_numbers", return_value=(set(), set(range(1, 99999)))):
-                with self.assertRaises(importer.ImportFailed) as caught:
+            with mock.patch.object(import_numbering, "used_numbers", return_value=(set(), set(range(1, 99999)))):
+                with self.assertRaises(import_errors.ImportFailed) as caught:
                     self.prepare()
             self.assertIn("free part numbers left", str(caught.exception))
 
@@ -433,7 +440,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             table.entries[0].name = "Renamed by hand"
             table.entries[0].description = "my notes"
             table.set_pn(1, "HCR-00500-002")
-            result = importer.finish(self.a, prepared, log=lambda *_: None)
+            result = import_finish.finish(self.a, prepared, log=lambda *_: None)
             prepared.close()
             self.assertEqual(result.pns[1], PN("HCR", 500, 2))
             self.assertTrue((self.a / "cad" / f"HCR-00500-002{Path(result.plan.order[0]).suffix}").exists()
@@ -450,8 +457,8 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             prepared = self.prepare()
             prepared.proposal.set_pn(2, "HCR-00001-001")          # exists already
             before = [e.pn for e in prepared.proposal.entries]
-            with self.assertRaises(importer.PNConflict) as ctx:
-                importer.finish(self.a, prepared, log=lambda *_: None)
+            with self.assertRaises(import_errors.PNConflict) as ctx:
+                import_finish.finish(self.a, prepared, log=lambda *_: None)
             self.assertEqual([(c.index, c.manual) for c in ctx.exception.conflicts], [(2, True)])
             self.assertIn("Front upright", str(ctx.exception))
             self.assertEqual(self.fake.copied, [])                # refused before copying anything
@@ -460,7 +467,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             self.assertEqual([e.pn for e in prepared.proposal.entries if not e.manual],
                              [b for i, b in enumerate(before) if i != 2])
             prepared.proposal.set_pn(2, "HCR-00700-001")           # the user fixes the red row...
-            result = importer.finish(self.a, prepared, log=lambda *_: None)    # ...and finishes again
+            result = import_finish.finish(self.a, prepared, log=lambda *_: None)    # ...and finishes again
             prepared.close()
             self.assertIn(PN("HCR", 700, 1), result.pns)
             self.assert_clean(self.a)
@@ -475,7 +482,7 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             create.new_part(self.b, "Bea two")                    # takes 3
         with self.user("Alex"):
             prepared.proposal.set_pn(3, "HCR-00900-001")           # a typed one is fine and stays
-            result = importer.finish(self.a, prepared, log=lambda *_: None)
+            result = import_finish.finish(self.a, prepared, log=lambda *_: None)
             prepared.close()
             self.assertEqual(sorted(p.base for p in result.pns), [4, 5, 6, 900])
             self.assertEqual(sorted(r[0] for r in result.renumbered), [0, 1])
@@ -490,13 +497,13 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             create.new_part(self.b, "Bea one")                    # 2 (automatic row 0 used to be here)
             create.new_part(self.b, "Bea two")                    # 3
         with self.user("Alex"):
-            with self.assertRaises(importer.PNConflict) as ctx:
-                importer.finish(self.a, prepared, log=lambda *_: None)
+            with self.assertRaises(import_errors.PNConflict) as ctx:
+                import_finish.finish(self.a, prepared, log=lambda *_: None)
             self.assertEqual([c.index for c in ctx.exception.conflicts], [0])
             # the automatic rows were already moved on to free numbers, ready for the next try
             self.assertTrue(all(e.pn.base >= 4 for e in prepared.proposal.entries[1:]))
             prepared.proposal.reset_pn(0)                          # hand row 0 back to Litterbox
-            result = importer.finish(self.a, prepared, log=lambda *_: None)
+            result = import_finish.finish(self.a, prepared, log=lambda *_: None)
             prepared.close()
             self.assertEqual(len(set(result.pns)), 4)
             self.assert_nothing_left_but_import(result)
@@ -517,13 +524,13 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             prepared = self.prepare()
             prepared.proposal.set_pn(1, "HCR-00800-001")
             with mock.patch.object(runner, "run", run):
-                with self.assertRaises(importer.PNConflict) as ctx:
-                    importer.finish(self.a, prepared, log=lambda *_: None)
+                with self.assertRaises(import_errors.PNConflict) as ctx:
+                    import_finish.finish(self.a, prepared, log=lambda *_: None)
             self.assertEqual([c.index for c in ctx.exception.conflicts], [1])
             self.assertEqual(self.cad_names(), ["HCR-00001-001_A.SLDDRW", "HCR-00001-001_A.SLDPRT"])
             self.assert_clean(self.a)
             prepared.proposal.set_pn(1, "HCR-00801-001")
-            self.assertEqual(len(importer.finish(self.a, prepared, log=lambda *_: None).pns), 4)
+            self.assertEqual(len(import_finish.finish(self.a, prepared, log=lambda *_: None).pns), 4)
             prepared.close()
 
     def test_the_same_number_twice_in_the_table_is_a_conflict(self):
@@ -532,8 +539,8 @@ class ImportFlow(ImportFixture, unittest.TestCase):
             prepared = self.prepare()
             prepared.proposal.set_pn(0, "HCR-00600-001")
             prepared.proposal.set_pn(1, "HCR-00600-001")
-            with self.assertRaises(importer.PNConflict) as ctx:
-                importer.finish(self.a, prepared, log=lambda *_: None)
+            with self.assertRaises(import_errors.PNConflict) as ctx:
+                import_finish.finish(self.a, prepared, log=lambda *_: None)
             self.assertEqual([c.index for c in ctx.exception.conflicts], [1])
             self.assertIn("twice", str(ctx.exception))
 
@@ -542,49 +549,49 @@ class ImportFlow(ImportFixture, unittest.TestCase):
         with self.user("Alex"):
             prepared = self.prepare()
             for text in ("", "banana", "HCR-00000-001", "HCR-00005-000", "HCR-5-1"):
-                with self.assertRaises(importer.ImportFailed):
+                with self.assertRaises(import_errors.ImportFailed):
                     prepared.proposal.set_pn(0, text)
             prepared.proposal.set_pn(0, "XYZ-00600-001")           # a valid PN for another organization
-            with self.assertRaises(importer.PNConflict) as ctx:
-                importer.finish(self.a, prepared, log=lambda *_: None)
+            with self.assertRaises(import_errors.PNConflict) as ctx:
+                import_finish.finish(self.a, prepared, log=lambda *_: None)
             self.assertIn("different organization", str(ctx.exception))
 
     def assert_nothing_left_but_import(self, result):
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
-        self.assertFalse((self.a / ".git" / importer.JOURNAL_NAME).exists())
+        self.assertFalse((self.a / ".git" / import_journal.JOURNAL_NAME).exists())
 
     def test_cancelling_after_a_conflict_retry_still_leaves_nothing(self):
         self.make_manifest()
         with self.user("Alex"):
             prepared = self.prepare()
             prepared.proposal.set_pn(0, "HCR-00001-001")
-            with self.assertRaises(importer.PNConflict):
-                importer.finish(self.a, prepared, log=lambda *_: None)
+            with self.assertRaises(import_errors.PNConflict):
+                import_finish.finish(self.a, prepared, log=lambda *_: None)
             prepared.proposal.reset_pn(0)
-            with self.assertRaises(importer.ImportCancelled):
-                importer.finish(self.a, prepared, cancel=lambda: len(self.fake.copied) >= 2, log=lambda *_: None)
+            with self.assertRaises(import_errors.ImportCancelled):
+                import_finish.finish(self.a, prepared, cancel=lambda: len(self.fake.copied) >= 2, log=lambda *_: None)
             prepared.close()
             self.assert_nothing_left()
 
     def test_command_line_dry_run_and_recover(self):
         self.make_manifest()
         with self.user("Alex"):
-            with mock.patch.object(importer, "SolidWorksBackend", lambda: self.fake):
-                self.assertEqual(importer.main([str(self.a), str(self.manifest_path), "--dry-run"]), 0)
-                self.assertEqual(importer.main([str(self.a), "--recover"]), 0)
-                self.assertEqual(importer.main([str(self.a), str(self.manifest_path)]), 0)
-                self.assertEqual(importer.main([str(self.a), str(self.manifest_path)]), 1)     # nothing left to import
+            with mock.patch.object(sw_backend, "SolidWorksBackend", lambda: self.fake):
+                self.assertEqual(cli_import.main([str(self.a), str(self.manifest_path), "--dry-run"]), 0)
+                self.assertEqual(cli_import.main([str(self.a), "--recover"]), 0)
+                self.assertEqual(cli_import.main([str(self.a), str(self.manifest_path)]), 0)
+                self.assertEqual(cli_import.main([str(self.a), str(self.manifest_path)]), 1)     # nothing left to import
 
 
 class PairReferences(unittest.TestCase):
     def test_lists_that_line_up_are_paired_by_position(self):
-        self.assertEqual(importer.pair_references(["/old/a.SLDPRT", "/old/b.SLDPRT"], ["/x/a.SLDPRT", "/y/b.SLDPRT"]),
+        self.assertEqual(sw_backend.pair_references(["/old/a.SLDPRT", "/old/b.SLDPRT"], ["/x/a.SLDPRT", "/y/b.SLDPRT"]),
                          [("/old/a.SLDPRT", "/x/a.SLDPRT"), ("/old/b.SLDPRT", "/y/b.SLDPRT")])
 
     def test_lists_that_do_not_line_up_are_paired_by_unique_file_name(self):
-        pairs = importer.pair_references(["/old/a.SLDPRT", "/old/c.SLDPRT"], ["/y/a.SLDPRT", "/z/a.SLDPRT", "/y/b.SLDPRT"])
+        pairs = sw_backend.pair_references(["/old/a.SLDPRT", "/old/c.SLDPRT"], ["/y/a.SLDPRT", "/z/a.SLDPRT", "/y/b.SLDPRT"])
         self.assertEqual(pairs, [("/old/a.SLDPRT", ""), ("/old/c.SLDPRT", "")])
-        pairs = importer.pair_references(["/old/a.SLDPRT"], ["/y/a.SLDPRT", "/y/b.SLDPRT"])
+        pairs = sw_backend.pair_references(["/old/a.SLDPRT"], ["/y/a.SLDPRT", "/y/b.SLDPRT"])
         self.assertEqual(pairs, [("/old/a.SLDPRT", "/y/a.SLDPRT")])
 
 
@@ -598,18 +605,18 @@ class ClosingSolidWorks(unittest.TestCase):
     def test_waits_for_a_slow_exit_without_ending_it(self):
         alive = iter([True, True, False])
         ended = []
-        result = importer.wait_for_exit(42, alive=lambda pid: next(alive), kill=ended.append, sleep=lambda s: None)
+        result = sw_process.wait_for_exit(42, alive=lambda pid: next(alive), kill=ended.append, sleep=lambda s: None)
         self.assertEqual((result, ended), ("exited", []))
 
     def test_ends_a_process_that_will_not_exit(self):
         ended, notes = [], []
-        result = importer.wait_for_exit(42, timeout=1, alive=lambda pid: True, kill=ended.append,
+        result = sw_process.wait_for_exit(42, timeout=1, alive=lambda pid: True, kill=ended.append,
                                         sleep=lambda s: None, log=notes.append)
         self.assertEqual((result, ended), ("ended", [42]))
         self.assertTrue(notes)
 
     def test_already_gone_needs_no_waiting(self):
-        self.assertEqual(importer.wait_for_exit(42, alive=lambda pid: False, kill=lambda p: 1 / 0), "exited")
+        self.assertEqual(sw_process.wait_for_exit(42, alive=lambda pid: False, kill=lambda p: 1 / 0), "exited")
 
     def test_only_a_solidworks_we_started_is_exited_and_waited_for(self):
         calls = []
@@ -621,10 +628,10 @@ class ClosingSolidWorks(unittest.TestCase):
             def ExitApp(self):
                 calls.append("exit")
 
-        original = importer.wait_for_exit
-        importer.wait_for_exit = lambda pid, **kw: calls.append(("wait", pid))
+        original = sw_process.wait_for_exit
+        sw_process.wait_for_exit = lambda pid, **kw: calls.append(("wait", pid))
         try:
-            backend = importer.SolidWorksBackend()
+            backend = sw_backend.SolidWorksBackend()
             backend._sw, backend._started_by_us = App(), True
             backend.close()
             self.assertEqual(calls, ["exit", ("wait", 77)])
@@ -637,7 +644,7 @@ class ClosingSolidWorks(unittest.TestCase):
             backend.close()
             self.assertEqual(calls, [])
         finally:
-            importer.wait_for_exit = original
+            sw_process.wait_for_exit = original
 
 
 class CopyingWhenSolidWorksRefuses(unittest.TestCase):
@@ -666,7 +673,7 @@ class CopyingWhenSolidWorksRefuses(unittest.TestCase):
             def CopyDocument(inner, *args):
                 return 2                                    # refused, and nothing was written
 
-        backend = importer.SolidWorksBackend()
+        backend = sw_backend.SolidWorksBackend()
         backend._sw = App()
         backend._dependencies = lambda path, search: deps
         return backend
@@ -682,13 +689,13 @@ class CopyingWhenSolidWorksRefuses(unittest.TestCase):
         src = self.dir / "bracket.SLDASM"
         src.write_bytes(b"asm")
         dst = self.dir / "out" / "x.SLDASM"
-        with self.assertRaises(importer.ImportFailed) as ctx:
+        with self.assertRaises(import_errors.ImportFailed) as ctx:
             self.backend([]).copy(str(src), str(dst))
         self.assertIn("it returned 2", str(ctx.exception))
         self.assertFalse(dst.exists())
         part = self.dir / "uses.SLDPRT"
         part.write_bytes(b"p")
-        with self.assertRaises(importer.ImportFailed):
+        with self.assertRaises(import_errors.ImportFailed):
             self.backend(["C:/other.SLDPRT"]).copy(str(part), str(self.dir / "out" / "y.SLDPRT"))
 
 
@@ -697,20 +704,20 @@ class FindingTheProcess(unittest.TestCase):
         class App:
             def GetProcessID(self):
                 return 9
-        self.assertEqual(importer.own_process_id(App(), {1}), 9)
+        self.assertEqual(sw_process.own_process_id(App(), {1}), 9)
 
     def test_otherwise_the_one_new_process_is_used(self):
         class App:
             def GetProcessID(self):
                 raise RuntimeError
-        original = importer.solidworks_pids
+        original = sw_process.solidworks_pids
         try:
-            importer.solidworks_pids = lambda: {1, 8}
-            self.assertEqual(importer.own_process_id(App(), {1}), 8)
-            importer.solidworks_pids = lambda: {1, 8, 9}                     # two new: can't tell which
-            self.assertIsNone(importer.own_process_id(App(), {1}))
+            sw_process.solidworks_pids = lambda: {1, 8}
+            self.assertEqual(sw_process.own_process_id(App(), {1}), 8)
+            sw_process.solidworks_pids = lambda: {1, 8, 9}                     # two new: can't tell which
+            self.assertIsNone(sw_process.own_process_id(App(), {1}))
         finally:
-            importer.solidworks_pids = original
+            sw_process.solidworks_pids = original
 
     def test_the_wait_is_five_seconds(self):
-        self.assertEqual(importer.EXIT_WAIT_SECONDS, 5.0)
+        self.assertEqual(sw_process.EXIT_WAIT_SECONDS, 5.0)

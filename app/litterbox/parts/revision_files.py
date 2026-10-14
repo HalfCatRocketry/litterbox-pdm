@@ -17,7 +17,7 @@ from litterbox.git import read_only
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
-from litterbox.importing import importer
+from litterbox.importing import import_journal
 from litterbox.records import record_revisions
 from litterbox.util import journal as journal_file
 
@@ -75,9 +75,9 @@ def undo_attempt(repo, journal, log=print):
     """Put the vault back as it was before an attempt: our unpushed commit, new files, removed files, locks.
     Never deletes anything that the latest commit has. Returns 'cleaned' or 'finished'."""
     token = journal["token"]
-    commit = importer._our_commit(repo, token)
+    commit = import_journal.our_commit(repo, token)
     if commit:
-        if importer._unpushed(repo) == 0:
+        if import_journal.unpushed(repo) == 0:
             return "finished"                           # the attempt had reached the vault: keep it
         if repository.quiet_output(repo, "rev-parse", "HEAD") != commit:
             raise RevisionFailed("An unfinished revise left a commit that has not been pushed, but it is no "

@@ -648,7 +648,7 @@ class ImportRow:
 
 
 def import_rows(candidates, proposal, conflicts=(), duplicates=None):
-    """One ImportRow per item that could be imported, in order. `conflicts` come from importer.Refresh/PNConflict.
+    """One ImportRow per item that could be imported, in order. `conflicts` come from import_numbering.Refresh/PNConflict.
 
     Rows that are selected show their new part number; unticked rows show none and are greyed.
     """
@@ -698,7 +698,7 @@ def import_rows(candidates, proposal, conflicts=(), duplicates=None):
 def edit_import_cell(prepared, item_id, column, text):
     """Apply an edit made in the table. Returns '' if it worked, else a message to show the user."""
     from litterbox.parts import create
-    from litterbox.importing import importer
+    from litterbox.importing import import_errors
     item = next((i for i in prepared.candidates if i.id == item_id), None)
     if item is None or column not in EDITABLE_COLUMNS:
         return "That cell can't be edited."
@@ -713,7 +713,7 @@ def edit_import_cell(prepared, item_id, column, text):
             return ""
         try:
             prepared.proposal.set_pn(index, text)
-        except importer.ImportFailed as e:
+        except import_errors.ImportFailed as e:
             return str(e)
         return ""
     if column == "name":

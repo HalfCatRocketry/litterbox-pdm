@@ -17,7 +17,7 @@ stay on the thread that made them.
     session.close()
 
 on_done(result, error) is called on the window's thread; `error` is the exception (or None), so
-the window can tell importer.PNConflict and importer.ImportCancelled from other failures.
+the window can tell import_errors.PNConflict and import_errors.ImportCancelled from other failures.
 While a job runs, session.busy is True and the table must not be edited (the worker is using it).
 """
 
@@ -26,7 +26,12 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from litterbox.importing import importer
+from litterbox.cad.solidworks import sw_backend
+from litterbox.importing import import_duplicates
+from litterbox.importing import import_errors
+from litterbox.importing import import_finish
+from litterbox.importing import import_numbering
+from litterbox.importing import import_prepare
 from litterbox.importing import manifest as manifest_module
 from litterbox.importing import scan as scan_module
 from litterbox.parts import create_batch
@@ -40,11 +45,11 @@ def default_manifest_path(root, now=None):
 
 class ImportSession:
     def __init__(self, repo, post, backend_factory=None, log=lambda text: None, org=None,
-                 gap=importer.DEFAULT_GAP, jitter=importer.DEFAULT_JITTER):
+                 gap=import_numbering.DEFAULT_GAP, jitter=import_numbering.DEFAULT_JITTER):
         self.repo, self.post, self.log, self.org = repo, post, log, org
         self.gap, self.jitter = gap, jitter
-        self.backend_factory = backend_factory or importer.SolidWorksBackend
-        self.prepared = None                    # importer.Prepared, once start() has succeeded
+        self.backend_factory = backend_factory or sw_backend.SolidWorksBackend
+        self.prepared = None                    # import_prepare.Prepared, once start() has succeeded
         self.manifest_path = ""
         self.busy = False                       # touched only on the window's thread
         self._cancel = threading.Event()
@@ -91,7 +96,7 @@ class ImportSession:
 
     def _submit(self, work, on_done):
         if self.busy:
-            raise importer.ImportFailed("Still working on the last request.")
+            raise import_errors.ImportFailed("Still working on the last request.")
         self.busy = True
         self._cancel.clear()
         self._jobs.put((work, on_done))
@@ -112,7 +117,7 @@ class ImportSession:
         on_done(proposal, error): the Proposal to show as the table.
         """
         if not folders and not manifest_path:
-            raise importer.ImportFailed("Choose at least one folder to scan, or open a manifest.")
+            raise import_errors.ImportFailed("Choose at least one folder to scan, or open a manifest.")
         progress = self._progress(on_progress)
 
         def work():
@@ -120,7 +125,7 @@ class ImportSession:
             if folders:
                 def scan_progress(done, total, name):
                     if self._cancel_requested():
-                        raise importer.ImportCancelled("Cancelled. Nothing was changed.")
+                        raise import_errors.ImportCancelled("Cancelled. Nothing was changed.")
                     if progress:
                         progress(done, total, f"Scanning: {Path(name).name}")
                 found = scan_module.scan(folders, repo=self.repo, progress=scan_progress)
@@ -130,7 +135,7 @@ class ImportSession:
             self.manifest_path = path
             backend = self.backend_factory()
             try:
-                self.prepared = importer.prepare(
+                self.prepared = import_prepare.prepare(
                     self.repo, path, backend=backend, allow_external=allow_external, cots=cots,
                     cancel=self._cancel_requested, progress=progress, log=self.log, org=self.org,
                     gap=self.gap, jitter=self.jitter)
@@ -146,7 +151,7 @@ class ImportSession:
 
     def include(self, item_id, include, on_done):
         def work():
-            importer.set_included(self.repo, self.prepared, item_id, include)
+            import_prepare.set_included(self.repo, self.prepared, item_id, include)
             return self.prepared.proposal
         self._submit(work, on_done)
 
@@ -154,7 +159,7 @@ class ImportSession:
         """Give every automatic row a variant of one base number (or None: separate numbers again).
         on_done(proposal, error); an ImportFailed error means the base can't take that many parts."""
         def work():
-            importer.set_family(self.repo, self.prepared.proposal, base)
+            import_numbering.set_family(self.repo, self.prepared.proposal, base)
             return self.prepared.proposal
         self._submit(work, on_done)
 
@@ -162,7 +167,7 @@ class ImportSession:
         """Look for rows that duplicate parts already in the vault. on_done({row: [warnings]}, error)."""
         def work():
             create_batch.sync_latest(self.repo)
-            return importer.find_duplicates(self.repo, self.prepared)
+            return import_duplicates.find_duplicates(self.repo, self.prepared)
         self._submit(work, on_done)
 
     def set_allow_external(self, allowed):
@@ -170,12 +175,12 @@ class ImportSession:
             self.prepared.allow_external = bool(allowed)
 
     def refresh(self, on_done):
-        """Download the newest records and re-check the table. on_done(importer.Refresh, error)."""
-        self._submit(lambda: importer.refresh(self.repo, self.prepared.proposal, self.log), on_done)
+        """Download the newest records and re-check the table. on_done(import_numbering.Refresh, error)."""
+        self._submit(lambda: import_numbering.refresh(self.repo, self.prepared.proposal, self.log), on_done)
 
     def finish(self, on_done, on_progress=None):
-        """Finish & Import. on_done(importer.Result, error); a PNConflict error carries the rows to highlight."""
-        self._submit(lambda: importer.finish(self.repo, self.prepared, cancel=self._cancel_requested,
+        """Finish & Import. on_done(import_plan.Result, error); a PNConflict error carries the rows to highlight."""
+        self._submit(lambda: import_finish.finish(self.repo, self.prepared, cancel=self._cancel_requested,
                                              progress=self._progress(on_progress), log=self.log), on_done)
 
     def cancel(self):

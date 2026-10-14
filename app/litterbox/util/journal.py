@@ -2,7 +2,7 @@
 journal.py - a small JSON note in the vault's .git folder about an operation that is under way.
 
 The importer and Revise write one before they change the vault and delete it when they are done. If Litterbox
-stops half way, the note says what to put back (see importing/importer.recover and parts/revise.recover). This
+stops half way, the note says what to put back (see importing/import_journal.recover and parts/revision_files.recover). This
 file only reads and writes the note; what goes in it, and checking what it says, is up to each caller.
 """
 

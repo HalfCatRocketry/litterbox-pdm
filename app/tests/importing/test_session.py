@@ -19,7 +19,9 @@ from litterbox.gui.logic import gui_logic as logic
 from litterbox.vault import config
 from litterbox.vault import config_write
 from litterbox.importing import session as import_session
-from litterbox.importing import importer
+from litterbox.importing import import_duplicates
+from litterbox.importing import import_errors
+from litterbox.importing import import_prepare
 from litterbox.importing import manifest
 from litterbox.records import record_store
 from litterbox.core.part_number import PN
@@ -75,10 +77,10 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual([e.name for e in proposal.entries], ["sub", "top", "p1", "p3"])
 
     def test_nothing_to_do_is_an_error_not_a_crash(self):
-        with self.assertRaises(importer.ImportFailed):
+        with self.assertRaises(import_errors.ImportFailed):
             self.session.start(None)
         _, error, _ = self.go(manifest_path=str(self.tmp / "missing.yaml"))
-        self.assertIsInstance(error, importer.ImportFailed)
+        self.assertIsInstance(error, import_errors.ImportFailed)
 
     def test_all_the_slow_work_happens_on_one_thread_that_is_not_the_windows(self):
         seen = set()
@@ -124,9 +126,9 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         with self.user("Alex"):
             self.wait(lambda d, p: self.session.include(self.id_of("p1"), False, d))
             _, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
-            self.assertIsInstance(error, importer.ImportFailed)
+            self.assertIsInstance(error, import_errors.ImportFailed)
             self.assertIn("not part of this import", str(error))
-            self.assertIsInstance(error, importer.ExternalReferences)
+            self.assertIsInstance(error, import_errors.ExternalReferences)
             self.assertEqual({Path(f).name for f, _ in error.references}, {"top.SLDASM", "sub.SLDASM"})
             self.assertIn("not being imported", logic.import_external_text(error))
             self.assert_nothing_left()
@@ -158,7 +160,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             table = self.session.prepared.proposal
             table.set_pn(1, "HCR-00001-001")
             _, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
-            self.assertIsInstance(error, importer.PNConflict)
+            self.assertIsInstance(error, import_errors.PNConflict)
             self.assertEqual([c.index for c in error.conflicts], [1])
             self.assertFalse(self.session.busy)
             table.set_pn(1, "HCR-00800-001")
@@ -179,7 +181,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.fake.copy = slow_copy
         with self.user("Alex"):
             _, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
-            self.assertIsInstance(error, importer.ImportCancelled)
+            self.assertIsInstance(error, import_errors.ImportCancelled)
             self.assert_nothing_left()
             self.fake.copy = real_copy
             result, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
@@ -196,7 +198,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         import_session.scan_module.scan = cancelling_scan
         self.addCleanup(setattr, import_session.scan_module, "scan", real_walk)
         _, error, _ = self.go(folders=[self.src])
-        self.assertIsInstance(error, importer.ImportCancelled)
+        self.assertIsInstance(error, import_errors.ImportCancelled)
         self.assertFalse((self.tmp / "settings" / "imports").exists())
         self.assert_nothing_left()
 
@@ -206,7 +208,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.fake.references = lambda p: (gate.wait(10), real_refs(p))[1]
         with self.user("Alex"):
             self.session.start(lambda *a: None, folders=[self.src], manifest_root=self.tmp / "settings")
-            with self.assertRaises(importer.ImportFailed):
+            with self.assertRaises(import_errors.ImportFailed):
                 self.session.refresh(None)
             gate.set()
             self.session.cancel()
@@ -264,7 +266,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         config_write.save(self.a, org="HCR", start_number=10001)       # the vault also has HCR-00001-001, below the start
         with self.user("Alex"):
             self.make_manifest()
-            prepared = importer.prepare(self.a, self.manifest_path, backend=self.fake, gap=0, jitter=0,
+            prepared = import_prepare.prepare(self.a, self.manifest_path, backend=self.fake, gap=0, jitter=0,
                                         log=lambda *_: None)
             self.assertEqual([p.base for p in prepared.proposal.pns()], list(range(10001, 10005)))
             self.assertIn("start number is 10001", prepared.proposal.note)
@@ -272,8 +274,8 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             self.assertIn("start_number is 10001", prepared.proposal.note)
             # a number freed up by a conflict, or a row ticked later, also comes from the same sequence
             top = prepared.candidates[0]
-            importer.set_included(self.a, prepared, top.id, False)
-            importer.set_included(self.a, prepared, top.id, True)
+            import_prepare.set_included(self.a, prepared, top.id, False)
+            import_prepare.set_included(self.a, prepared, top.id, True)
             self.assertTrue(all(p.base >= 10001 for p in prepared.proposal.pns()))
 
     def test_the_note_says_why_the_start_number_is_1(self):
@@ -309,9 +311,9 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             (other / "unique.SLDPRT").write_text("unique\n")
             path = self.tmp / "other-manifest.yaml"
             manifest.save(import_session.scan_module.scan([other], repo=self.a), path)
-            prepared = importer.prepare(self.a, path, backend=self.fake, gap=0, jitter=0, log=lambda *_: None, cots=True)
+            prepared = import_prepare.prepare(self.a, path, backend=self.fake, gap=0, jitter=0, log=lambda *_: None, cots=True)
             names = [e.name for e in prepared.proposal.entries]
-            found = importer.find_duplicates(self.a, prepared)
+            found = import_duplicates.find_duplicates(self.a, prepared)
         row = {n: names.index(n) for n in names}
         self.assertIn("identical to the one in the vault", found[row["same bytes"]][0])
         self.assertTrue(any("exactly this name already exists" in w for w in found[row["p3"]]))

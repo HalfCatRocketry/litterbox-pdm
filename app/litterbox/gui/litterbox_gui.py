@@ -44,7 +44,7 @@ from litterbox.parts import number_suggestions
 from litterbox.vault import create_vault as init_vault
 from litterbox.importing import session as import_session
 from litterbox.jobs import job_queue as jobs
-from litterbox.importing import importer
+from litterbox.importing import import_errors
 from litterbox.importing import manifest as manifest_module
 from litterbox.importing import scan as scan_module
 from litterbox.user import settings
@@ -1455,7 +1455,7 @@ class ImportWindow(ctk.CTkToplevel):
     def _prepared(self, proposal, error):
         if error is not None:
             self._show("pick")
-            if isinstance(error, importer.ImportCancelled):
+            if isinstance(error, import_errors.ImportCancelled):
                 self._say("Cancelled. Nothing was changed.", "warn")
             else:
                 self._say("The scan could not be completed.", "error")
@@ -1559,7 +1559,7 @@ class ImportWindow(ctk.CTkToplevel):
         def next_one(_result=None, error=None):
             if error is not None:
                 self._say(self._error_text(error), "warn")
-                if isinstance(error, importer.FamilyFull):
+                if isinstance(error, import_errors.FamilyFull):
                     messagebox.showwarning("Not enough variant numbers", self._error_text(error), parent=self)
             if wanted and error is None:
                 row = wanted.pop(0)
@@ -1583,7 +1583,7 @@ class ImportWindow(ctk.CTkToplevel):
                 return
             if error is not None:
                 self._say(self._error_text(error), "warn")
-                if isinstance(error, importer.FamilyFull):
+                if isinstance(error, import_errors.FamilyFull):
                     messagebox.showwarning("Not enough variant numbers", self._error_text(error), parent=self)
             if rebuild:
                 self._rebuild()
@@ -1762,7 +1762,7 @@ class ImportWindow(ctk.CTkToplevel):
     def _finished(self, result, error):
         confirmed, self._cots_confirmed = self._cots_confirmed, False      # each Finish asks again
         self.session.set_allow_external(False)             # the answer to the question below counts for one try only
-        if isinstance(error, importer.ExternalReferences):
+        if isinstance(error, import_errors.ExternalReferences):
             self._show("table")
             self._rebuild()
             if messagebox.askyesno("Files outside this import", logic.import_external_text(error), parent=self):
@@ -1780,14 +1780,14 @@ class ImportWindow(ctk.CTkToplevel):
             self._really_close()
             return
         self._show("table")
-        if isinstance(error, importer.PNConflict):
+        if isinstance(error, import_errors.PNConflict):
             self.conflicts, self.renumbered = error.conflicts, error.renumbered
             self._rebuild()
             self._say("Nothing was imported: some part numbers can't be used. Change the red rows, then press "
                       "Finish & Import again.", "error")
             messagebox.showwarning("Part numbers taken", logic.import_conflict_text(error.conflicts, error.renumbered),
                                    parent=self)
-        elif isinstance(error, importer.ImportCancelled):
+        elif isinstance(error, import_errors.ImportCancelled):
             self._rebuild()
             self._say("Import cancelled. Nothing was added to the vault, and your files were not changed.", "warn")
         else:
