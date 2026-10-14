@@ -13,8 +13,8 @@ APP = HERE.parent
 sys.path.insert(0, str(APP))
 PACKAGING = next((p for p in (APP.parent / "packaging", APP / "litterbox-pdm" / "packaging") if p.is_dir()), None)
 
-from litterbox.user import updater  # noqa: E402
-from litterbox import version  # noqa: E402
+from litterbox.user import updater
+from litterbox import version
 
 
 @unittest.skipIf(PACKAGING is None, "packaging folder not found next to the app")

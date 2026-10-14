@@ -34,8 +34,8 @@ jobs:
       - name: Run the tests
         working-directory: app
         env:
-          PYTHONPATH: ".:tests"
-        run: python -m unittest discover -s tests -p "test_*.py"
+          PYTHONPATH: "."
+        run: python -m unittest discover -s tests -t . -p "test_*.py"
 
       - name: Run the SolidWorks tool tests
         working-directory: tools/solidworks
@@ -70,8 +70,8 @@ jobs:
         continue-on-error: true
         working-directory: app
         env:
-          PYTHONPATH: ".;tests"
-        run: python -m unittest discover -s tests -p "test_*.py"
+          PYTHONPATH: "."
+        run: python -m unittest discover -s tests -t . -p "test_*.py"
 
       - name: Tell the program where its updates come from
         run: python packaging/write_build_info.py --repo ${{ github.repository }}

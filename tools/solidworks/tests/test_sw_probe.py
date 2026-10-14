@@ -1,5 +1,5 @@
 """Tests for sw_probe.py using a pretend SolidWorks. (The real connection can only be tried on Windows with
-SolidWorks installed.) Run from the app folder with:  python -m unittest discover -s tests -v"""
+SolidWorks installed.) Run from tools/solidworks with the app folder on PYTHONPATH:  python -m unittest discover -s tests -v"""
 
 import contextlib
 import io
