@@ -53,7 +53,10 @@ from pathlib import Path
 import yaml
 
 from litterbox.vault import config_write
-from litterbox.team import people
+from litterbox.team import team_identity
+from litterbox.team import team_model
+from litterbox.team import team_permissions
+from litterbox.team import team_store
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
@@ -269,8 +272,8 @@ def edit_templates(repo, change, message):
     """Change the workflow file for everyone: lock it, get the latest, `change(templates, directory)`, check,
     commit, push, unlock. If anything fails the file is put back. Admins only. Returns what change() returns."""
     repository.validate_repo(repo)
-    identity = people.require(repo, "manage_workflows")
-    if identity.state != people.OK:
+    identity = team_permissions.require(repo, "manage_workflows")
+    if identity.state != team_identity.OK:
         raise WorkflowError("Set up the team first (Team... > Set Up Team): workflows are about people's roles.")
     rel = layout.WORKFLOWS_FILE
     config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
@@ -283,7 +286,7 @@ def edit_templates(repo, change, message):
     try:
         remote.pull(repo)
         templates = load(repo)
-        directory = people.load(repo)
+        directory = team_store.load(repo)
         result = change(templates, directory)
         validate(templates, directory)
         save(repo, templates)
@@ -431,7 +434,7 @@ def open_slots(pending, person_id):
 
 
 def _is_admin(person):
-    return person.access in (people.OWNER, people.ADMIN)
+    return person.access in (team_model.OWNER, team_model.ADMIN)
 
 
 def _is_signer(pending, person):
@@ -473,8 +476,8 @@ def file_hashes(repo, files):
 
 def _me(repo, action):
     """The current user as a team member. Workflows are about people, so a vault with no team can't use them."""
-    identity = people.require(repo, action)
-    if identity.state != people.OK or identity.person is None:
+    identity = team_permissions.require(repo, action)
+    if identity.state != team_identity.OK or identity.person is None:
         raise WorkflowError("Set up the team first (Team... > Set Up Team): sign-offs are done by people on it.")
     return identity.person
 
@@ -573,7 +576,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
     template = templates_for(repo, action).get(template_name)
     if template is None:
         raise WorkflowError(f"There is no {label_of(action)} workflow called '{template_name}'. Run Get Latest.")
-    directory = people.load(repo)
+    directory = team_store.load(repo)
     slots = build_slots(template, directory, me.id, assignments, extras)
     reason = " ".join((reason or "").split())
     if action in NEEDS_REASON and not reason:
@@ -885,7 +888,7 @@ def withdraw(repo, pns, reason=""):
 def reassign(repo, pns, slot, person_id):
     """Name a different person for a sign-off that hasn't been given. The person who asked, or an Admin, may."""
     me = _me(repo, "signoff")
-    directory = people.load(repo)
+    directory = team_store.load(repo)
 
     def edit_for(batch_id):
         def edit(record, user):
@@ -952,7 +955,7 @@ class Task:
 def tasks_from_rows(rows, identity):
     """Everything waiting on a sign-off, from the part list's rows (PartStatus), one task per request. With no
     team member identity the tasks are listed, but nothing can be done to them."""
-    me = identity.person if identity.state == people.OK else None
+    me = identity.person if identity.state == team_identity.OK else None
     groups = {}
     for row in rows:
         pending = getattr(row, "pending", None)

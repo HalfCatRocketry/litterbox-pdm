@@ -25,6 +25,8 @@ from litterbox.importing import importer
 from litterbox.records import record_store
 from litterbox.user import settings
 from litterbox.errors import NothingToSaveError
+from litterbox.team import team_identity
+from litterbox.team import team_model
 
 
 REAL_SESSION = import_session.ImportSession
@@ -192,10 +194,8 @@ class TeamWiring(unittest.TestCase):
 
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
-        from litterbox.team import people
         from litterbox.parts.part_status import PartStatus
         from litterbox.core.part_number import PN
-        self.people = people
         self.pn = PN("HCR", 7, 1)
         row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=["cad/HCR-00007-001_A.SLDPRT"],
                          revisions={"A": ["cad/HCR-00007-001_A.SLDPRT"]})
@@ -207,11 +207,11 @@ class TeamWiring(unittest.TestCase):
         self.app = app
 
     def test_legacy_vaults_allow_everything(self):
-        self.app.identity = self.people.Identity(self.people.LEGACY)
+        self.app.identity = team_identity.Identity(team_identity.LEGACY)
         self.assertIsNotNone(self.app._plan("checkout"))
 
     def test_someone_not_listed_can_look_but_every_change_is_refused_with_the_reason(self):
-        self.app.identity = self.people.Identity(self.people.NOT_LISTED, "stranger")
+        self.app.identity = team_identity.Identity(team_identity.NOT_LISTED, "stranger")
         for action in ("checkout", "checkin", "release", "revise", "edit", "void"):
             self.said.clear()
             self.assertIsNone(self.app._plan(action), action)
@@ -220,7 +220,7 @@ class TeamWiring(unittest.TestCase):
             self.assertIsNotNone(self.app._plan(action), action)
 
     def test_new_part_and_import_are_refused_too(self):
-        self.app.identity = self.people.Identity(self.people.UNVERIFIED)
+        self.app.identity = team_identity.Identity(team_identity.UNVERIFIED)
         self.app.jobs = fake_jobs()
         self.app.new_part()
         self.app.import_cad()
@@ -228,8 +228,8 @@ class TeamWiring(unittest.TestCase):
         self.assertTrue(all(tone == "warn" for _t, tone in self.said))
 
     def test_a_member_may_work_but_not_manage_people(self):
-        person = self.people.Person("m", "M")
-        self.app.identity = self.people.Identity(self.people.OK, "m", person)
+        person = team_model.Person("m", "M")
+        self.app.identity = team_identity.Identity(team_identity.OK, "m", person)
         self.assertIsNotNone(self.app._plan("checkout"))
         self.assertFalse(self.app._may("manage_people"))
         self.assertIn("Only an Admin", self.said[-1][0])
@@ -401,9 +401,9 @@ class WorkflowWiring(unittest.TestCase):
         app._say = lambda text, tone="normal": self.said.append(text)
         app.repo = lambda: "C:/vault"
         app.rows, app.rows_by_pn = [], {}
-        directory = self.gui.people.Directory(
-            [self.gui.people.Person("alex", "Alex", "", ["Alex"], "owner", ["Responsible Engineer"]),
-             self.gui.people.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"])],
+        directory = self.gui.team_model.Directory(
+            [self.gui.team_model.Person("alex", "Alex", "", ["Alex"], "owner", ["Responsible Engineer"]),
+             self.gui.team_model.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"])],
             ["Responsible Engineer", "Quality"])
         self.directory = directory
         app.identity = SimpleNamespace(state="ok", directory=directory, person=directory.get("alex"))
@@ -647,8 +647,8 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual(shown[-1], "My Tasks")
 
     def _draft_window(self, roles, templates=None):
-        directory = self.gui.people.Directory(
-            [self.gui.people.Person("bea", "Bea", "", ["Bea"], "owner", list(roles))], list(roles))
+        directory = self.gui.team_model.Directory(
+            [self.gui.team_model.Person("bea", "Bea", "", ["Bea"], "owner", list(roles))], list(roles))
         draft = self.gui.TeamDraft(directory, templates or {}, "bea")
         reloaded = []
         window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: reloaded.append(1), draft=draft)

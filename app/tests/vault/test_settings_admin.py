@@ -12,7 +12,7 @@ from tests.support.workflow_fixture import Fixture
 
 from litterbox.vault import config
 from litterbox.vault import config_write
-from litterbox.team import people
+from litterbox.team import team_model
 from litterbox.vault import settings_admin as vault_settings
 from litterbox.errors import LitterboxError
 from litterbox import layout
@@ -111,7 +111,7 @@ class EditingTheSetting(Fixture, unittest.TestCase):
         self.assertEqual(config.get_release_rule(self.b), "block")
 
     def test_manage_settings_is_an_admin_action(self):
-        self.assertIn("manage_settings", people.ADMIN_ACTIONS)
+        self.assertIn("manage_settings", team_model.ADMIN_ACTIONS)
 
 
 class DialogLogic(unittest.TestCase):

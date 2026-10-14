@@ -5,8 +5,8 @@ Saving a change to the team goes through Git (lock, pull, commit, push, unlock) 
 you are making several changes that is a lot of waiting, so the Team window works on a DRAFT instead:
 
     draft = TeamDraft(directory, templates, my_person_id)
-    draft.stage_people("Add Bea", lambda d, who: people.add_person(d, who, "bea", "Bea Jones"))
-    draft.stage_people("Roles", lambda d, who: people.set_roles(d, who, [...], scrub=True))
+    draft.stage_people("Add Bea", lambda d, who: team_editing.add_person(d, who, "bea", "Bea Jones"))
+    draft.stage_people("Roles", lambda d, who: team_editing.set_roles(d, who, [...], scrub=True))
     draft.stage_workflow("Release workflow", lambda t, d: workflow.set_template(t, "release", [...]))
     draft.directory / draft.templates      what the window shows (the vault's state plus your staged changes)
     draft.save(repo)                       one commit for the team file, one for the workflow file
@@ -20,7 +20,8 @@ A change function must capture ids and plain values, never the people objects of
 
 import copy
 
-from litterbox.team import people
+from litterbox.team import team_model
+from litterbox.team import team_store
 from litterbox.workflows import workflow
 from litterbox.errors import LitterboxError, NothingToSaveError
 
@@ -57,10 +58,10 @@ class TeamDraft:
         trial = copy.deepcopy(self.directory)
         actor = trial.get(self.actor_id)
         if actor is None:
-            raise people.PeopleError("You are not on the team list any more. Close this window and press "
+            raise team_model.PeopleError("You are not on the team list any more. Close this window and press "
                                      "Get Latest.")
         change(trial, actor)
-        people.validate(trial)
+        team_model.validate(trial)
         if self.templates:
             workflow.validate(copy.deepcopy(self.templates), trial)
         self.directory = trial
@@ -89,14 +90,14 @@ class TeamDraft:
                     func(directory, actor)
 
             try:
-                people.edit_directory(repo, change, "Team: " + _short("; ".join(label for label, _ in ops)),
+                team_store.edit_directory(repo, change, "Team: " + _short("; ".join(label for label, _ in ops)),
                                       action="transfer_owner" if self.needs_owner else "manage_people")
                 changed = True
             except NothingToSaveError:              # the changes cancelled each other out
                 pass
             saved += [label for label, _ in ops]
             self.people_ops, self.needs_owner = [], False
-            self.directory = people.load(repo)          # the vault's file as it is now
+            self.directory = team_store.load(repo)          # the vault's file as it is now
         if self.workflow_ops:
             ops = list(self.workflow_ops)
 

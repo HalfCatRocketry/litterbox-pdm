@@ -26,7 +26,11 @@ from litterbox.vault import config
 from litterbox.vault import config_write
 from litterbox.records import record_model
 from litterbox.records import record_store
-from litterbox.team import people
+from litterbox.team import team_editing
+from litterbox.team import team_identity
+from litterbox.team import team_model
+from litterbox.team import team_setup
+from litterbox.team import team_store
 from litterbox.references import references
 from litterbox.parts import revise
 from litterbox.team import commit_signing as signing
@@ -2375,7 +2379,7 @@ class RolesDialog(ctk.CTkToplevel):
         self._show()
 
     def _standard(self):
-        for role in people.STANDARD_ROLES:
+        for role in team_model.STANDARD_ROLES:
             if role.lower() not in (r.lower() for r in self.roles):
                 self.roles.append(role)
         self._show()
@@ -3183,7 +3187,7 @@ class TeamWindow(ctk.CTkToplevel):
 
     def _new_draft(self):
         identity = self.app.identity
-        if identity.state == people.LEGACY or identity.directory is None:
+        if identity.state == team_identity.LEGACY or identity.directory is None:
             return None
         try:
             templates = workflow.load(self.app.repo())
@@ -3213,11 +3217,11 @@ class TeamWindow(ctk.CTkToplevel):
         if self.draft is None or not self.draft.dirty:      # nothing unsaved: show the vault as it is now
             self.draft = self._new_draft()
         directory = self.draft.directory if self.draft is not None else identity.directory
-        if identity.state == people.LEGACY:
+        if identity.state == team_identity.LEGACY:
             directory = None
         elif directory is None:
             try:
-                directory = people.load(self.app.repo())
+                directory = team_store.load(self.app.repo())
             except LitterboxError:
                 directory = None
         self.save_button = None
@@ -3262,7 +3266,7 @@ class TeamWindow(ctk.CTkToplevel):
 
 
 class App(ctk.CTk):
-    identity = people.Identity(people.LEGACY)       # replaced after the first refresh
+    identity = team_identity.Identity(team_identity.LEGACY)       # replaced after the first refresh
 
     def __init__(self):
         super().__init__()
@@ -3287,7 +3291,7 @@ class App(ctk.CTk):
         self._was_busy = False
         self._shown_pending = {}
         self.rows = []                  # every PartStatus from the engine
-        self.identity = people.Identity(people.LEGACY)      # who you are on this vault's team (see people.py)
+        self.identity = team_identity.Identity(team_identity.LEGACY)      # who you are on this vault's team (see people.py)
         self.rows_by_pn = {}
         self.buttons = []               # disabled while something is running
         self.action_buttons = {}        # button text -> button, for the ones that follow the selection
@@ -3979,9 +3983,9 @@ class App(ctk.CTk):
         def work():
             def find_out_who():
                 try:
-                    return people.current(repo)
+                    return team_identity.current(repo)
                 except LitterboxError as e:           # a damaged team file must not hide the parts
-                    return people.Identity(people.UNVERIFIED, detail=str(e).splitlines()[0])
+                    return team_identity.Identity(team_identity.UNVERIFIED, detail=str(e).splitlines()[0])
 
             started = time.monotonic()
             with ThreadPoolExecutor(max_workers=2) as pool:      # the list and "who am I" don't depend on each other
@@ -4287,10 +4291,10 @@ class App(ctk.CTk):
         def show(who):
             self.identity = who
             self._show_identity()
-            messagebox.showinfo("Who am I?", logic.who_am_i_text(who) if who.state != people.UNVERIFIED
+            messagebox.showinfo("Who am I?", logic.who_am_i_text(who) if who.state != team_identity.UNVERIFIED
                                 else who.message(), parent=parent)
 
-        self.run_task(lambda: people.current(repo, refresh=True), "Checked who you are", on_success=show,
+        self.run_task(lambda: team_identity.current(repo, refresh=True), "Checked who you are", on_success=show,
                       refresh=False)
 
     def set_up_team(self):
@@ -4301,7 +4305,7 @@ class App(ctk.CTk):
                 "Litterbox needs the internet to ask the host who you are."):
             return
         repo = self.repo()
-        self.run_task(lambda: (people.setup_team(repo), people.current(repo, refresh=True))[1], "The team is set up",
+        self.run_task(lambda: (team_setup.setup_team(repo), team_identity.current(repo, refresh=True))[1], "The team is set up",
                       on_success=self._team_changed)
 
     def _team_changed(self, who):
@@ -4336,14 +4340,14 @@ class App(ctk.CTk):
             if person is None:
                 new_id = fields.pop("id")
                 return self._stage(window, f"Add {fields['name']}",
-                                   lambda d, who: people.add_person(d, who, new_id, **fields))
+                                   lambda d, who: team_editing.add_person(d, who, new_id, **fields))
             if logic.person_unchanged(person, fields):
                 return ""
             pid = person.id
-            return self._stage(window, f"Edit {person.name}", lambda d, who: people.update_person(d, who, pid, **fields))
+            return self._stage(window, f"Edit {person.name}", lambda d, who: team_editing.update_person(d, who, pid, **fields))
 
         PersonDialog(window, person, directory.roles, [p.id for p in directory.people],
-                     self.identity.access == people.OWNER, apply=apply).show()
+                     self.identity.access == team_model.OWNER, apply=apply).show()
 
     def toggle_person(self, window, person_id):
         if not self._may("manage_people"):
@@ -4354,7 +4358,7 @@ class App(ctk.CTk):
             return
         turn_on, pid = not person.active, person.id
         problem = self._stage(window, f"Switch {'on' if turn_on else 'off'} {person.name}",
-                              lambda d, who: people.set_active(d, who, pid, turn_on))
+                              lambda d, who: team_editing.set_active(d, who, pid, turn_on))
         if problem:
             messagebox.showwarning("Team", problem, parent=window)
 
@@ -4362,8 +4366,8 @@ class App(ctk.CTk):
         if not self._may("manage_people") or window.draft is None:
             return
         directory = window.draft.directory
-        RolesDialog(window, directory.roles, lambda role: people.holders_of(window.draft.directory, role),
-                    apply=lambda roles: self._stage(window, "Roles", lambda d, who: people.set_roles(
+        RolesDialog(window, directory.roles, lambda role: team_editing.holders_of(window.draft.directory, role),
+                    apply=lambda roles: self._stage(window, "Roles", lambda d, who: team_editing.set_roles(
                         d, who, roles, scrub=True))).show()
 
     def transfer_owner(self, window, person_id):
@@ -4380,7 +4384,7 @@ class App(ctk.CTk):
             return
         pid = person.id
         problem = self._stage(window, f"{person.name} becomes the Owner",
-                              lambda d, who: people.transfer_owner(d, who, pid), needs_owner=True)
+                              lambda d, who: team_editing.transfer_owner(d, who, pid), needs_owner=True)
         if problem:
             messagebox.showwarning("Team", problem, parent=window)
 
@@ -4449,7 +4453,7 @@ class App(ctk.CTk):
 
         def work():
             draft.save(repo)
-            return people.current(repo, probe=False)
+            return team_identity.current(repo, probe=False)
 
         self.run_task(work, "Saved the team changes", on_success=self._team_changed, refresh=False)
 

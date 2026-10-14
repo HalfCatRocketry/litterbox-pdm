@@ -10,7 +10,8 @@ from pathlib import Path
 from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.vault import create_vault as iv
-from litterbox.team import people
+from litterbox.team import team_model
+from litterbox.team import team_setup
 from litterbox.core import part_number
 from litterbox.records import record_store
 from tests.support.vault_fixture import SHIM, SKIP_ON_WINDOWS, git
@@ -117,18 +118,18 @@ class CreatingAVault(EmptyRepo):
 
     def test_setting_up_the_team_makes_you_the_owner(self):
         result = self.make(set_up_team=True)
-        self.assertEqual(result.owner.access, people.OWNER)
+        self.assertEqual(result.owner.access, team_model.OWNER)
         self.assertEqual(result.owner.host_names, ["alexsmith"])
         self.assertEqual(result.team_error, "")
         self.assertIn(".litterbox/people.yaml", self.remote_files())
 
     def test_a_team_that_cannot_be_set_up_does_not_undo_the_vault(self):
-        real = people.setup_team
+        real = team_setup.setup_team
 
         def broken(*args, **kwargs):
-            raise people.PeopleError("The host didn't answer.")
-        people.setup_team = broken
-        self.addCleanup(setattr, people, "setup_team", real)
+            raise team_model.PeopleError("The host didn't answer.")
+        team_setup.setup_team = broken
+        self.addCleanup(setattr, team_setup, "setup_team", real)
         result = self.make(set_up_team=True)
         self.assertIsNone(result.owner)
         self.assertIn("didn't answer", result.team_error)

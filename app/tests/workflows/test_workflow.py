@@ -10,7 +10,10 @@ from unittest import mock
 
 from tests.support.vault_fixture import DRW, PART, PRT, git
 
-from litterbox.team import people
+from litterbox.team import team_identity
+from litterbox.team import team_model
+from litterbox.team import team_permissions
+from litterbox.team import team_store
 from litterbox.records import record_model
 from litterbox.workflows import workflow as wf
 from tests.support.workflow_fixture import CHIEF, ENGINEER, MANAGER, PART2, PRT2, QUALITY, Fixture
@@ -116,7 +119,7 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertEqual(templates, {})
 
     def test_standard_workflows_need_their_roles(self):
-        directory = people.load(self.a)
+        directory = team_store.load(self.a)
         directory.roles = [ENGINEER, MANAGER]
         templates = {}
         missing = wf.add_standard(templates, directory)
@@ -135,13 +138,13 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertIn("Litterbox 0.2", str(ctx.exception))
 
     def test_people_for_a_row_include_everyone_with_any_of_its_roles(self):
-        directory = people.load(self.a)
+        directory = team_store.load(self.a)
         self.assertEqual([p.id for p in wf.eligible(directory, [MANAGER, QUALITY])], ["bea", "cy"])
         directory.people[1].active = False
         self.assertEqual([p.id for p in wf.eligible(directory, [MANAGER, QUALITY])], ["cy"])
 
     def test_warnings(self):
-        directory = people.load(self.a)
+        directory = team_store.load(self.a)
         t = wf.Template(wf.RELEASE, "T", [wf.Row(["Manufacturing"]), wf.Row([QUALITY])])
         self.assertEqual(len(wf.role_warnings(t, directory)), 1)
         self.assertIn("nobody active", wf.role_warnings(t, directory)[0])
@@ -153,7 +156,7 @@ class TestTemplates(Fixture, unittest.TestCase):
         self.assertEqual(wf.role_warnings(t, directory), [])
 
     def test_a_vault_without_a_team_cannot_have_workflows(self):
-        with mock.patch.object(people, "require", return_value=people.Identity(people.LEGACY)):
+        with mock.patch.object(team_permissions, "require", return_value=team_identity.Identity(team_identity.LEGACY)):
             with self.assertRaises(LitterboxError) as ctx:
                 wf.edit_templates(self.a, lambda t, d: None, "x")
         self.assertIn("Set up the team", str(ctx.exception))
@@ -543,9 +546,9 @@ class TestOverride(Fixture, unittest.TestCase):
         self.assertEqual(self.record().status, record_model.STATUS_VOID)
 
 
-def identity_for(person_id, directory, access=people.MEMBER):
+def identity_for(person_id, directory, access=team_model.MEMBER):
     person = directory.get(person_id)
-    return SimpleNamespace(state=people.OK, person=person, directory=directory)
+    return SimpleNamespace(state=team_identity.OK, person=person, directory=directory)
 
 
 class TestTasks(Fixture, unittest.TestCase):
@@ -553,7 +556,7 @@ class TestTasks(Fixture, unittest.TestCase):
         return self.do(user, part_status.get_status)
 
     def tasks(self, who, user="Alex"):
-        return wf.tasks_from_rows(self.rows(user), identity_for(who, people.load(self.a)))
+        return wf.tasks_from_rows(self.rows(user), identity_for(who, team_store.load(self.a)))
 
     def test_nothing_pending_means_no_tasks(self):
         self.assertEqual(self.tasks("alex"), [])
@@ -596,7 +599,7 @@ class TestTasks(Fixture, unittest.TestCase):
 
     def test_nobody_can_act_without_a_team_identity(self):
         self.request()
-        ident = SimpleNamespace(state=people.NOT_LISTED, person=None, directory=None)
+        ident = SimpleNamespace(state=team_identity.NOT_LISTED, person=None, directory=None)
         (t,) = wf.tasks_from_rows(self.rows(), ident)
         self.assertFalse(any((t.can_sign, t.can_reject, t.can_complete, t.can_withdraw, t.can_override)))
 

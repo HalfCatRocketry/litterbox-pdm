@@ -17,7 +17,7 @@ from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.vault import config_write
-from litterbox.team import people
+from litterbox.team import team_permissions
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
@@ -35,7 +35,7 @@ def edit(repo, **values):
     """Change the settings given (see config_write.set_values), commit and upload the change. If anything fails the file
     is put back. Returns True if something changed, False if the vault already had those values."""
     repository.validate_repo(repo)
-    people.require(repo, "manage_settings")
+    team_permissions.require(repo, "manage_settings")
     path = Path(repo) / CONFIG_REL
     tracked = repository.in_index(repo, CONFIG_REL)
     before = path.read_bytes() if path.is_file() else None

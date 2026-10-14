@@ -4,7 +4,10 @@ from unittest import mock
 
 from tests.support.vault_fixture import PART, SKIP_ON_WINDOWS, TwoUserVault, git
 
-from litterbox.team import people
+from litterbox.team import team_editing
+from litterbox.team import team_model
+from litterbox.team import team_setup
+from litterbox.team import team_store
 from litterbox.records import record_store
 from litterbox.workflows import workflow as wf
 from litterbox.core.part_number import PN
@@ -26,11 +29,11 @@ class Fixture(TwoUserVault):
         quiet.start()
         self.addCleanup(quiet.stop)
         with self.user("Alex"):
-            people.setup_team(self.a, "Alex Smith", "alex@x.com")
-            people.edit_directory(self.a, lambda d, who: (
-                people.update_person(d, who, "alex", roles=[ENGINEER]),
-                people.add_person(d, who, "bea", "Bea Jones", "bea@x.com", ["Bea"], people.MEMBER, [QUALITY]),
-                people.add_person(d, who, "cy", "Cy Day", "cy@x.com", ["Cy"], people.MEMBER, [MANAGER])),
+            team_setup.setup_team(self.a, "Alex Smith", "alex@x.com")
+            team_store.edit_directory(self.a, lambda d, who: (
+                team_editing.update_person(d, who, "alex", roles=[ENGINEER]),
+                team_editing.add_person(d, who, "bea", "Bea Jones", "bea@x.com", ["Bea"], team_model.MEMBER, [QUALITY]),
+                team_editing.add_person(d, who, "cy", "Cy Day", "cy@x.com", ["Cy"], team_model.MEMBER, [MANAGER])),
                 "Team: add Bea and Cy")
         self.get_latest("Bea")
 

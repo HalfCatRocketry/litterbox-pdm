@@ -14,5 +14,5 @@ def check_permission(repo, user, action):
     In a vault with a people file, only active team members pass (see people.py); a vault
     without one lets everybody do everything.
     """
-    from litterbox.team import people
-    people.require(repo, action)
+    from litterbox.team import team_permissions
+    team_permissions.require(repo, action)

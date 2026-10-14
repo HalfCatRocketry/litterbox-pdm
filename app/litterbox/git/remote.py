@@ -21,8 +21,8 @@ def pull(repo):
 def push_with_retry(repo, attempts=3):
     """Sync then push. If someone else pushed first, sync again and retry.
     First checks that the vault's latest team list still lets you upload."""
-    from litterbox.team import people
-    people.check_before_push(repo)
+    from litterbox.team import team_store
+    team_store.check_before_push(repo)
     for attempt in range(1, attempts + 1):
         pull(repo)
         try:

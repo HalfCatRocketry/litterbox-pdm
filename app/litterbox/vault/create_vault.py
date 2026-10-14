@@ -35,7 +35,7 @@ from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.vault import config_write
-from litterbox.team import people
+from litterbox.team import team_setup
 from litterbox.core import part_number
 from litterbox import version
 from litterbox.core.part_number import PNError, check_org
@@ -102,7 +102,7 @@ class InitResult:
     files: list                      # what was written (repo-relative)
     pushed: bool
     warnings: list
-    owner: object = None             # the people.Person set up as Owner, if the team was set up
+    owner: object = None             # the team_model.Person set up as Owner, if the team was set up
     team_error: str = ""             # why the team wasn't set up (the vault is fine; use Team... later)
 
 
@@ -337,7 +337,7 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
                             f"locking are available on this repository.\n{e}")
     if set_up_team and push:
         try:
-            result.owner = people.setup_team(repo, name=name, email=email)
+            result.owner = team_setup.setup_team(repo, name=name, email=email)
         except LitterboxError as e:
             result.team_error = str(e)
     return result

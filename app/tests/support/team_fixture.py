@@ -4,7 +4,11 @@ from unittest import mock
 
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault
 
-from litterbox.team import people
+from litterbox.team import team_editing
+from litterbox.team import team_identity
+from litterbox.team import team_model
+from litterbox.team import team_setup
+from litterbox.team import team_store
 from litterbox import diagnostics
 from litterbox.parts import get_latest
 from litterbox.git import lfs_locks
@@ -20,11 +24,11 @@ class TeamFixture(TwoUserVault):
 
     def setup_team(self):
         with self.user("Alex"):
-            return people.setup_team(self.a, "Alex Smith", "alex@x.com")
+            return team_setup.setup_team(self.a, "Alex Smith", "alex@x.com")
 
-    def add_bea(self, access=people.MEMBER):
+    def add_bea(self, access=team_model.MEMBER):
         with self.user("Alex"):
-            people.edit_directory(self.a, lambda d, who: people.add_person(
+            team_store.edit_directory(self.a, lambda d, who: team_editing.add_person(
                 d, who, "bea", "Bea Jones", "bea@x.com", ["Bea"], access), "Team: add Bea")
         with self.user("Bea"):
             get_latest.get_latest(self.b)
@@ -35,4 +39,4 @@ class TeamFixture(TwoUserVault):
 
     def who(self, repo, user, **kwargs):
         with self.user(user):
-            return people.current(repo, **kwargs)
+            return team_identity.current(repo, **kwargs)

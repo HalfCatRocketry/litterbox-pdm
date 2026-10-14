@@ -13,6 +13,7 @@ from litterbox.parts.part_changes import ChangeReport
 from litterbox.parts.part_status import PartStatus
 from litterbox.errors import LitterboxError
 from litterbox.core.part_number import PN
+from litterbox.team import team_identity
 
 
 def row(base, state="Available", kind="ok", description="", files=(), name="", import_path=""):
@@ -605,20 +606,18 @@ class TestReferenceText(unittest.TestCase):
 
 class TestTeamText(unittest.TestCase):
     def setUp(self):
-        from litterbox.team import people
-        self.people = people
-        self.d = people.Directory([people.Person("alex", "Alex Smith", "a@x.com", ["alexs"], people.OWNER, ["Quality"]),
-                                   people.Person("bea", "Bea", "", [], people.MEMBER, [], False, ["ssh-ed25519 AAAA"])],
+        from litterbox.team import team_model
+        self.d = team_model.Directory([team_model.Person("alex", "Alex Smith", "a@x.com", ["alexs"], team_model.OWNER, ["Quality"]),
+                                   team_model.Person("bea", "Bea", "", [], team_model.MEMBER, [], False, ["ssh-ed25519 AAAA"])],
                                   ["Quality"])
 
     def test_banner(self):
-        p = self.people
-        self.assertEqual(logic.identity_banner(p.Identity(p.LEGACY))[1], "normal")
-        text, tone = logic.identity_banner(p.resolve(self.d, "alexs"))
+        self.assertEqual(logic.identity_banner(team_identity.Identity(team_identity.LEGACY))[1], "normal")
+        text, tone = logic.identity_banner(team_identity.resolve(self.d, "alexs"))
         self.assertEqual((tone, "Alex Smith" in text, "Owner" in text, "Quality" in text), ("normal", True, False, False))
         for host in ("stranger", "", ):
-            self.assertEqual(logic.identity_banner(p.resolve(self.d, host))[1], "warn")
-        self.assertEqual(logic.identity_banner(p.Identity(p.INACTIVE))[1], "warn")
+            self.assertEqual(logic.identity_banner(team_identity.resolve(self.d, host))[1], "warn")
+        self.assertEqual(logic.identity_banner(team_identity.Identity(team_identity.INACTIVE))[1], "warn")
 
     def test_people_table(self):
         rows = logic.people_table(self.d)
@@ -632,10 +631,9 @@ class TestTeamText(unittest.TestCase):
         self.assertEqual(logic.suggest_person_id("!!!", []), "person")
 
     def test_who_am_i(self):
-        p = self.people
-        self.assertIn("matches Alex Smith", logic.who_am_i_text(p.resolve(self.d, "ALEXS")))
-        self.assertIn("not on this vault's team list", logic.who_am_i_text(p.resolve(self.d, "stranger")))
-        self.assertIn("no team list yet", logic.who_am_i_text(p.Identity(p.LEGACY, "x")))
+        self.assertIn("matches Alex Smith", logic.who_am_i_text(team_identity.resolve(self.d, "ALEXS")))
+        self.assertIn("not on this vault's team list", logic.who_am_i_text(team_identity.resolve(self.d, "stranger")))
+        self.assertIn("no team list yet", logic.who_am_i_text(team_identity.Identity(team_identity.LEGACY, "x")))
 
     def test_person_form(self):
         form = {"name": " Cy  Ng ", "email": "cy@x.com", "host_names": "cyng, Cy Ng", "roles": "Quality",
@@ -775,11 +773,11 @@ class TestWorkflowText(unittest.TestCase):
         self.assertIn("HCR-00001-001: offline", text)
 
     def test_people_drop_downs(self):
-        from litterbox.team import people
-        directory = people.Directory(
-            [people.Person("a", "Alex", "", [], "owner", ["Quality"]), people.Person("b", "Alex", "", [], "member",
+        from litterbox.team import team_model
+        directory = team_model.Directory(
+            [team_model.Person("a", "Alex", "", [], "owner", ["Quality"]), team_model.Person("b", "Alex", "", [], "member",
                                                                                       ["Manager"]),
-             people.Person("c", "Cy", "", [], "member", ["Quality"], active=False)], ["Quality", "Manager"])
+             team_model.Person("c", "Cy", "", [], "member", ["Quality"], active=False)], ["Quality", "Manager"])
         self.assertEqual(logic.row_choices(directory, ["Quality", "Manager"]), [("Alex (a)", "a"), ("Alex (b)", "b")])
         self.assertEqual(logic.row_choices(directory, ["Quality"], "a", False), [])
         self.assertEqual(logic.row_choices(directory, ["Manager"]), [("Alex", "b")])
@@ -921,9 +919,10 @@ class TestTicks(unittest.TestCase):
         self.assertTrue(text.endswith("Continue?"))
 
     def test_the_banner_shows_only_the_name(self):
-        from litterbox.team import people
-        who = people.Person("bea", "Bea Jones", "", ["Bea"], "member", ["Quality"])
-        self.assertEqual(people.Identity.describe(type("I", (), {"state": people.OK, "person": who})()),
+        from litterbox.team import team_identity
+        from litterbox.team import team_model
+        who = team_model.Person("bea", "Bea Jones", "", ["Bea"], "member", ["Quality"])
+        self.assertEqual(team_identity.Identity.describe(type("I", (), {"state": team_identity.OK, "person": who})()),
                          "Bea Jones")
 
     def test_tick_text(self):
@@ -932,8 +931,8 @@ class TestTicks(unittest.TestCase):
         self.assertTrue(logic.tick_text(3).startswith("3 parts selected."))
 
     def test_person_unchanged(self):
-        from litterbox.team import people
-        who = people.Person("bea", "Bea", "b@x.com", ["Bea"], "member", ["Quality"])
+        from litterbox.team import team_model
+        who = team_model.Person("bea", "Bea", "b@x.com", ["Bea"], "member", ["Quality"])
         same = {"name": "Bea", "email": "b@x.com", "host_names": ["Bea"], "access": "member", "roles": ["Quality"]}
         self.assertTrue(logic.person_unchanged(who, same))
         self.assertFalse(logic.person_unchanged(who, dict(same, roles=[])))
