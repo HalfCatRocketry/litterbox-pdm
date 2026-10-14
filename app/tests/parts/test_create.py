@@ -18,7 +18,7 @@ from tests.support.vault_fixture import PART, PRT, SKIP_ON_WINDOWS, TwoUserVault
 
 from litterbox.records import registry
 from litterbox.parts import create
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
 from litterbox.parts import checkout

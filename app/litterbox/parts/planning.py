@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox import diagnostics
-from litterbox.core import pn as pn_module
-from litterbox.core.pn import PN
+from litterbox.core import revision_letters
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
@@ -142,7 +142,7 @@ def make_cots_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
                               ctx=ctx or PlanContext(repo))
     if record.cots:
         problems.insert(0, "It is already a COTS part.")
-    elif record.released_revision or record.revision != pn_module.FIRST_REVISION:
+    elif record.released_revision or record.revision != revision_letters.FIRST_REVISION:
         problems.insert(0, "It has been released or revised, so it is not an unmodified purchased part.")
     return ReleasePlan(pn, record.name, cad, problems)
 

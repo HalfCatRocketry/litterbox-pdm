@@ -10,7 +10,7 @@ from pathlib import Path
 
 from litterbox.gui.logic import gui_logic as logic
 from litterbox.jobs import job_queue as jobs
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError, NothingToSaveError
 
 

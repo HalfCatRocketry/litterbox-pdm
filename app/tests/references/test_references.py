@@ -15,7 +15,7 @@ from litterbox.vault import config
 from litterbox.references import references as refs
 from litterbox.records import registry
 from litterbox.parts import revise
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
 from litterbox.parts import checkout

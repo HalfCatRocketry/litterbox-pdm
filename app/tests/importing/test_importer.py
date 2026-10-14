@@ -22,7 +22,7 @@ from litterbox.parts import create
 from litterbox.importing import importer
 from litterbox.importing import manifest
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from tests.support.import_fixture import ImportFixture
 from litterbox.errors import LitterboxError
 from litterbox.parts import get_latest

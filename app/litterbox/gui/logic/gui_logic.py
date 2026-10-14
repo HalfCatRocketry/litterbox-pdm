@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from litterbox.errors import LitterboxError
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
+from litterbox.core import revision_letters
 from litterbox.records import registry
 from litterbox.workflows import workflow
 
@@ -206,7 +207,7 @@ def import_base_placeholder(repo, org):
     """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
     from litterbox.vault import config
     try:
-        return pn_module.format_base(registry.next_free_base(repo, org, config.get_start_number(repo)))
+        return part_number.format_base(registry.next_free_base(repo, org, config.get_start_number(repo)))
     except Exception:
         return ""
 
@@ -774,8 +775,8 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
     if index is None:
         return "Select the row first: unselected rows are not given a part number."
     try:
-        base = parse_typed_number(base_text, "part number", pn_module.BASE_DIGITS)
-        variant = parse_typed_number(variant_text, "variant number", pn_module.VARIANT_DIGITS)
+        base = parse_typed_number(base_text, "part number", part_number.BASE_DIGITS)
+        variant = parse_typed_number(variant_text, "variant number", part_number.VARIANT_DIGITS)
     except ValueError as e:
         return str(e)
     if base is None and variant is None:
@@ -789,7 +790,7 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
             variant = registry.next_free_variant(repo, base, org) if repo else 1
         except Exception:
             variant = 1
-    chosen = pn_module.PN(org, base, variant)
+    chosen = part_number.PN(org, base, variant)
     if chosen == entry.pn:
         return ""
     try:
@@ -932,7 +933,7 @@ def open_choices(row, drawing=False):
     if released and released != working and revisions.get(released):
         wanted.append(released)
     if not wanted and revisions:                       # fall back to the newest revision that has files
-        wanted.append(max(revisions, key=pn_module.revision_number))
+        wanted.append(max(revisions, key=revision_letters.revision_number))
     choices = [(rev, revisions[rev]) for rev in wanted]
     if drawing:
         choices = [(rev, files) for rev, files in choices if _has_drawing(files)]
@@ -973,7 +974,7 @@ def revision_rows(record, revisions):
     cancelled = set(registry.cancelled_revisions(record))
     letters = set(revisions) | set(released) | {record.revision} | cancelled
     rows = []
-    for rev in sorted(letters, key=pn_module.revision_number, reverse=True):
+    for rev in sorted(letters, key=revision_letters.revision_number, reverse=True):
         event = released.get(rev)
         if rev in cancelled:
             rows.append((rev, "Cancelled", "kept in the cancelled-revs folder"))

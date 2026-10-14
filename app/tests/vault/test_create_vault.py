@@ -11,7 +11,7 @@ from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.vault import create_vault as iv
 from litterbox.team import people
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
 from litterbox.records import registry
 from tests.support.vault_fixture import SHIM, SKIP_ON_WINDOWS, git
 from litterbox.errors import LitterboxError
@@ -39,7 +39,7 @@ class EmptyRepo(unittest.TestCase):
         empty.write_text("")
         os.environ["GIT_CONFIG_GLOBAL"] = str(empty)
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
-        self.addCleanup(pn_module.configure)               # a test that changes the digits must not leak them
+        self.addCleanup(part_number.configure)               # a test that changes the digits must not leak them
 
         git(root, "init", "--bare", "-b", "main", "remote.git")
         self.remote = root / "remote.git"

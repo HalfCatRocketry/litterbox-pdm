@@ -9,8 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from litterbox.core import pn as pn_module
-from litterbox.core.pn import PN
+from litterbox.core import revision_letters
+from litterbox.core.part_number import PN
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import repository
@@ -86,7 +86,7 @@ def get_status(repo):
         elif record.cots:
             state, kind = "COTS part", "cots"
         elif not files and every_file:
-            others = ", ".join(sorted(revisions, key=pn_module.revision_number))
+            others = ", ".join(sorted(revisions, key=revision_letters.revision_number))
             state, kind = f"No files for Rev {record.revision} (found Rev {others})", "stray"
         elif not files:
             state, kind = "Created, no CAD files yet", "ok"

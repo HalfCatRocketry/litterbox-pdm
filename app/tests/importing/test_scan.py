@@ -10,7 +10,7 @@ from pathlib import Path
 from litterbox.importing import manifest as mf
 from litterbox.records import registry
 from litterbox.importing import scan
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 
 
 class ScanTestCase(unittest.TestCase):

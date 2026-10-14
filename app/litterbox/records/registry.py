@@ -34,8 +34,10 @@ from pathlib import Path
 
 import yaml
 
-from litterbox.core.pn import (FIRST_REVISION, PN, PNError, check_revision, next_base, next_revision, next_variant, parse, parse_filename,
-                parse_short, revision_number, try_parse)
+from litterbox.core.filenames import parse_filename
+from litterbox.core.numbering import next_base, next_variant
+from litterbox.core.part_number import PN, PNError, parse, parse_short, try_parse
+from litterbox.core.revision_letters import FIRST_REVISION, check_revision, next_revision, revision_number
 from litterbox import layout
 
 

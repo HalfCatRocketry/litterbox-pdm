@@ -52,9 +52,12 @@ from pathlib import Path
 from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.importing import manifest as manifest_module
-from litterbox.core import pn as pn_module
+from litterbox.core import filenames
+from litterbox.core import numbering
+from litterbox.core import part_number
+from litterbox.core import revision_letters
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from litterbox import layout
@@ -155,7 +158,7 @@ def pair_references(stored, found):
 
 
 def _cad_target(repo, pn, original_path):
-    return str(registry.cad_dir(repo) / pn_module.filename(pn, pn_module.FIRST_REVISION, _extension(original_path)))
+    return str(registry.cad_dir(repo) / filenames.filename(pn, revision_letters.FIRST_REVISION, _extension(original_path)))
 
 
 def _relative(repo, path):
@@ -526,7 +529,7 @@ def build_plan(repo, items, specs, pns, refs, manifest, allow_external=False):
     known = dict(copies)
     for item in manifest.items:
         if item.pn:
-            pn = pn_module.try_parse(item.pn)
+            pn = part_number.try_parse(item.pn)
             for path in _item_files(item):
                 target = _cad_target(repo, pn, path) if pn else None
                 if target and os.path.exists(target):
@@ -670,10 +673,10 @@ class Proposal:
     def set_pn(self, index, text):
         """The user typed a part number into row `index`. Raises ImportFailed if it isn't a valid one."""
         try:
-            new = pn_module.parse(str(text).strip())
-            pn_module.check_new_base(new.base)
-            pn_module.check_variant(new.variant)
-        except pn_module.PNError as e:
+            new = part_number.parse(str(text).strip())
+            part_number.check_new_base(new.base)
+            part_number.check_variant(new.variant)
+        except part_number.PNError as e:
             raise ImportFailed(f"Row {index + 1}: {e}") from None
         entry = self.entries[index]
         entry.pn, entry.manual = new, True
@@ -697,12 +700,12 @@ def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=Non
     count up from the vault's start number and, past the highest the digits allow, round again from 1."""
     _taken, bases = _used_numbers(repo, org)
     start = config.get_start_number(repo)
-    lowest = pn_module.free_bases(bases, 1, start)
+    lowest = numbering.free_bases(bases, 1, start)
     if not lowest:
         raise ImportFailed(f"The vault does not have {count} free part numbers left.")
     extra = (rng or random).randrange(jitter) if jitter > 0 and gap > 0 else 0
-    first = pn_module.base_after(lowest[0], max(gap, 0) + extra, start)
-    free = pn_module.free_bases(bases, count, first)
+    first = numbering.base_after(lowest[0], max(gap, 0) + extra, start)
+    free = numbering.free_bases(bases, count, first)
     if len(free) < count:
         raise ImportFailed(f"The vault does not have {count} free part numbers left.")
     return [PN(org, b, 1) for b in free]
@@ -714,12 +717,12 @@ def _family_free_variants(repo, proposal, skip=()):
     used = {pn.variant for pn in registry.list_pns(repo, org) if pn.base == base}
     used |= {e.pn.variant for i, e in enumerate(proposal.entries)
              if e.manual and e.pn.base == base and i not in skip}
-    return [v for v in range(pn_module.MIN_VARIANT, pn_module.MAX_VARIANT + 1) if v not in used]
+    return [v for v in range(part_number.MIN_VARIANT, part_number.MAX_VARIANT + 1) if v not in used]
 
 
 def _family_shortage(base, wanted, free):
-    return (f"Part number {pn_module.format_base(base)} only has {free} unused variant number(s) "
-            f"(the most a part number can have is {pn_module.MAX_VARIANT}), but {wanted} part(s) are being imported "
+    return (f"Part number {part_number.format_base(base)} only has {free} unused variant number(s) "
+            f"(the most a part number can have is {part_number.MAX_VARIANT}), but {wanted} part(s) are being imported "
             f"to it. Choose another number, or import fewer parts at a time.")
 
 
@@ -743,8 +746,8 @@ def set_family(repo, proposal, base, sync=True):
                 entry.pn = pn
         return
     try:
-        base = pn_module.check_new_base(base)
-    except pn_module.PNError as e:
+        base = part_number.check_new_base(base)
+    except part_number.PNError as e:
         raise ImportFailed(str(e)) from None
     if sync:
         try:
@@ -798,7 +801,7 @@ def _renumber_automatic(repo, proposal, conflicts):
     bad = [c for c in conflicts if not c.manual]
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
     near = min(automatic, default=config.get_start_number(repo))          # stay near the proposed block
-    free = pn_module.free_bases(bases | in_use, len(bad), near)
+    free = numbering.free_bases(bases | in_use, len(bad), near)
     if len(free) < len(bad):
         raise ImportFailed("The vault has run out of part numbers for this import.")
     changes = []
@@ -887,7 +890,7 @@ def _free_pn(repo, proposal):
     here = {e.pn.base for e in proposal.entries}
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
     if automatic:                                       # just after the numbers already proposed
-        free = pn_module.free_bases(bases | here, 1, max(automatic) + 1)
+        free = numbering.free_bases(bases | here, 1, max(automatic) + 1)
     else:
         free = [pick_block(repo, 1, proposal.org)[0].base]
     if not free:
@@ -967,9 +970,9 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
             raise ImportFailed(str(e)) from None
         proposal = Proposal([Entry(item, pn, item.name, item.description) for item, pn in zip(items, block)], org)
         _taken, bases = _used_numbers(repo, org)
-        proposal.note = (f"Proposed part numbers start at {pn_module.format_base(block[0].base)}. This vault's start number is "
-                         f"{pn_module.format_base(config.get_start_number(repo))}; the highest part number in use is "
-                         + (pn_module.format_base(max(bases)) if bases else "(none yet)") + ". "
+        proposal.note = (f"Proposed part numbers start at {part_number.format_base(block[0].base)}. This vault's start number is "
+                         f"{part_number.format_base(config.get_start_number(repo))}; the highest part number in use is "
+                         + (part_number.format_base(max(bases)) if bases else "(none yet)") + ". "
                          + config.explain_start_number(repo))
         return Prepared(mf, str(manifest_path), candidates, refs, proposal, backend, owns_backend, version,
                         allow_external, cots)

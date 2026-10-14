@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.importing import importer
-from litterbox.core import pn as pn_module
+from litterbox.core import filenames
 from litterbox.records import registry
 from litterbox.errors import LitterboxError
 from litterbox.records.error_conversion import converts_errors
@@ -183,8 +183,8 @@ class RevisePlan:
 
 
 def _revised_name(rel, new_revision):
-    file_pn, _rev, ext = pn_module.parse_filename(rel)
-    return f"{layout.CAD_DIR_NAME}/{pn_module.filename(file_pn, new_revision, ext)}"
+    file_pn, _rev, ext = filenames.parse_filename(rel)
+    return f"{layout.CAD_DIR_NAME}/{filenames.filename(file_pn, new_revision, ext)}"
 
 
 def _copy_list(repo, record, files):

@@ -7,7 +7,7 @@ from tests.support.vault_fixture import PART, SKIP_ON_WINDOWS, TwoUserVault, git
 from litterbox.team import people
 from litterbox.records import registry
 from litterbox.workflows import workflow as wf
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox import diagnostics
 from litterbox.parts import get_latest
 from litterbox.git import read_only

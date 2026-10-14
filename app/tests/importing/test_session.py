@@ -21,7 +21,7 @@ from litterbox.importing import session as import_session
 from litterbox.importing import importer
 from litterbox.importing import manifest
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 
 
 @SKIP_ON_WINDOWS

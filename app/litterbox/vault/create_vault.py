@@ -29,16 +29,15 @@ CHOOSING THE NUMBERS (they can't be changed once the first part number exists)
 """
 
 import argparse
-import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.vault import config
 from litterbox.team import people
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
 from litterbox import version
-from litterbox.core.pn import PNError, check_org
+from litterbox.core.part_number import PNError, check_org
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from litterbox import layout
@@ -138,8 +137,8 @@ def _has_commits(repo):
         return False
 
 
-def plan(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
-         variant_digits=pn_module.DEFAULT_VARIANT_DIGITS, push=True):
+def plan(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
+         variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True):
     """Check that `folder` can become a vault with these settings. Changes nothing."""
     result = InitPlan()
     try:
@@ -147,8 +146,8 @@ def plan(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
     except PNError as e:
         result.problems.append(str(e))
 
-    for label, value, (low, high) in (("The number of digits in the part number", base_digits, pn_module.BASE_DIGITS_RANGE),
-                                      ("The number of digits in the variant", variant_digits, pn_module.VARIANT_DIGITS_RANGE)):
+    for label, value, (low, high) in (("The number of digits in the part number", base_digits, part_number.BASE_DIGITS_RANGE),
+                                      ("The number of digits in the variant", variant_digits, part_number.VARIANT_DIGITS_RANGE)):
         if isinstance(value, bool) or not isinstance(value, int) or not (low <= value <= high):
             result.problems.append(f"{label} must be a whole number from {low} to {high}.")
     if isinstance(start_number, bool) or not isinstance(start_number, int) or start_number < 1:
@@ -276,8 +275,8 @@ class _Writer:
             diagnostics.LOG(f"WARNING: could not fully undo the vault set-up: {e}")
 
 
-def create(folder, org, start_number=1, base_digits=pn_module.DEFAULT_BASE_DIGITS,
-           variant_digits=pn_module.DEFAULT_VARIANT_DIGITS, push=True, set_up_team=True, name=None, email=None,
+def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
+           variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True, set_up_team=True, name=None, email=None,
            min_version=version.VERSION):
     """Turn the empty cloned repository in `folder` into a Litterbox vault. Returns an InitResult.
 
@@ -352,8 +351,8 @@ def main(argv=None):
     parser.add_argument("folder", help="the cloned, empty repository")
     parser.add_argument("--org", required=True, help="org code, 2 to 4 letters (HCR)")
     parser.add_argument("--start", type=int, default=1, help="first part number to hand out (default 1)")
-    parser.add_argument("--base-digits", type=int, default=pn_module.NEW_VAULT_BASE_DIGITS)
-    parser.add_argument("--variant-digits", type=int, default=pn_module.DEFAULT_VARIANT_DIGITS)
+    parser.add_argument("--base-digits", type=int, default=part_number.NEW_VAULT_BASE_DIGITS)
+    parser.add_argument("--variant-digits", type=int, default=part_number.DEFAULT_VARIANT_DIGITS)
     parser.add_argument("--no-push", action="store_true", help="commit locally only")
     parser.add_argument("--no-team", action="store_true", help="don't set up the team (do it later in Team...)")
     parser.add_argument("--name", help="your name for the team list (default: git's user.name)")

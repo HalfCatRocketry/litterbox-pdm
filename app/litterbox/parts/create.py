@@ -37,11 +37,11 @@ from functools import wraps
 from pathlib import Path
 
 from litterbox.vault import config
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
 from litterbox.records import registry
 from dataclasses import dataclass
 
-from litterbox.core.pn import PN, PNError, check_base, check_new_base, check_org, check_variant, format_base, format_variant
+from litterbox.core.part_number import PN, PNError, check_base, check_new_base, check_org, check_variant, format_base, format_variant
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from litterbox.parts import permission_check
@@ -245,8 +245,8 @@ def _plan_batch(repo, specs, org):
                 raise CreateError(f"{label(index)}: {PN(org, base, variant)} is already in use"
                                   f"{_describe(repo, org, base, variant)}.")
         else:
-            variant = next(v for v in range(1, pn_module.MAX_VARIANT + 2) if (base, v) not in taken)
-            if variant > pn_module.MAX_VARIANT:
+            variant = next(v for v in range(1, part_number.MAX_VARIANT + 2) if (base, v) not in taken)
+            if variant > part_number.MAX_VARIANT:
                 raise CreateError(f"{label(index)}: every variant of part number {format_base(base)} is used.")
         taken.add((base, variant))
         bases_used.add(base)

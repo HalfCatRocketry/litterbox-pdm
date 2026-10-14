@@ -7,9 +7,9 @@ from unittest import mock
 
 from litterbox.parts import create
 from litterbox.importing import importer
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 
 
 def entry(base, variant=1, manual=False):
@@ -23,7 +23,7 @@ class FamilyNumbering(unittest.TestCase):
             patcher = mock.patch.object(target, value, side_effect=self._fake(value))
             patcher.start()
             self.addCleanup(patcher.stop)
-        patcher = mock.patch.object(pn_module, "MAX_VARIANT", 999)
+        patcher = mock.patch.object(part_number, "MAX_VARIANT", 999)
         patcher.start()
         self.addCleanup(patcher.stop)
 

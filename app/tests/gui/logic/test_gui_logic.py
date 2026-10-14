@@ -10,7 +10,7 @@ from litterbox.user import settings
 from litterbox.parts.part_changes import ChangeReport
 from litterbox.parts.part_status import PartStatus
 from litterbox.errors import LitterboxError
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 
 
 def row(base, state="Available", kind="ok", description="", files=(), name="", import_path=""):
@@ -869,7 +869,7 @@ class TestWorkflowEditor(unittest.TestCase):
 class TestWorkflowHistory(unittest.TestCase):
     def history(self, *events):
         from litterbox.records import registry
-        from litterbox.core.pn import parse
+        from litterbox.core.part_number import parse
         record = registry.Record(parse("HCR-00001-001"), "Upright", "Alex", "2026-10-11T00:00:00Z")
         for event in events:
             record.history.append(dict({"by": "Bea", "at": "2026-10-11T01:00:00Z", "revision": "A"}, **event))
@@ -1058,9 +1058,9 @@ class AddOrgWiring(unittest.TestCase):
         source = (Path(__file__).resolve().parents[3] / "litterbox" / "gui" / "litterbox_gui.py").read_text(encoding="utf-8")
         self.assertIn("self.add_org()", source)
         self.assertNotIn("self._org_setup(None)", source)
-        self.assertIn("pnmod.NEW_VAULT_BASE_DIGITS", source)
+        self.assertIn("part_number.NEW_VAULT_BASE_DIGITS", source)
 
     def test_new_vaults_suggest_six_digits_but_existing_vaults_keep_their_default(self):
-        from litterbox.core import pn
-        self.assertEqual(pn.NEW_VAULT_BASE_DIGITS, 6)
-        self.assertEqual(pn.DEFAULT_BASE_DIGITS, 5)
+        from litterbox.core import part_number
+        self.assertEqual(part_number.NEW_VAULT_BASE_DIGITS, 6)
+        self.assertEqual(part_number.DEFAULT_BASE_DIGITS, 5)

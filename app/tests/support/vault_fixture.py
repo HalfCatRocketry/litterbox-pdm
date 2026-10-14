@@ -24,7 +24,7 @@ import unittest
 from pathlib import Path
 
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.git import lfs_locks
 from litterbox.parts import part_status
 from litterbox.git import read_only

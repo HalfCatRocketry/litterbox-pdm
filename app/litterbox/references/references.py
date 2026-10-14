@@ -24,9 +24,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from litterbox.core import pn as pn_module
+from litterbox.core import filenames
+from litterbox.core import revision_letters
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.cad import file_types
 from litterbox.cad.solidworks import com
@@ -70,7 +71,7 @@ class ReferencesError(LitterboxError):
 
 def split_stem(stem):
     """'HCR-00005-001_B' -> (PN, 'B'), or None if it is not a Litterbox name."""
-    parsed = pn_module.try_parse_filename(f"{stem}.X")
+    parsed = filenames.try_parse_filename(f"{stem}.X")
     if parsed is None:
         return None
     return parsed[0], parsed[1]
@@ -78,10 +79,10 @@ def split_stem(stem):
 
 def stem_of_path(path):
     """The Litterbox 'HCR-00005-001_B' of a file path, or None for any other file."""
-    parsed = pn_module.try_parse_filename(str(path))
+    parsed = filenames.try_parse_filename(str(path))
     if parsed is None:
         return None
-    return pn_module.file_stem(parsed[0], parsed[1])
+    return filenames.file_stem(parsed[0], parsed[1])
 
 
 def _new_backend(attach_only=False):
@@ -97,7 +98,7 @@ def read_assembly_references(repo, pn, revision, backend, files=None):
     """The Litterbox parts that this revision's assembly files use, as a sorted list like
     ['HCR-00005-001_A']. Parts are not assemblies, so a revision with no .SLDASM gives [].
     Files that are not Litterbox files (a screw from a library, say) are ignored."""
-    own = pn_module.file_stem(pn, revision)
+    own = filenames.file_stem(pn, revision)
     found = set()
     for rel in files if files is not None else registry.cad_files(repo, pn, revision):
         if file_types.extension(rel) not in file_types.ASSEMBLY_EXTENSIONS:
@@ -208,10 +209,10 @@ def classify(child_record, revision):
         return VOID, latest
     if revision in registry.cancelled_revisions(child_record):
         return CANCELLED, latest
-    number = pn_module.revision_number(revision)
-    if latest and pn_module.revision_number(latest) > number:
+    number = revision_letters.revision_number(revision)
+    if latest and revision_letters.revision_number(latest) > number:
         return STALE, latest
-    if not latest or number > pn_module.revision_number(latest):
+    if not latest or number > revision_letters.revision_number(latest):
         if child_record.cots:
             return OK, latest
         return UNRELEASED, latest
@@ -262,7 +263,7 @@ def where_used(repo, pn, records=None):
                 if parts and parts[0] == pn:
                     found.append(_use(records, parent_record, revision, stem))
     return sorted((u for u in found if u),
-                  key=lambda u: (str(u.parent), pn_module.revision_number(u.parent_revision), u.child_revision))
+                  key=lambda u: (str(u.parent), revision_letters.revision_number(u.parent_revision), u.child_revision))
 
 
 def stale_uses(repo, pn, records=None):
@@ -424,7 +425,7 @@ def _plan_replacement(repo, parent, items, locks):
                                                          "Run Get Latest.")
             if read_only.is_pointer(Path(repo) / new_rel):
                 return ReplaceResult(parent, "failed", f"{new_rel} has not been downloaded. Run Get Latest.")
-            old_name = pn_module.filename(item.child, item.old_revision, file_types.extension(new_rel))
+            old_name = filenames.filename(item.child, item.old_revision, file_types.extension(new_rel))
             edits.append((item, old_name, os.path.join(str(repo), new_rel)))
             names.append(f"{item.child} Rev {item.old_revision} -> {latest}")
         if not edits:

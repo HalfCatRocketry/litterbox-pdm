@@ -194,7 +194,7 @@ class TeamWiring(unittest.TestCase):
         self.gui = load_gui_with_fakes(FakeBox())
         from litterbox.team import people
         from litterbox.parts.part_status import PartStatus
-        from litterbox.core.pn import PN
+        from litterbox.core.part_number import PN
         self.people = people
         self.pn = PN("HCR", 7, 1)
         row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=["cad/HCR-00007-001_A.SLDPRT"],
@@ -703,9 +703,8 @@ class WorkflowWiring(unittest.TestCase):
 
 class TickAndSaveWiring(unittest.TestCase):
     def setUp(self):
-        from types import SimpleNamespace
         self.gui = load_gui_with_fakes(FakeBox())
-        from litterbox.core.pn import PN
+        from litterbox.core.part_number import PN
         self.PN = PN
         app = self.gui.App.__new__(self.gui.App)
         app.ticked = set()
@@ -974,7 +973,7 @@ class OpenWiring(unittest.TestCase):
         self.box = FakeBox()
         self.gui = load_gui_with_fakes(self.box)
         from litterbox.parts.part_status import PartStatus
-        from litterbox.core.pn import PN
+        from litterbox.core.part_number import PN
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Part", "in_work", "Available", "ok", files=list(self.B), revision="B",
                               released_revision="A", revisions={"A": self.A, "B": self.B})
@@ -1036,7 +1035,7 @@ class OpenWiring(unittest.TestCase):
     # -- out-of-date parts offered when an assembly in work is opened -------------------------
     def _stale(self, replaceable=True):
         from types import SimpleNamespace as S
-        from litterbox.core.pn import PN
+        from litterbox.core.part_number import PN
         return S(child=PN("HCR", 3, 1), child_revision="A", latest_released="B", replaceable=replaceable)
 
     def test_opening_an_assembly_with_out_of_date_parts_offers_a_review(self):
@@ -1082,7 +1081,7 @@ class ListAndFilenameWiring(unittest.TestCase):
     def setUp(self):
         self.gui = load_gui_with_fakes(FakeBox())
         from litterbox.parts.part_status import PartStatus
-        from litterbox.core.pn import PN
+        from litterbox.core.part_number import PN
         self.pn = PN("HCR", 7, 1)
         self.row = PartStatus(self.pn, "Bracket", "in_work", "Available (Rev A released)", "ok",
                               files=["cad/HCR-00007-001_B.SLDPRT"], revision="B", released_revision="A",

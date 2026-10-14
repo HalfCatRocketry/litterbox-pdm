@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox import diagnostics
-from litterbox.core.pn import PN
-from litterbox.core.pn import parse as parse_pn
+from litterbox.core.part_number import PN
+from litterbox.core.part_number import parse as parse_pn
 from litterbox.errors import LitterboxError
 from litterbox.git import committing
 from litterbox.git import lfs_locks

@@ -7,7 +7,7 @@ records or part-number rules underneath.
 
 from functools import wraps
 
-from litterbox.core.pn import PNError
+from litterbox.core.part_number import PNError
 from litterbox.errors import LitterboxError
 from litterbox.records import registry
 

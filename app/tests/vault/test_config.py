@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 
 from litterbox.vault import config
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.git import repository
 
@@ -112,13 +112,13 @@ class TestConfig(unittest.TestCase):
                     config.get_digits(self.repo)
 
     def test_apply_sets_the_format_for_the_rest_of_the_program(self):
-        self.addCleanup(pn_module.configure)
+        self.addCleanup(part_number.configure)
         self.write_config("org: HCR\npn_base_digits: 6\npn_variant_digits: 2\n")
         self.assertEqual(config.apply(self.repo), (6, 2))
         self.assertEqual(str(PN("HCR", 42, 1)), "HCR-000042-01")
 
     def test_digits_can_be_chosen_in_an_empty_vault_but_not_changed_afterwards(self):
-        self.addCleanup(pn_module.configure)
+        self.addCleanup(part_number.configure)
         config.save(self.repo, org="HCR", base_digits=6, variant_digits=2)
         self.assertEqual(config.get_digits(self.repo), (6, 2))
         config.apply(self.repo)
@@ -132,14 +132,14 @@ class TestConfig(unittest.TestCase):
             config.save(self.repo, variant_digits=9)
 
     def test_the_engine_learns_the_digits_whenever_it_starts_work_on_a_vault(self):
-        self.addCleanup(pn_module.configure)
+        self.addCleanup(part_number.configure)
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self.write_config("org: HCR\npn_base_digits: 6\npn_variant_digits: 2\n")
         repository.validate_repo(self.repo)
-        self.assertEqual((pn_module.BASE_DIGITS, pn_module.VARIANT_DIGITS), (6, 2))
+        self.assertEqual((part_number.BASE_DIGITS, part_number.VARIANT_DIGITS), (6, 2))
         self.write_config("org: HCR\n")
         repository.validate_repo(self.repo)
-        self.assertEqual((pn_module.BASE_DIGITS, pn_module.VARIANT_DIGITS), (5, 3))
+        self.assertEqual((part_number.BASE_DIGITS, part_number.VARIANT_DIGITS), (5, 3))
         self.write_config("org: HCR\npn_base_digits: 0\n")
         with self.assertRaises(LitterboxError):
             repository.validate_repo(self.repo)

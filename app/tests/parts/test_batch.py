@@ -14,7 +14,7 @@ from unittest import mock
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, TwoUserVault, git
 
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from litterbox.parts import batch_core

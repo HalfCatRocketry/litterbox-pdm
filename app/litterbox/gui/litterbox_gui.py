@@ -41,9 +41,10 @@ from litterbox.vault import clone as vault_clone
 from litterbox.vault import settings_admin as vault_settings
 from litterbox.workflows import workflow
 from litterbox.team.draft import TeamDraft
-from litterbox.core import pn as pnmod
-from litterbox.core.pn import PNError, check_org
-from litterbox.core.pn import parse as parse_pn
+from litterbox.core import filenames
+from litterbox.core import part_number
+from litterbox.core.part_number import PNError, check_org
+from litterbox.core.part_number import parse as parse_pn
 from litterbox.errors import LitterboxError, NothingToSaveError
 from litterbox import diagnostics
 from litterbox.parts import checkin
@@ -607,9 +608,9 @@ class OrgDialog(ctk.CTkToplevel):
                                    parent=self)
             return
         try:
-            base_digits = logic.parse_digit_count(self.base_digits_var.get(), "part number digits", *pnmod.BASE_DIGITS_RANGE)
+            base_digits = logic.parse_digit_count(self.base_digits_var.get(), "part number digits", *part_number.BASE_DIGITS_RANGE)
             variant_digits = logic.parse_digit_count(self.variant_digits_var.get(), "variant digits",
-                                                     *pnmod.VARIANT_DIGITS_RANGE)
+                                                     *part_number.VARIANT_DIGITS_RANGE)
         except ValueError as e:
             messagebox.showwarning("Org setup", str(e), parent=self)
             return
@@ -709,7 +710,7 @@ class FilenameDialog(ctk.CTkToplevel):
     def __init__(self, parent, pn, revision="A"):
         super().__init__(parent)
         set_window_icon(self)
-        self.stem = pnmod.file_stem(pn, revision)
+        self.stem = filenames.file_stem(pn, revision)
         width, height = 520, 230
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
@@ -987,8 +988,8 @@ class NewPartDialog(ctk.CTkToplevel):
 
         Raises ValueError (a message safe to show) if a box isn't written exactly.
         """
-        base = logic.parse_typed_number(self.base_entry.get(), "part number", pnmod.BASE_DIGITS)
-        variant = logic.parse_typed_number(self.variant_entry.get(), "variant number", pnmod.VARIANT_DIGITS)
+        base = logic.parse_typed_number(self.base_entry.get(), "part number", part_number.BASE_DIGITS)
+        variant = logic.parse_typed_number(self.variant_entry.get(), "variant number", part_number.VARIANT_DIGITS)
         return base, variant
 
     def _refresh(self, first_time=False, from_base=False):
@@ -1012,13 +1013,13 @@ class NewPartDialog(ctk.CTkToplevel):
                 self._say(str(e), ERROR)
                 return
             if first_time:
-                self.base_entry.configure(placeholder_text=pnmod.format_base(suggested_base))
-            self.variant_entry.configure(placeholder_text=pnmod.format_variant(suggested_variant))
+                self.base_entry.configure(placeholder_text=part_number.format_base(suggested_base))
+            self.variant_entry.configure(placeholder_text=part_number.format_variant(suggested_variant))
 
         if problem:
             # Still typing (all digits, not too long yet)? Say it quietly. Anything else is a real mistake.
             texts = (self.base_entry.get().strip(), self.variant_entry.get().strip())
-            limits = (pnmod.BASE_DIGITS, pnmod.VARIANT_DIGITS)
+            limits = (part_number.BASE_DIGITS, part_number.VARIANT_DIGITS)
             still_typing = all(t.isascii() and t.isdigit() and len(t) <= n or not t for t, n in zip(texts, limits))
             self._say(problem, MUTED if still_typing else WARN)
         elif not self.base_entry.get().strip() and not self.variant_entry.get().strip():
@@ -1046,7 +1047,7 @@ class NewPartDialog(ctk.CTkToplevel):
             base, variant = self._typed()
         except ValueError as e:
             self._warn(f"{e}\n\nA part number you type must be written in full, "
-                       f"for example {self.org}-{pnmod.format_base(2)}-{pnmod.format_variant(1)}.")
+                       f"for example {self.org}-{part_number.format_base(2)}-{part_number.format_variant(1)}.")
             return
         try:
             check = create.check_numbers(self.repo, base, variant, self.org)
@@ -1080,10 +1081,10 @@ class PnEditor:
         tk.Label(self.frame, text=f"{org}-", **label).pack(side="left", padx=(6, 0))
         options = dict(font=("Segoe UI", 10), bg="#2b2b2b", fg="#ffffff", insertbackground="#ffffff",
                        relief="flat", justify="center")
-        self.base_box = tk.Entry(self.frame, width=pnmod.BASE_DIGITS + 1, **options)
+        self.base_box = tk.Entry(self.frame, width=part_number.BASE_DIGITS + 1, **options)
         self.base_box.pack(side="left")
         tk.Label(self.frame, text="-", **label).pack(side="left")
-        self.variant_box = tk.Entry(self.frame, width=pnmod.VARIANT_DIGITS + 1, **options)
+        self.variant_box = tk.Entry(self.frame, width=part_number.VARIANT_DIGITS + 1, **options)
         self.variant_box.pack(side="left", padx=(0, 6))
         self.base_box.insert(0, base)
         self.variant_box.insert(0, variant)
@@ -1653,7 +1654,7 @@ class ImportWindow(ctk.CTkToplevel):
         parsed = parse_pn(text) if text else None
         if not parsed:
             return "", ""
-        return pnmod.format_base(parsed.base), pnmod.format_variant(parsed.variant)
+        return part_number.format_base(parsed.base), part_number.format_variant(parsed.variant)
 
     def _end_edit(self):
         if self.editor:
@@ -3659,7 +3660,7 @@ class App(ctk.CTk):
     def _org_setup(self, org):
         """Edit an org: its code, vault folder and starting part number."""
         folder = logic.known_orgs(self.settings).get(org, "") if org else ""
-        start, base_digits, variant_digits = 1, pnmod.DEFAULT_BASE_DIGITS, pnmod.DEFAULT_VARIANT_DIGITS
+        start, base_digits, variant_digits = 1, part_number.DEFAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS
         if folder and Path(folder).is_dir():
             try:
                 start = config.get_start_number(folder)
@@ -3690,7 +3691,7 @@ class App(ctk.CTk):
         """Create new vault...: turn an empty cloned repository into a vault (see init_vault.py)."""
         if not messagebox.askyesno("Create new vault", logic.CREATE_VAULT_INTRO, parent=self):
             return
-        result = OrgDialog(self, "", "", 1, pnmod.NEW_VAULT_BASE_DIGITS, pnmod.DEFAULT_VARIANT_DIGITS,
+        result = OrgDialog(self, "", "", 1, part_number.NEW_VAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS,
                            title="Create new vault", save_text="Create").show()
         if not result:
             return

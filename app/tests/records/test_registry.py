@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from litterbox.records import registry
-from litterbox.core.pn import PN
+from litterbox.core.part_number import PN
 from litterbox.records.registry import PNExistsError, RegistryError
 
 TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")

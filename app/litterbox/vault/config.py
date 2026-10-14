@@ -32,10 +32,10 @@ from pathlib import Path
 
 import yaml
 
-from litterbox.core import pn as pn_module
+from litterbox.core import part_number
 from litterbox.records import registry
 from litterbox import version
-from litterbox.core.pn import PNError, check_org
+from litterbox.core.part_number import PNError, check_org
 from litterbox import layout
 
 
@@ -130,8 +130,8 @@ def get_digits(repo):
     data = load(repo)
     result = []
     for key, default, (low, high) in (
-            ("pn_base_digits", pn_module.DEFAULT_BASE_DIGITS, pn_module.BASE_DIGITS_RANGE),
-            ("pn_variant_digits", pn_module.DEFAULT_VARIANT_DIGITS, pn_module.VARIANT_DIGITS_RANGE)):
+            ("pn_base_digits", part_number.DEFAULT_BASE_DIGITS, part_number.BASE_DIGITS_RANGE),
+            ("pn_variant_digits", part_number.DEFAULT_VARIANT_DIGITS, part_number.VARIANT_DIGITS_RANGE)):
         value = data.get(key)
         if value in (None, ""):
             value = default
@@ -266,7 +266,7 @@ def apply(repo):
     """Tell the rest of the program how this vault writes its part numbers. Returns (base, variant) digits."""
     check_compatible(repo)
     digits = get_digits(repo)
-    pn_module.configure(*digits)
+    part_number.configure(*digits)
     return digits
 
 
@@ -284,8 +284,8 @@ def save(repo, org=None, start_number=None, base_digits=None, variant_digits=Non
         data["start_number"] = start_number
     current = dict(zip(("pn_base_digits", "pn_variant_digits"), get_digits(repo)))
     for key, value, (low, high) in (
-            ("pn_base_digits", base_digits, pn_module.BASE_DIGITS_RANGE),
-            ("pn_variant_digits", variant_digits, pn_module.VARIANT_DIGITS_RANGE)):
+            ("pn_base_digits", base_digits, part_number.BASE_DIGITS_RANGE),
+            ("pn_variant_digits", variant_digits, part_number.VARIANT_DIGITS_RANGE)):
         if value is None:
             continue
         if isinstance(value, bool) or not isinstance(value, int) or not (low <= value <= high):
