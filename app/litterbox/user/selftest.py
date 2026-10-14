@@ -12,7 +12,7 @@ import importlib
 import sys
 from pathlib import Path
 
-APP_MODULES = ("litterbox.vault.config", "litterbox.parts.create", "litterbox.gui.logic.gui_logic",
+APP_MODULES = ("litterbox.vault.config", "litterbox.parts.create", "litterbox.gui.logic.action_rules", "litterbox.gui.logic.icon_files",
                "litterbox.importing.session", "litterbox.importing.import_finish", "litterbox.cad.solidworks.sw_backend", "litterbox.parts.checkin",
                "litterbox.importing.manifest", "litterbox.cad.opener", "litterbox.team.team_store", "litterbox.core.part_number",
                "litterbox.references.reference_queries", "litterbox.records.record_store", "litterbox.parts.revise",
@@ -38,8 +38,8 @@ def problems(assets_dir=None):
     except Exception as e:
         found.append(f"customtkinter check failed: {e!r}")
     try:
-        from litterbox.gui.logic import gui_logic
-        if assets_dir is not None and gui_logic.find_icon(assets_dir) is None:
+        from litterbox.gui.logic import icon_files
+        if assets_dir is not None and icon_files.find_icon(assets_dir) is None:
             found.append(f"the icon files are missing from {assets_dir}")
     except Exception as e:
         found.append(f"icon check failed: {e!r}")

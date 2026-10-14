@@ -15,7 +15,7 @@ from pathlib import Path
 from tests.support.import_fixture import ImportFixture
 from tests.support.vault_fixture import SKIP_ON_WINDOWS
 
-from litterbox.gui.logic import gui_logic as logic
+from litterbox.gui.logic import import_table
 from litterbox.vault import config
 from litterbox.vault import config_write
 from litterbox.importing import session as import_session
@@ -130,7 +130,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             self.assertIn("not part of this import", str(error))
             self.assertIsInstance(error, import_errors.ExternalReferences)
             self.assertEqual({Path(f).name for f, _ in error.references}, {"top.SLDASM", "sub.SLDASM"})
-            self.assertIn("not being imported", logic.import_external_text(error))
+            self.assertIn("not being imported", import_table.import_external_text(error))
             self.assert_nothing_left()
             self.session.set_allow_external(True)
             result, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
@@ -223,7 +223,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
     # -- what the window shows and how edits behave --------------------------------
     def rows(self, conflicts=()):
         prepared = self.session.prepared
-        return logic.import_rows(prepared.candidates, prepared.proposal, conflicts)
+        return import_table.import_rows(prepared.candidates, prepared.proposal, conflicts)
 
     def test_table_rows_show_numbers_types_and_state(self):
         self.go(folders=[self.src])
@@ -240,7 +240,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.go(folders=[self.src])
         prepared = self.session.prepared
         top = self.id_of("top")
-        edit = lambda column, text, item=top: logic.edit_import_cell(prepared, item, column, text)
+        edit = lambda column, text, item=top: import_table.edit_import_cell(prepared, item, column, text)
         self.assertEqual(edit("name", "  Top   assembly "), "")
         self.assertEqual(edit("description", "my notes"), "")
         self.assertEqual(edit("pn", "HCR-00700-001"), "")
@@ -253,7 +253,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual(edit("pn", ""), "")                                  # cleared: automatic again
         self.assertEqual(next(r for r in self.rows() if r.item_id == top).tag, "ok")
         self.assertIn("can't be edited", edit("files", "x"))
-        self.assertIn("can't be edited", logic.edit_import_cell(prepared, 9999, "name", "x"))
+        self.assertIn("can't be edited", import_table.edit_import_cell(prepared, 9999, "name", "x"))
         with self.user("Alex"):
             self.wait(lambda d, p: self.session.include(top, False, d))
         self.assertIn("Select the row first", edit("pn", "HCR-00800-001"))
@@ -324,19 +324,19 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual(prepared.cots, True)
 
     def test_cots_confirmation_text(self):
-        text = logic.import_cots_confirm_text(3, {1: ["The file is identical to the one in the vault for HCR-00002-001."]},
+        text = import_table.import_cots_confirm_text(3, {1: ["The file is identical to the one in the vault for HCR-00002-001."]},
                                               ["a", "bolt", "c"])
         self.assertIn("3 parts", text)
         self.assertIn("Row 2, bolt", text)
         self.assertIn("NOT", text.upper())
-        self.assertNotIn("already has", logic.import_cots_confirm_text(1, {}, ["a"]))
+        self.assertNotIn("already has", import_table.import_cots_confirm_text(1, {}, ["a"]))
 
     def test_part_number_boxes(self):
         self.go(folders=[self.src])
         prepared = self.session.prepared
         top = self.id_of("top")
         pn_of = lambda: next(e.pn for e in prepared.proposal.entries if e.item.id == top)
-        edit = lambda base, variant, **k: logic.edit_import_pn(prepared, top, base, variant, **k)
+        edit = lambda base, variant, **k: import_table.edit_import_pn(prepared, top, base, variant, **k)
         self.assertEqual(edit("00700", "002"), "")
         self.assertEqual(pn_of(), PN("HCR", 700, 2))
         self.assertEqual(edit("00700", ""), "")                       # empty variant: 001 without a repo...
@@ -356,7 +356,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         with self.user("Alex"):
             self.wait(lambda d, p: self.session.include(top, False, d))
         self.assertIn("Select the row first", edit("00700", "001"))
-        self.assertIn("can't be edited", logic.edit_import_pn(prepared, 9999, "00700", "001"))
+        self.assertIn("can't be edited", import_table.edit_import_pn(prepared, 9999, "00700", "001"))
 
     def test_conflict_rows_are_marked_and_explained(self):
         self.go(folders=[self.src])
@@ -366,11 +366,11 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         rows = self.rows(error.conflicts)
         self.assertEqual([r.tag for r in rows], ["ok", "ok", "conflict", "ok"])
         self.assertIn("Front upright", rows[2].detail)
-        text = logic.import_conflict_text(error.conflicts, [(0, None, None)])
+        text = import_table.import_conflict_text(error.conflicts, [(0, None, None)])
         self.assertIn("Row 3", text)
         self.assertIn("Nothing was imported", text)
         self.assertIn("1 automatic", text)
-        self.assertIn("1 part number", logic.import_summary_line(
+        self.assertIn("1 part number", import_table.import_summary_line(
             self.session.prepared.candidates, self.session.prepared.proposal, error.conflicts))
 
     def test_warnings_show_in_the_notes_column(self):
@@ -388,7 +388,7 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.go(folders=[self.src])
         with self.user("Alex"):
             result, error, _ = self.wait(lambda d, p: self.session.finish(d, None))
-        text = logic.import_result_text(result)
+        text = import_table.import_result_text(result)
         self.assertIn("Imported 4 parts", text)
         self.assertIn("5 CAD file(s)", text)
 

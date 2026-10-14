@@ -8,7 +8,10 @@ import unittest
 from pathlib import Path
 
 
-from litterbox.gui.logic import gui_logic as logic
+from litterbox.gui.logic import action_rules
+from litterbox.gui.logic import checkin_text
+from litterbox.gui.logic import error_text
+from litterbox.gui.logic import job_text
 from litterbox.jobs import job_queue as jobs
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError, NothingToSaveError
@@ -156,12 +159,12 @@ class Banner(unittest.TestCase):
 
 class Logic(unittest.TestCase):
     def test_job_labels(self):
-        self.assertEqual(logic.job_label("checkin", 1), "Checking in 1 part")
-        self.assertEqual(logic.job_label("void", 12), "Voiding 12 parts")
-        self.assertEqual(logic.job_label("nonsense", 2), "Working on 2 parts")
+        self.assertEqual(job_text.job_label("checkin", 1), "Checking in 1 part")
+        self.assertEqual(job_text.job_label("void", 12), "Voiding 12 parts")
+        self.assertEqual(job_text.job_label("nonsense", 2), "Working on 2 parts")
 
     def test_busy_text_in_the_status_column(self):
-        self.assertEqual(logic.busy_state_text("Checked out by you", "Checking in 2 parts"),
+        self.assertEqual(job_text.busy_state_text("Checked out by you", "Checking in 2 parts"),
                          "⏳ checking in 2 parts...")
 
     def test_advice_covers_the_usual_problems_and_always_says_something(self):
@@ -174,12 +177,12 @@ class Logic(unittest.TestCase):
             "something nobody has seen before": "Refresh",
         }
         for message, expected in cases.items():
-            self.assertIn(expected, logic.error_advice(message), message)
+            self.assertIn(expected, error_text.error_advice(message), message)
 
     def test_the_report_lists_each_problem_with_what_to_do(self):
         notes = [jobs.ErrorNote("Checking in 2 parts", "push failed", "try again"),
                  jobs.ErrorNote("Voiding", "no network", "check your connection")]
-        text = logic.error_report_text(notes)
+        text = error_text.error_report_text(notes)
         for part in ("Checking in 2 parts", "push failed", "What to do: try again", "Voiding", "no network"):
             self.assertIn(part, text)
 
@@ -188,19 +191,19 @@ class Logic(unittest.TestCase):
         pn1, pn2 = PN("HCR", 1, 1), PN("HCR", 2, 1)
         rows = {pn1: PartStatus(pn1, "a", "in_work", "mine", "mine"), pn2: PartStatus(pn2, "b", "in_work", "mine", "mine")}
         pending = {str(pn1): "Checking in 1 part"}
-        plan = logic.plan_action("checkin", [pn1, pn2], rows, pending)
+        plan = action_rules.plan_action("checkin", [pn1, pn2], rows, pending)
         self.assertEqual(plan.targets, [pn2])
         self.assertEqual(plan.skipped, [(pn1, "busy: checking in 1 part")])
-        self.assertEqual(logic.plan_action("open", [pn1], rows, pending).targets, [pn1])
-        states = logic.button_states([pn1], [], rows, pending)
+        self.assertEqual(action_rules.plan_action("open", [pn1], rows, pending).targets, [pn1])
+        states = action_rules.button_states([pn1], [], rows, pending)
         self.assertFalse(states["Check In"])
         self.assertFalse(states["Undo Checkout"])
         self.assertTrue(states["Open"])
-        self.assertTrue(logic.button_states([pn2], [], rows, pending)["Check In"])
+        self.assertTrue(action_rules.button_states([pn2], [], rows, pending)["Check In"])
 
     def test_the_caution_and_the_open_warning_say_to_wait_for_ready(self):
-        self.assertIn("Ready", logic.CHECKIN_CAUTION)
-        self.assertIn("banner", logic.open_while_busy_text(PN("HCR", 7, 1), "Checking in 2 parts"))
+        self.assertIn("Ready", checkin_text.CHECKIN_CAUTION)
+        self.assertIn("banner", checkin_text.open_while_busy_text(PN("HCR", 7, 1), "Checking in 2 parts"))
 
 
 class Wiring(unittest.TestCase):
@@ -220,8 +223,8 @@ class Wiring(unittest.TestCase):
         self.assertIn("Litterbox is still working", self.source)
 
     def test_the_check_in_prompt_carries_the_caution_and_batches_pass_their_parts(self):
-        self.assertIn("logic.CHECKIN_CAUTION", self.source)
-        self.assertIn("label=logic.job_label(action, len(targets)), parts=targets", self.source)
+        self.assertIn("checkin_text.CHECKIN_CAUTION", self.source)
+        self.assertIn("label=job_text.job_label(action, len(targets)), parts=targets", self.source)
 
     def test_a_refresh_is_collapsible_and_no_task_is_refused_for_being_busy(self):
         self.assertIn('kind="refresh"', self.source)

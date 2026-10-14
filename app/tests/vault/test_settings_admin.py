@@ -116,11 +116,11 @@ class EditingTheSetting(Fixture, unittest.TestCase):
 
 class DialogLogic(unittest.TestCase):
     def test_only_what_changed_is_saved(self):
-        from litterbox.gui.logic import gui_logic as logic
+        from litterbox.gui.logic import team_text
         current = {"commit_style": "per_part", "release_rule": "warn", "require_signatures": False}
-        self.assertEqual(logic.changed_settings(current, dict(current)), {})
-        self.assertEqual(logic.changed_settings(current, None), {})
-        self.assertEqual(logic.changed_settings(current, dict(current, release_rule="block", require_signatures=True)),
+        self.assertEqual(team_text.changed_settings(current, dict(current)), {})
+        self.assertEqual(team_text.changed_settings(current, None), {})
+        self.assertEqual(team_text.changed_settings(current, dict(current, release_rule="block", require_signatures=True)),
                          {"release_rule": "block", "require_signatures": True})
 
 

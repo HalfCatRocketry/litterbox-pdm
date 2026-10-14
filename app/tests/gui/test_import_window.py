@@ -351,7 +351,7 @@ class CreateVaultWiring(unittest.TestCase):
     def test_choosing_the_menu_entry_starts_it(self):
         started = []
         self.app.create_vault = lambda: started.append(True)
-        self.app.on_org_chosen(self.gui.logic.CREATE_VAULT)
+        self.app.on_org_chosen(self.gui.org_menu.CREATE_VAULT)
         self.assertEqual(started, [True])
 
     def test_not_having_cloned_it_yet_stops_at_the_first_question(self):
@@ -660,7 +660,7 @@ class WorkflowWiring(unittest.TestCase):
         out = []
 
         def dialog(parent, roles, templates, apply=None):
-            editor = self.gui.logic.WorkflowEditor(templates)
+            editor = self.gui.workflow_editor.WorkflowEditor(templates)
             for op in result:
                 if op["op"] == "set":
                     editor.items.setdefault(op["action"], []).append(
@@ -775,7 +775,7 @@ class TickAndSaveWiring(unittest.TestCase):
         kinds = {1: "ok", 2: "mine", 3: "released"}
         app.rows_by_pn = {pns[n]: PartStatus(pns[n], "x", "in_work", "s", kinds[n]) for n in pns}
         app.action_buttons = {text: SimpleNamespace(state=None, configure=lambda state, b=None: None)
-                              for text in self.gui.logic.BUTTON_ACTIONS}
+                              for text in self.gui.action_rules.BUTTON_ACTIONS}
         log = {}
         for text in app.action_buttons:
             app.action_buttons[text].configure = lambda state, text=text: log.__setitem__(text, state)
@@ -1119,7 +1119,7 @@ class ListAndFilenameWiring(unittest.TestCase):
 
     def test_search_finds_a_part_by_the_short_or_the_full_number(self):
         for text in ("00007-001", "HCR-00007-001"):
-            self.assertEqual(len(self.gui.logic.filter_rows([self.row], text)), 1)
+            self.assertEqual(len(self.gui.list_view.filter_rows([self.row], text)), 1)
 
     def test_new_part_shows_the_filename_to_save_as_and_copies_it(self):
         dialog = self.gui.FilenameDialog(FakeParent(), self.pn)
@@ -1200,7 +1200,7 @@ class WindowEffects(unittest.TestCase):
         self.assertEqual(window.alphas[-1], 0.0)
 
     def test_the_icon_is_put_back_after_customtkinter_resets_it(self):
-        replace(self, self.gui.logic, "find_icon", lambda *a, **k: Path("litterbox.ico"))
+        replace(self, self.gui.icon_files, "find_icon", lambda *a, **k: Path("litterbox.ico"))
         window = FakeWindow()
         self.gui.set_window_icon(window)
         window.run_timers()

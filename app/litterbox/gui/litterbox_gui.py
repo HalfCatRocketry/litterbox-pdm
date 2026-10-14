@@ -20,7 +20,22 @@ from tkinter import filedialog, messagebox, ttk
 
 import customtkinter as ctk
 
-from litterbox.gui.logic import gui_logic as logic
+from litterbox.gui.logic import action_rules
+from litterbox.gui.logic import checkin_text
+from litterbox.gui.logic import confirmations
+from litterbox.gui.logic import workflow_editor
+from litterbox.gui.logic import error_text
+from litterbox.gui.logic import history_text
+from litterbox.gui.logic import icon_files
+from litterbox.gui.logic import import_table
+from litterbox.gui.logic import job_text
+from litterbox.gui.logic import list_view
+from litterbox.gui.logic import number_input
+from litterbox.gui.logic import opening_text
+from litterbox.gui.logic import org_menu
+from litterbox.gui.logic import reference_text
+from litterbox.gui.logic import task_text
+from litterbox.gui.logic import team_text
 from litterbox.cad import opener
 from litterbox.vault import config
 from litterbox.vault import config_write
@@ -118,7 +133,7 @@ ASSETS_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "
 
 # Which icon to use. The default is the white one. To switch, add a line
 # "icon: black" to C:\Litterbox\settings.yaml.
-ICON_SETTING = {"choice": logic.DEFAULT_ICON}
+ICON_SETTING = {"choice": icon_files.DEFAULT_ICON}
 
 
 FADE_IN_MS = 160            # how long a window takes to fade in, and out
@@ -163,7 +178,7 @@ def set_window_icon(window, main_window=False):
     also made the default for later windows. A missing icon file, or a system that can't show
     .ico files or transparency, just means no icon or no fade.
     """
-    icon = logic.find_icon(ASSETS_DIR, ICON_SETTING["choice"])
+    icon = icon_files.find_icon(ASSETS_DIR, ICON_SETTING["choice"])
     state = {"shown": False, "closing": False}
     real_destroy = window.destroy
 
@@ -627,8 +642,8 @@ class OrgDialog(ctk.CTkToplevel):
                                    parent=self)
             return
         try:
-            base_digits = logic.parse_digit_count(self.base_digits_var.get(), "part number digits", *part_number.BASE_DIGITS_RANGE)
-            variant_digits = logic.parse_digit_count(self.variant_digits_var.get(), "variant digits",
+            base_digits = number_input.parse_digit_count(self.base_digits_var.get(), "part number digits", *part_number.BASE_DIGITS_RANGE)
+            variant_digits = number_input.parse_digit_count(self.variant_digits_var.get(), "variant digits",
                                                      *part_number.VARIANT_DIGITS_RANGE)
         except ValueError as e:
             messagebox.showwarning("Org setup", str(e), parent=self)
@@ -670,7 +685,7 @@ class TableSorter:
             return
         ids = list(self.tree.get_children())
         values = [self.tree.set(iid, self.column) for iid in ids]
-        for position, index in enumerate(logic.sort_order(values, self.reverse)):
+        for position, index in enumerate(list_view.sort_order(values, self.reverse)):
             self.tree.move(ids[index], "", position)
 
 
@@ -891,7 +906,7 @@ class EditDetailsDialog(ctk.CTkToplevel):
 
     def _save(self):
         name, description = self.name_entry.get(), self.desc_entry.get()
-        problem, changed = logic.edit_details_result(*self.old, name, description)
+        problem, changed = confirmations.edit_details_result(*self.old, name, description)
         self.problem.configure(text=problem)
         if problem:
             return
@@ -1007,8 +1022,8 @@ class NewPartDialog(ctk.CTkToplevel):
 
         Raises ValueError (a message safe to show) if a box isn't written exactly.
         """
-        base = logic.parse_typed_number(self.base_entry.get(), "part number", part_number.BASE_DIGITS)
-        variant = logic.parse_typed_number(self.variant_entry.get(), "variant number", part_number.VARIANT_DIGITS)
+        base = number_input.parse_typed_number(self.base_entry.get(), "part number", part_number.BASE_DIGITS)
+        variant = number_input.parse_typed_number(self.variant_entry.get(), "variant number", part_number.VARIANT_DIGITS)
         return base, variant
 
     def _refresh(self, first_time=False, from_base=False):
@@ -1050,7 +1065,7 @@ class NewPartDialog(ctk.CTkToplevel):
                 self._say(str(e), ERROR)
                 return
             if check.taken:
-                self._say("PN in use:", ERROR, logic.in_use_text(check))
+                self._say("PN in use:", ERROR, number_input.in_use_text(check))
             else:
                 self._say(f"PN available: {check.pn}", GREEN_TEXT)
 
@@ -1074,7 +1089,7 @@ class NewPartDialog(ctk.CTkToplevel):
             self._warn(str(e))
             return
         if check.taken:
-            self._warn(f"{check.pn} is already in use.\n\n{logic.in_use_text(check)}\n\n"
+            self._warn(f"{check.pn} is already in use.\n\n{number_input.in_use_text(check)}\n\n"
                        "Change the part number and try again.")
             return
         self.result = {"name": name, "description": self.desc_var.get().strip(),
@@ -1459,12 +1474,12 @@ class ImportWindow(ctk.CTkToplevel):
                 self._say("Cancelled. Nothing was changed.", "warn")
             else:
                 self._say("The scan could not be completed.", "error")
-                messagebox.showerror("Import CAD", logic.shorten(self._error_text(error)), parent=self)
+                messagebox.showerror("Import CAD", error_text.shorten(self._error_text(error)), parent=self)
             return
         self.conflicts, self.renumbered = [], []
         self.family_applied = None
         self.family_var.set(False)
-        self.family_placeholder = logic.import_base_placeholder(self.repo, self.session.prepared.proposal.org)
+        self.family_placeholder = number_input.import_base_placeholder(self.repo, self.session.prepared.proposal.org)
         self.family_entry.configure(placeholder_text=self.family_placeholder)
         self._show("table")
         self._rebuild()
@@ -1499,7 +1514,7 @@ class ImportWindow(ctk.CTkToplevel):
     # ------------------------------------------------------------------
     def _rebuild(self):
         prepared = self.session.prepared
-        rows = logic.import_rows(prepared.candidates, prepared.proposal, self.conflicts, self.duplicates)
+        rows = import_table.import_rows(prepared.candidates, prepared.proposal, self.conflicts, self.duplicates)
         self._details = {str(r.item_id): r for r in rows}
         selected = self.tree.selection()
         self.tree.delete(*self.tree.get_children())
@@ -1510,7 +1525,7 @@ class ImportWindow(ctk.CTkToplevel):
         if keep:
             self.tree.selection_set(*keep)
         self.sorter.apply()
-        self.summary.configure(text=logic.import_summary_line(prepared.candidates, prepared.proposal, self.conflicts),
+        self.summary.configure(text=import_table.import_summary_line(prepared.candidates, prepared.proposal, self.conflicts),
                                text_color=ERROR if self.conflicts else "#e6e6e6")
         self._show_detail()
 
@@ -1535,9 +1550,9 @@ class ImportWindow(ctk.CTkToplevel):
         self._end_edit()
         self.conflicts, self.duplicates = [], {}              # row positions change; the next check finds them again
         anchor, shown = self.last_click, list(self.tree.get_children())
-        if logic.shift_held(event) and anchor is not None and anchor[0] in shown:
+        if list_view.shift_held(event) and anchor is not None and anchor[0] in shown:
             # Shift: give every row from the last click to this one the state the last click gave its row
-            between = logic.range_between(shown, anchor[0], iid)
+            between = list_view.range_between(shown, anchor[0], iid)
             self.last_click = (iid, anchor[1])
             self._include_rows([int(i) for i in between], anchor[1])
             return "break"
@@ -1693,9 +1708,9 @@ class ImportWindow(ctk.CTkToplevel):
         prepared = self.session.prepared
         index = next((n for n, e in enumerate(prepared.proposal.entries) if e.item.id == int(iid)), None)
         if column == "pn":
-            problem = logic.edit_import_pn(prepared, int(iid), text[0], text[1], repo=self.repo)
+            problem = import_table.edit_import_pn(prepared, int(iid), text[0], text[1], repo=self.repo)
         else:
-            problem = logic.edit_import_cell(prepared, int(iid), column, text)
+            problem = import_table.edit_import_cell(prepared, int(iid), column, text)
         self._say(problem, "warn" if problem else "normal")
         if column == "pn" and not problem:                    # an edited number is no longer known to be taken
             self.conflicts = [c for c in self.conflicts if c.index != index]
@@ -1752,7 +1767,7 @@ class ImportWindow(ctk.CTkToplevel):
         if not checked:
             return
         entries = self.session.prepared.proposal.entries
-        text = logic.import_cots_confirm_text(len(entries), self.duplicates, [e.name for e in entries])
+        text = import_table.import_cots_confirm_text(len(entries), self.duplicates, [e.name for e in entries])
         if messagebox.askyesno("Import as COTS?", text, parent=self):
             self._cots_confirmed = True
             self._finish()
@@ -1765,7 +1780,7 @@ class ImportWindow(ctk.CTkToplevel):
         if isinstance(error, import_errors.ExternalReferences):
             self._show("table")
             self._rebuild()
-            if messagebox.askyesno("Files outside this import", logic.import_external_text(error), parent=self):
+            if messagebox.askyesno("Files outside this import", import_table.import_external_text(error), parent=self):
                 self.session.set_allow_external(True)
                 self._cots_confirmed = confirmed
                 self._finish()
@@ -1774,7 +1789,7 @@ class ImportWindow(ctk.CTkToplevel):
                           "warn")
             return
         if error is None:
-            messagebox.showinfo("Import complete", logic.import_result_text(result), parent=self)
+            messagebox.showinfo("Import complete", import_table.import_result_text(result), parent=self)
             if self.on_imported:
                 self.on_imported(result)
             self._really_close()
@@ -1785,7 +1800,7 @@ class ImportWindow(ctk.CTkToplevel):
             self._rebuild()
             self._say("Nothing was imported: some part numbers can't be used. Change the red rows, then press "
                       "Finish & Import again.", "error")
-            messagebox.showwarning("Part numbers taken", logic.import_conflict_text(error.conflicts, error.renumbered),
+            messagebox.showwarning("Part numbers taken", import_table.import_conflict_text(error.conflicts, error.renumbered),
                                    parent=self)
         elif isinstance(error, import_errors.ImportCancelled):
             self._rebuild()
@@ -1793,7 +1808,7 @@ class ImportWindow(ctk.CTkToplevel):
         else:
             self._rebuild()
             self._say("The import did not go ahead, and nothing was added to the vault.", "error")
-            messagebox.showerror("Import CAD", logic.shorten(self._error_text(error)), parent=self)
+            messagebox.showerror("Import CAD", error_text.shorten(self._error_text(error)), parent=self)
 
     def _cancel_job(self):
         if self.running:
@@ -1860,7 +1875,7 @@ class HistoryWindow(ctk.CTkToplevel):
                          wraplength=760).grid(row=2, column=0, sticky="w")
 
         # The revisions of this part, with buttons to open one
-        revision_rows = logic.revision_rows(record, revisions or {})
+        revision_rows = history_text.revision_rows(record, revisions or {})
         box = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=10)
         box.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
         box.columnconfigure(0, weight=1)
@@ -1898,7 +1913,7 @@ class HistoryWindow(ctk.CTkToplevel):
         scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 4))
         self.tree.configure(yscrollcommand=scroll.set)
 
-        for row in logic.format_history(record):
+        for row in history_text.format_history(record):
             self.tree.insert("", "end", values=row)
         self.after(100, self.lift)
 
@@ -1953,11 +1968,11 @@ class ReferencesWindow(ctk.CTkToplevel):
                 (0, "This part uses", (("tick", "", 34), ("pn", "Part", 110), ("name", "Name", 230),
                                        ("rev", "Rev used", 70), ("latest", "Latest released", 100),
                                        ("state", "State", 250)),
-                 logic.uses_table(uses_list), uses_list),
+                 reference_text.uses_table(uses_list), uses_list),
                 (2, "This part is used in", (("tick", "", 34), ("pn", "Assembly", 110), ("name", "Name", 200),
                                              ("rev", "Its rev", 60), ("status", "Its status", 80),
                                              ("used", "Rev of this part", 110), ("state", "State", 230)),
-                 logic.used_in_table(used_list), used_list)):
+                 reference_text.used_in_table(used_list), used_list)):
             ctk.CTkLabel(body, text=title if rows else title + " - nothing", text_color=MUTED, anchor="w").grid(
                 row=row, column=0, sticky="w", padx=20, pady=(8, 0))
             frame = ctk.CTkFrame(body, fg_color=BG_PANEL, corner_radius=10)
@@ -1979,7 +1994,7 @@ class ReferencesWindow(ctk.CTkToplevel):
             self.trees.append(tree)
 
         self.banner_text = None
-        stale_note = logic.outdated_note(pn, this_outdated, others_outdated)
+        stale_note = reference_text.outdated_note(pn, this_outdated, others_outdated)
         if stale_note:
             banner = ctk.CTkFrame(body, fg_color=BG_PANEL, corner_radius=10)
             banner.grid(row=4, column=0, sticky="ew", padx=20, pady=(10, 0))
@@ -2047,13 +2062,13 @@ class ReferencesWindow(ctk.CTkToplevel):
         iid = tree.identify_row(event.y)
         if iid:
             anchor = self.last_click.get(str(tree))
-            if logic.shift_held(event) and anchor is not None and tree.exists(anchor) and tree.set(anchor, "tick"):
+            if list_view.shift_held(event) and anchor is not None and tree.exists(anchor) and tree.set(anchor, "tick"):
                 mark = tree.set(anchor, "tick")             # Shift: everything from the last click to here
-                for between in logic.range_between(list(tree.get_children()), anchor, iid):
+                for between in list_view.range_between(list(tree.get_children()), anchor, iid):
                     if tree.set(between, "tick"):
                         self._set_mark(tree, between, mark)
             else:
-                self._set_mark(tree, iid, logic.toggled(tree.set(iid, "tick")))
+                self._set_mark(tree, iid, reference_text.toggled(tree.set(iid, "tick")))
             self.last_click[str(tree)] = iid
 
     @staticmethod
@@ -2064,7 +2079,7 @@ class ReferencesWindow(ctk.CTkToplevel):
         for tree in self.trees:
             for iid in tree.get_children():
                 if tree.set(iid, "tick"):
-                    self._set_mark(tree, iid, logic.CHECKED)
+                    self._set_mark(tree, iid, reference_text.CHECKED)
 
     def _replace(self):
         if self.busy:
@@ -2073,7 +2088,7 @@ class ReferencesWindow(ctk.CTkToplevel):
         for tree in self.trees:
             for iid in tree.get_children():
                 use = self.entries.get((str(tree), iid))
-                if use is not None and tree.set(iid, "tick") == logic.CHECKED and use.replaceable:
+                if use is not None and tree.set(iid, "tick") == reference_text.CHECKED and use.replaceable:
                     key = (use.parent, use.child, use.child_revision)
                     if key not in seen:
                         seen.add(key)
@@ -2194,7 +2209,7 @@ class PersonDialog(ctk.CTkToplevel):
         self.role_tree.delete(*self.role_tree.get_children())
         for role in self.chosen_roles:
             self.role_tree.insert("", "end", iid=role, values=(role,))
-        left = logic.roles_to_choose(self.all_roles, self.chosen_roles)
+        left = team_text.roles_to_choose(self.all_roles, self.chosen_roles)
         self.role_menu.configure(values=[self.ADD_ROLE] + left)
         self.role_var.set(self.ADD_ROLE)
 
@@ -2213,7 +2228,7 @@ class PersonDialog(ctk.CTkToplevel):
         form = {"name": self.name_entry.get(), "email": self.email_entry.get(), "host_names": self.host_entry.get(),
                 "roles": ", ".join(self.chosen_roles), "keys": self.keys_box.get("1.0", "end"),
                 "access": self.access_var.get()}
-        problem, fields = logic.person_form_result(None if self.person is None else self.person.id, form,
+        problem, fields = team_text.person_form_result(None if self.person is None else self.person.id, form,
                                                    self.existing_ids)
         self.problem.configure(text=problem)
         if problem:
@@ -2371,7 +2386,7 @@ class RolesDialog(ctk.CTkToplevel):
             self.tree.insert("", "end", iid=role, values=(role,))
 
     def _add(self):
-        problem, role = logic.add_role_result(self.entry.get(), self.roles)
+        problem, role = team_text.add_role_result(self.entry.get(), self.roles)
         self.problem.configure(text=problem)
         if problem:
             return
@@ -2385,7 +2400,7 @@ class RolesDialog(ctk.CTkToplevel):
             self.problem.configure(text="Select a role to remove.")
             return
         role = chosen[0]
-        if not messagebox.askyesno("Remove role", logic.role_removal_text(role, self.holders_of(role)), parent=self):
+        if not messagebox.askyesno("Remove role", team_text.role_removal_text(role, self.holders_of(role)), parent=self):
             return
         self.roles.remove(role)
         self.problem.configure(text="")
@@ -2418,7 +2433,7 @@ class WorkflowsDialog(ctk.CTkToplevel):
     """Team > Workflows: the sign-off templates for each action, one tab per action.
 
         WorkflowsDialog(parent, roles, templates, apply=callback).show()
-        # callback(ops, editor) -> problem text, or "" when the change was taken (see logic.WorkflowEditor)
+        # callback(ops, editor) -> problem text, or "" when the change was taken (see workflow_editor.WorkflowEditor)
 
     A template is a list of sign-offs. A role listed twice is two sign-offs; "+ or" lets a sign-off be filled by
     someone with any of several roles. Nothing is saved here: OK keeps the change in the Team window's draft.
@@ -2430,7 +2445,7 @@ class WorkflowsDialog(ctk.CTkToplevel):
         self.result = None
         self.apply = apply
         self.roles = list(roles)
-        self.editor = logic.WorkflowEditor(templates)
+        self.editor = workflow_editor.WorkflowEditor(templates)
         self.selected = {action: 0 for action in workflow_templates.ACTIONS}
         self.name_vars = {}
         width, height = 820, 640
@@ -2735,7 +2750,7 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
         template = self.template
         self.row_vars, self.row_ids = [], []
         for number, row in enumerate(template.rows):
-            choices = logic.row_choices(self.directory, row.roles, self.my_id, template.requester_may_sign)
+            choices = task_text.row_choices(self.directory, row.roles, self.my_id, template.requester_may_sign)
             var = tk.StringVar(value=choices[0][0] if len(choices) == 1 else self.CHOOSE)
             ctk.CTkLabel(self.holder, text=row.text(), anchor="w", width=190).grid(
                 row=number, column=0, sticky="w", padx=(8, 8), pady=(8 if number == 0 else 3, 0))
@@ -2765,7 +2780,7 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
                               width=180, height=30, fg_color=GRAY, button_color=GRAY_HOVER,
                               button_hover_color=ACCENT,
                               command=lambda value, e=extra: self._extra_role(e)).grid(row=0, column=0, padx=(0, 8))
-            choices = logic.row_choices(self.directory, [extra["role"].get()])
+            choices = task_text.row_choices(self.directory, [extra["role"].get()])
             extra["ids"] = {label: pid for label, pid in choices}
             self._menu(frame, choices, extra["person"]).grid(row=0, column=1)
             ReleaseButton(frame, text="Remove", width=76, height=30, fg_color=GRAY, hover_color=GRAY_HOVER,
@@ -2793,13 +2808,13 @@ class WorkflowRequestDialog(ctk.CTkToplevel):
         try:
             slots = signoff_slots.build_slots(self.template, self.directory, self.my_id, assignments, extras)
         except workflow_templates.WorkflowError as e:
-            self.problem.configure(text=logic.shorten(str(e)))
+            self.problem.configure(text=error_text.shorten(str(e)))
             return
         if self.action in workflow_templates.NEEDS_REASON and not reason:
             self.problem.configure(text="A reason is required.")
             return
         self.problem.configure(text="")
-        text = logic.request_confirm_text(self.action, self.parts, self.template, slots, reason,
+        text = task_text.request_confirm_text(self.action, self.parts, self.template, slots, reason,
                                           workflow_editing.role_warnings(self.template, self.directory))
         if not messagebox.askokcancel("Start the workflow?", text, parent=self):
             return
@@ -2862,7 +2877,7 @@ class ReassignDialog(ctk.CTkToplevel):
 
     def _people(self):
         index = self.slot_labels[self.slot_var.get()]
-        choices = logic.row_choices(self.directory, self.task.slots[index]["roles"])
+        choices = task_text.row_choices(self.directory, self.task.slots[index]["roles"])
         self.ids = {label: pid for label, pid in choices}
         self.person_menu.configure(values=[label for label, _ in choices] or ["(nobody holds the role)"])
         self.person_var.set(choices[0][0] if choices else "(nobody holds the role)")
@@ -3068,11 +3083,11 @@ class TasksWindow(ctk.CTkToplevel):
         frame.grid(row=1, column=0, sticky="nsew", padx=20)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
-        self.tree = ttk.Treeview(frame, columns=[c[0] for c in logic.TASK_COLUMNS], show="headings",
+        self.tree = ttk.Treeview(frame, columns=[c[0] for c in task_text.TASK_COLUMNS], show="headings",
                                  selectmode="browse")
-        for name, _title, width in logic.TASK_COLUMNS:
+        for name, _title, width in task_text.TASK_COLUMNS:
             self.tree.column(name, width=width, anchor="w")
-        TableSorter(self.tree, [(c[0], c[1]) for c in logic.TASK_COLUMNS])
+        TableSorter(self.tree, [(c[0], c[1]) for c in task_text.TASK_COLUMNS])
         self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
         scroll = ctk.CTkScrollbar(frame, command=self.tree.yview)
         scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 4))
@@ -3104,7 +3119,7 @@ class TasksWindow(ctk.CTkToplevel):
         tasks = workflow_tasks.tasks_from_rows(self.app.rows, self.app.identity)
         self.tasks = {t.id: t for t in tasks}
         self.tree.delete(*self.tree.get_children())
-        for iid, values in logic.tasks_table(tasks):
+        for iid, values in task_text.tasks_table(tasks):
             self.tree.insert("", "end", iid=iid, values=values)
         mine = workflow_tasks.count_for_me(tasks)
         if not tasks:
@@ -3130,7 +3145,7 @@ class TasksWindow(ctk.CTkToplevel):
                  "override": task and task.can_override, "reassign": task and task.can_reassign}
         for key, value in flags.items():
             self.action_buttons[key].configure(state="normal" if value else "disabled")
-        self.detail.configure(text=logic.task_detail(task) if task else "")
+        self.detail.configure(text=task_text.task_detail(task) if task else "")
         self.why.configure(text=(task.why_not_sign if task and not task.can_sign and not task.ready else ""))
 
     def _act(self, key):
@@ -3243,7 +3258,7 @@ class TeamWindow(ctk.CTkToplevel):
                                         "one up makes you the Owner; then only people you add can change anything.")
             self._button("Set Up Team", self.app.set_up_team, ACCENT, "#18527f")
         else:
-            for iid, values in logic.people_table(directory):
+            for iid, values in team_text.people_table(directory):
                 self.tree.insert("", "end", iid=iid, values=values)
             unsaved = self.draft.summary() if self.draft is not None else ""
             self.summary.configure(text=f"You: {identity.describe()}."
@@ -3288,10 +3303,10 @@ class App(ctk.CTk):
         # calling withdraw() right after creating the window.)
         self.settings = settings.load()
         settings.DEBUG = diagnostics.DEBUG = settings.is_debug(self.settings)
-        if logic.migrate_settings(self.settings, self._detect_org):
+        if org_menu.migrate_settings(self.settings, self._detect_org):
             settings.save(self.settings)
-        self.org = logic.current_org(self.settings)
-        ICON_SETTING["choice"] = self.settings.get("icon", logic.DEFAULT_ICON)
+        self.org = org_menu.current_org(self.settings)
+        ICON_SETTING["choice"] = self.settings.get("icon", icon_files.DEFAULT_ICON)
         set_window_icon(self, main_window=True)
         self.withdraw()
         self.title(f"Litterbox {version.display()}")
@@ -3412,7 +3427,7 @@ class App(ctk.CTk):
     def _button(self, parent, text, command, **options):
         button = ReleaseButton(parent, text=text, command=command, **options)
         self.buttons.append(button)
-        if text in logic.BUTTON_ACTIONS:
+        if text in action_rules.BUTTON_ACTIONS:
             self.action_buttons[text] = button
         return button
 
@@ -3430,7 +3445,7 @@ class App(ctk.CTk):
                      anchor="w").grid(row=0, column=0, sticky="w")
         self.org_var = tk.StringVar(value=self.org or "No org")
         self.org_menu = ctk.CTkOptionMenu(
-            title_row, variable=self.org_var, values=logic.org_menu_values(self.settings), width=120,
+            title_row, variable=self.org_var, values=org_menu.org_menu_values(self.settings), width=120,
             height=32, fg_color=GRAY, button_color=GRAY_HOVER, button_hover_color=ACCENT,
             command=self.on_org_chosen)
         self.org_menu.grid(row=0, column=1, sticky="w", padx=(16, 0))
@@ -3483,7 +3498,7 @@ class App(ctk.CTk):
         self.search = ctk.CTkEntry(toolbar, placeholder_text="Search part number, name or description...", height=34)
         self.search.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.search.bind("<KeyRelease>", lambda event: self._render())
-        self.view = ctk.CTkSegmentedButton(toolbar, values=list(logic.VIEWS), command=lambda value: self._render())
+        self.view = ctk.CTkSegmentedButton(toolbar, values=list(list_view.VIEWS), command=lambda value: self._render())
         self.view.set("All")
         self.view.grid(row=0, column=1, padx=(0, 8))
         self.void_box = ctk.CTkCheckBox(toolbar, text="Show void", command=self._render, width=90)
@@ -3518,7 +3533,7 @@ class App(ctk.CTk):
         # The tick boxes: tick parts to act on several at once without worrying about the highlight.
         self.ticked = set()
         self.tree.column("tick", width=40, minwidth=40, anchor="center", stretch=False)
-        self.tree.heading("tick", text=logic.TICK_OFF, anchor="center", command=self._toggle_all_ticks)
+        self.tree.heading("tick", text=list_view.TICK_OFF, anchor="center", command=self._toggle_all_ticks)
         self.tree.bind("<Button-1>", self._on_tree_click, add="+")
         self.tree.bind("<space>", self._tick_highlighted)
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._update_buttons(), add="+")
@@ -3594,7 +3609,7 @@ class App(ctk.CTk):
     # ------------------------------------------------------------------
     def repo(self):
         """The vault folder of the org that is open."""
-        return logic.known_orgs(self.settings).get(self.org, "") if self.org else ""
+        return org_menu.known_orgs(self.settings).get(self.org, "") if self.org else ""
 
     @staticmethod
     def _detect_org(folder):
@@ -3604,17 +3619,17 @@ class App(ctk.CTk):
             return None
 
     def _reload_org_menu(self):
-        self.org_menu.configure(values=logic.org_menu_values(self.settings))
+        self.org_menu.configure(values=org_menu.org_menu_values(self.settings))
         self.org_var.set(self.org or "No org")
         self.folder_label.configure(text=self.repo())
 
     def on_org_chosen(self, choice):
         """The dropdown changed: switch org (everything reloads) or open the setup pop-up."""
-        if choice == logic.ADD_ORG:
+        if choice == org_menu.ADD_ORG:
             self.add_org()
-        elif choice == logic.CREATE_VAULT:
+        elif choice == org_menu.CREATE_VAULT:
             self.create_vault()
-        elif choice == logic.EDIT_ORG:
+        elif choice == org_menu.EDIT_ORG:
             self._org_setup(self.org)
         elif choice != self.org:
             self.switch_org(choice)
@@ -3637,18 +3652,18 @@ class App(ctk.CTk):
         """Add org...: paste the URL of a vault on your Git host. Litterbox clones it into its own folder (see
         vault_clone.py), reads the org code and numbering from it, and opens it. A brand-new vault is made with
         Create new vault... instead."""
-        known = logic.known_orgs(self.settings)
+        known = org_menu.known_orgs(self.settings)
         url = CloneDialog(self, settings.ROOT).show()
         if not url:
             return
-        target, problem = logic.plan_add_org(url, settings.ROOT, known)
+        target, problem = org_menu.plan_add_org(url, settings.ROOT, known)
         if problem:
             messagebox.showwarning("Add org", problem, parent=self)
             return
 
         def work():
             if target.exists():
-                org, _problem = logic.inspect_vault_folder(target)
+                org, _problem = org_menu.inspect_vault_folder(target)
                 if org:
                     return target                              # cloned already (an earlier try): just use it
                 if any(target.iterdir()):
@@ -3662,12 +3677,12 @@ class App(ctk.CTk):
             return target
 
         def cloned(folder):
-            org, problem = logic.inspect_vault_folder(folder)
+            org, problem = org_menu.inspect_vault_folder(folder)
             if problem:
                 messagebox.showwarning("Add org", f"The vault was copied to {folder}, but:\n\n{problem}",
                                        parent=self)
                 return
-            logic.remember_org(self.settings, org, str(folder))
+            org_menu.remember_org(self.settings, org, str(folder))
             settings.save(self.settings)
             self._reload_org_menu()
             self.note = f"Added {org}"
@@ -3678,7 +3693,7 @@ class App(ctk.CTk):
 
     def _org_setup(self, org):
         """Edit an org: its code, vault folder and starting part number."""
-        folder = logic.known_orgs(self.settings).get(org, "") if org else ""
+        folder = org_menu.known_orgs(self.settings).get(org, "") if org else ""
         start, base_digits, variant_digits = 1, part_number.DEFAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS
         if folder and Path(folder).is_dir():
             try:
@@ -3698,17 +3713,17 @@ class App(ctk.CTk):
             messagebox.showerror("Org setup", f"Could not save the settings in the vault:\n\n{e}", parent=self)
             return
         if org and org != new_org:
-            orgs = logic.known_orgs(self.settings)
+            orgs = org_menu.known_orgs(self.settings)
             orgs.pop(org, None)
             self.settings["orgs"] = orgs
-        logic.remember_org(self.settings, new_org, new_folder)
+        org_menu.remember_org(self.settings, new_org, new_folder)
         settings.save(self.settings)
         self.note = ("Saved. Commit and push .litterbox/config.yaml so your team gets the same org setup")
         self.switch_org(new_org)
 
     def create_vault(self):
         """Create new vault...: turn an empty cloned repository into a vault (see init_vault.py)."""
-        if not messagebox.askyesno("Create new vault", logic.CREATE_VAULT_INTRO, parent=self):
+        if not messagebox.askyesno("Create new vault", org_menu.CREATE_VAULT_INTRO, parent=self):
             return
         result = OrgDialog(self, "", "", 1, part_number.NEW_VAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS,
                            title="Create new vault", save_text="Create").show()
@@ -3724,11 +3739,11 @@ class App(ctk.CTk):
             return
 
         def made(created):
-            logic.remember_org(self.settings, created.org, folder)
+            org_menu.remember_org(self.settings, created.org, folder)
             settings.save(self.settings)
             self._reload_org_menu()
             self.switch_org(created.org)
-            messagebox.showinfo("Create new vault", logic.vault_created_text(created), parent=self)
+            messagebox.showinfo("Create new vault", org_menu.vault_created_text(created), parent=self)
 
         self.run_task(lambda: create_vault.create(folder, org, start, base_digits, variant_digits),
                       f"Created the {checked.org} vault", on_success=made, refresh=False)
@@ -3805,7 +3820,7 @@ class App(ctk.CTk):
     def show_errors(self):
         notes = self.jobs.errors()
         if notes:
-            ErrorDetailsWindow(self, logic.error_report_text(notes), self.dismiss_errors)
+            ErrorDetailsWindow(self, error_text.error_report_text(notes), self.dismiss_errors)
 
     def dismiss_errors(self):
         self.jobs.dismiss_errors()
@@ -3832,7 +3847,7 @@ class App(ctk.CTk):
             return
         tree = self.tree
         highlighted = [parse_pn(iid) for iid in tree.selection()]
-        states = logic.button_states(self._ticked_pns(), highlighted, self.rows_by_pn, self.jobs.pending_parts())
+        states = action_rules.button_states(self._ticked_pns(), highlighted, self.rows_by_pn, self.jobs.pending_parts())
         for text, button in self.action_buttons.items():
             button.configure(state="normal" if states.get(text) else "disabled")
         deselect = getattr(self, "deselect_button", None)
@@ -3851,11 +3866,11 @@ class App(ctk.CTk):
         return [parse_pn(iid) for iid in self.tree.get_children() if iid in ticked]
 
     def _selected_pns(self, action=None):
-        """The parts an action applies to: see logic.choose_targets."""
+        """The parts an action applies to: see action_rules.choose_targets."""
         highlighted = [parse_pn(iid) for iid in self.tree.selection()]
         if action is None:
             return highlighted
-        return logic.choose_targets(action, self._ticked_pns(), highlighted)
+        return action_rules.choose_targets(action, self._ticked_pns(), highlighted)
 
     def _on_tree_click(self, event):
         """A click in the tick column flips that row's box and leaves the highlight alone."""
@@ -3865,8 +3880,8 @@ class App(ctk.CTk):
         if iid:
             shown = list(self.tree.get_children())
             anchor = getattr(self, "last_tick", None)
-            if logic.shift_held(event) and anchor in shown:   # Shift: tick everything from the last click to here
-                self._set_ticks(logic.range_between(shown, anchor, iid), anchor in self.ticked)
+            if list_view.shift_held(event) and anchor in shown:   # Shift: tick everything from the last click to here
+                self._set_ticks(list_view.range_between(shown, anchor, iid), anchor in self.ticked)
             else:
                 self._set_ticks([iid], iid not in self.ticked)
             self.last_tick = iid
@@ -3887,12 +3902,12 @@ class App(ctk.CTk):
             (self.ticked.add if on else self.ticked.discard)(iid)
             if not self.tree.exists(iid):
                 continue
-            self.tree.set(iid, "tick", logic.TICK_ON if on else logic.TICK_OFF)
+            self.tree.set(iid, "tick", list_view.TICK_ON if on else list_view.TICK_OFF)
             kinds = [t for t in self.tree.item(iid, "tags") if t != "ticked"]
-            self.tree.item(iid, tags=logic.row_tags(kinds[0], on) if kinds else ())
+            self.tree.item(iid, tags=list_view.row_tags(kinds[0], on) if kinds else ())
         shown = self.tree.get_children()
-        self.tree.heading("tick", text=logic.TICK_ON if shown and all(i in self.ticked for i in shown) else logic.TICK_OFF)
-        self._say(logic.tick_text(len(self._ticked_pns())))
+        self.tree.heading("tick", text=list_view.TICK_ON if shown and all(i in self.ticked for i in shown) else list_view.TICK_OFF)
+        self._say(list_view.tick_text(len(self._ticked_pns())))
         self._update_buttons()
 
     def _plan(self, action):
@@ -3901,7 +3916,7 @@ class App(ctk.CTk):
         if not allowed:
             self._say(why, "warn")
             return None
-        plan = logic.plan_action(action, self._selected_pns(action), self.rows_by_pn, self.jobs.pending_parts())
+        plan = action_rules.plan_action(action, self._selected_pns(action), self.rows_by_pn, self.jobs.pending_parts())
         if plan.message:
             self._say(plan.message, "warn")
             return None
@@ -3963,7 +3978,7 @@ class App(ctk.CTk):
         except Exception as e:                      # a bug in a handler must not kill the window
             self._log(f"INTERNAL ERROR: {e!r}")
             self.jobs.add_error(job.label, f"Something unexpected went wrong: {e!r}",
-                                logic.error_advice("unexpected error"))
+                                error_text.error_advice("unexpected error"))
         finally:
             self.jobs.finished(job)
             self._sync_busy()
@@ -3977,7 +3992,7 @@ class App(ctk.CTk):
             # A real problem: no pop-up (you may be busy elsewhere). The banner turns red; Details says what to do.
             self.note = ""
             self._log("ERROR: " + error)
-            self.jobs.add_error(job.label, error, logic.error_advice(error))
+            self.jobs.add_error(job.label, error, error_text.error_advice(error))
             self._say("Something went wrong. Press Details... on the red banner.", "error")
         else:
             if not is_refresh:
@@ -4038,7 +4053,7 @@ class App(ctk.CTk):
 
     def _render(self):
         """Redraw the list using the search box and filters. Returns how many rows are shown."""
-        rows = logic.filter_rows(self.rows, self.search.get(), self.view.get(), bool(self.void_box.get()))
+        rows = list_view.filter_rows(self.rows, self.search.get(), self.view.get(), bool(self.void_box.get()))
         self.ticked &= {str(row.pn) for row in self.rows}                     # parts that no longer exist lose their tick
         if not self.void_box.get():                                           # so do void parts that are now hidden
             self.ticked -= {str(row.pn) for row in self.rows if row.kind == "void"}
@@ -4049,12 +4064,12 @@ class App(ctk.CTk):
         for row in rows:
             mark = busy.get(str(row.pn))
             self.tree.insert("", "end", iid=str(row.pn),
-                             tags=logic.row_tags(row.kind, str(row.pn) in self.ticked) + (("busy",) if mark else ()),
+                             tags=list_view.row_tags(row.kind, str(row.pn) in self.ticked) + (("busy",) if mark else ()),
                              values=(
-                logic.TICK_ON if str(row.pn) in self.ticked else logic.TICK_OFF,
+                list_view.TICK_ON if str(row.pn) in self.ticked else list_view.TICK_OFF,
                 row.pn.short, row.name, row.description, "Yes" if row.cots else "", row.revision,
-                logic.busy_state_text(row.state, mark) if mark else row.state,
-                logic.file_types(row.files)))
+                job_text.busy_state_text(row.state, mark) if mark else row.state,
+                list_view.file_types(row.files)))
         keep = [str(row.pn) for row in rows if str(row.pn) in previous]
         if keep:
             self.tree.selection_set(*keep)
@@ -4128,7 +4143,7 @@ class App(ctk.CTk):
         ImportWindow(self, self.repo(), self.org, imported, log=lambda text: self.queue.put(("log", text)), cots=cots)
 
     def _warn_open_files(self, paths):
-        names = logic.cad_changes(paths)
+        names = checkin_text.cad_changes(paths)
         if names:
             messagebox.showinfo(
                 "Newer versions downloaded",
@@ -4137,7 +4152,7 @@ class App(ctk.CTk):
                 "so you aren't looking at an old copy.")
 
     def _show_identity(self):
-        text, tone = logic.identity_banner(self.identity)
+        text, tone = team_text.identity_banner(self.identity)
         self.identity_label.configure(text=text, text_color=WARN if tone == "warn" else MUTED)
         self._refresh_tasks()
 
@@ -4153,7 +4168,7 @@ class App(ctk.CTk):
         if button is None:
             return
         tasks = workflow_tasks.tasks_from_rows(self.rows, self.identity)
-        button.configure(text=logic.tasks_button_text(workflow_tasks.count_for_me(tasks)))
+        button.configure(text=task_text.tasks_button_text(workflow_tasks.count_for_me(tasks)))
         for window in self._task_windows():
             window.reload()
 
@@ -4174,7 +4189,7 @@ class App(ctk.CTk):
                       on_success=lambda result: self._signed(task, result))
 
     def _signed(self, task, result):
-        text, _warn = logic.signoff_result_text(result)
+        text, _warn = task_text.signoff_result_text(result)
         if text:
             messagebox.showwarning("Sign-off saved", text)
         elif result.completed:
@@ -4229,7 +4244,7 @@ class App(ctk.CTk):
         """Without a workflow these actions work on one part at a time. True if that's what was chosen."""
         if len(plan.targets) == 1:
             return True
-        self._say(f"Select just one part to {logic.NAME[action]}. (This vault has no workflow for it, so it happens "
+        self._say(f"Select just one part to {action_rules.NAME[action]}. (This vault has no workflow for it, so it happens "
                   "directly, one part at a time.)", "warn")
         return False
 
@@ -4240,7 +4255,7 @@ class App(ctk.CTk):
         try:
             templates = workflow_store.templates_for(repo, action)
         except LitterboxError as e:
-            messagebox.showerror("Litterbox", logic.shorten(str(e)))
+            messagebox.showerror("Litterbox", error_text.shorten(str(e)))
             return True
         pending = [pn for pn in plan.targets if self.rows_by_pn[pn].kind == "pending"]
         if not templates and not pending:
@@ -4304,7 +4319,7 @@ class App(ctk.CTk):
         def show(who):
             self.identity = who
             self._show_identity()
-            messagebox.showinfo("Who am I?", logic.who_am_i_text(who) if who.state != team_identity.UNVERIFIED
+            messagebox.showinfo("Who am I?", team_text.who_am_i_text(who) if who.state != team_identity.UNVERIFIED
                                 else who.message(), parent=parent)
 
         self.run_task(lambda: team_identity.current(repo, refresh=True), "Checked who you are", on_success=show,
@@ -4336,7 +4351,7 @@ class App(ctk.CTk):
         try:
             draft.stage_people(label, change, needs_owner)
         except LitterboxError as e:
-            return logic.shorten(str(e))
+            return error_text.shorten(str(e))
         window.reload()
         return ""
 
@@ -4354,7 +4369,7 @@ class App(ctk.CTk):
                 new_id = fields.pop("id")
                 return self._stage(window, f"Add {fields['name']}",
                                    lambda d, who: team_editing.add_person(d, who, new_id, **fields))
-            if logic.person_unchanged(person, fields):
+            if team_text.person_unchanged(person, fields):
                 return ""
             pid = person.id
             return self._stage(window, f"Edit {person.name}", lambda d, who: team_editing.update_person(d, who, pid, **fields))
@@ -4412,7 +4427,7 @@ class App(ctk.CTk):
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
         chosen = VaultSettingsDialog(window, current).show()
-        changes = logic.changed_settings(current, chosen)
+        changes = team_text.changed_settings(current, chosen)
         if not changes:
             return
         if changes.get("require_signatures") and not messagebox.askokcancel(
@@ -4449,9 +4464,9 @@ class App(ctk.CTk):
                 workflow_editing.apply_ops(templates, ops)
 
             try:
-                draft.stage_workflow(logic.ops_label(ops), change)
+                draft.stage_workflow(workflow_editor.ops_label(ops), change)
             except LitterboxError as e:
-                return logic.shorten(str(e))
+                return error_text.shorten(str(e))
             window.reload()
             return ""
 
@@ -4477,14 +4492,14 @@ class App(ctk.CTk):
         self.run_task(
             lambda: func(repo, targets),
             "", on_success=lambda result: self._after_batch(action, plan, result),
-            label=logic.job_label(action, len(targets)), parts=targets)
+            label=job_text.job_label(action, len(targets)), parts=targets)
 
     def _after_batch(self, action, plan, result):
         done, failed = result
-        self.note = logic.summary(action, len(done), len(failed), len(plan.skipped))
+        self.note = action_rules.summary(action, len(done), len(failed), len(plan.skipped))
         self._say(self.note, "warn" if failed else "normal")
         if failed:
-            messagebox.showerror("Litterbox", logic.shorten(
+            messagebox.showerror("Litterbox", error_text.shorten(
                 "\n\n".join(f"{pn}: {message}" for pn, message in failed)))
 
         if action == "checkout":
@@ -4509,7 +4524,7 @@ class App(ctk.CTk):
     def _ask_comment_and_check_in(self, action, plan, allow_unchanged=frozenset()):
         """Ask for a comment, then check in (or save progress on) the planned parts."""
         keep_lock = action == "save"
-        comment = self._ask("Describe your changes:\n\n" + logic.CHECKIN_CAUTION,
+        comment = self._ask("Describe your changes:\n\n" + checkin_text.CHECKIN_CAUTION,
                             "Save Progress" if keep_lock else "Check In")
         if comment is None:                                  # cancelled
             return
@@ -4545,11 +4560,11 @@ class App(ctk.CTk):
             refresh=False, is_refresh=True)
 
     def _confirm_unchanged(self, plan, reports):
-        unchanged = logic.parts_without_changes(reports)
+        unchanged = checkin_text.parts_without_changes(reports)
         if unchanged:
             dialog = ConfirmDialog(
                 self, "No changes detected", "No changes were detected in these files:",
-                logic.unchanged_lines(unchanged),
+                checkin_text.unchanged_lines(unchanged),
                 note="Continue will still check the part in: the check-in is recorded in its log, "
                      "uploaded, and your lock is released. Cancel leaves everything as it is.",
                 confirm_text="Continue")
@@ -4568,7 +4583,7 @@ class App(ctk.CTk):
         plan = self._plan("undo")
         if not plan:
             return
-        if not messagebox.askyesno("Undo checkout", logic.undo_prompt(plan.targets)):
+        if not messagebox.askyesno("Undo checkout", checkin_text.undo_prompt(plan.targets)):
             return
         self._run_batch("undo", plan, undoing.undo_checkout_many)
 
@@ -4586,19 +4601,19 @@ class App(ctk.CTk):
     def _confirm_release(self, repo, plans):
         good, bad = [p for p in plans if p.ok], [p for p in plans if not p.ok]
         if not good:
-            messagebox.showwarning("Can't release yet", logic.plans_problem_text(bad, "released"))
+            messagebox.showwarning("Can't release yet", confirmations.plans_problem_text(bad, "released"))
             return
         if len(plans) == 1:
-            title, text = f"Release {good[0].pn}", logic.release_confirm_text(good[0])
+            title, text = f"Release {good[0].pn}", confirmations.release_confirm_text(good[0])
         else:
-            title, text = f"Release {len(good)} parts", logic.release_many_confirm_text(good, bad)
+            title, text = f"Release {len(good)} parts", confirmations.release_many_confirm_text(good, bad)
         if not messagebox.askokcancel(title, text):
             return
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
         self.run_task(lambda: lifecycle.release_many(repo, pns), "",
-                      on_success=lambda result: self._after_batch("release", logic.ActionPlan(pns, skipped), result),
-                      label=logic.job_label("release", len(pns)), parts=pns)
+                      on_success=lambda result: self._after_batch("release", action_rules.ActionPlan(pns, skipped), result),
+                      label=job_text.job_label("release", len(pns)), parts=pns)
 
     def open_part(self, drawing=False):
         """Open the part's model, or (drawing=True) its drawing, in the program for that file type.
@@ -4611,17 +4626,17 @@ class App(ctk.CTk):
         row = self.rows_by_pn[pn]
         waiting = self.jobs.pending_parts().get(str(pn))
         if waiting and not messagebox.askokcancel(
-                "Still being uploaded", logic.open_while_busy_text(pn, waiting), parent=self):
+                "Still being uploaded", checkin_text.open_while_busy_text(pn, waiting), parent=self):
             return
-        problem = logic.open_message(row, drawing)
+        problem = opening_text.open_message(row, drawing)
         if problem:
             self._say(problem, "warn")
             return
-        choices = logic.open_choices(row, drawing)
+        choices = opening_text.open_choices(row, drawing)
         if len(choices) == 1:
             rev = choices[0][0]
         else:
-            rev = RevisionPickerDialog(self, pn, [(logic.revision_label(row, r), r) for r, _f in choices],
+            rev = RevisionPickerDialog(self, pn, [(history_text.revision_label(row, r), r) for r, _f in choices],
                                        "Open drawing of" if drawing else "Open").show()
             if rev is None:
                 return
@@ -4639,7 +4654,7 @@ class App(ctk.CTk):
             return False
         if not stale:
             return False
-        if messagebox.askyesno("Parts out of date", logic.stale_open_text(pn, stale)):
+        if messagebox.askyesno("Parts out of date", reference_text.stale_open_text(pn, stale)):
             self._load_references(pn)
             return True
         return False
@@ -4686,10 +4701,10 @@ class App(ctk.CTk):
             if error:
                 if window.winfo_exists():
                     window.set_idle()
-                messagebox.showerror("Update references", logic.shorten(error))
+                messagebox.showerror("Update references", error_text.shorten(error))
                 return
             self._show_rows(rows)
-            text, problems = logic.update_summary(results)
+            text, problems = reference_text.update_summary(results)
             if problems:
                 messagebox.showwarning("Update references", text)
             self._load_references(pn, window)
@@ -4709,7 +4724,7 @@ class App(ctk.CTk):
             return
 
         def done(results):
-            text, problems = logic.replace_summary(results)
+            text, problems = reference_text.replace_summary(results)
             (messagebox.showwarning if problems else messagebox.showinfo)("Replace references", text)
 
         self.run_task(lambda: reference_replace.replace_references(
@@ -4718,7 +4733,7 @@ class App(ctk.CTk):
     def _open_revision(self, pn, rev, drawing=False):
         """Open one revision's model or drawing (used by the Open buttons and the History window)."""
         row = self.rows_by_pn.get(pn)
-        files = logic.row_revisions(row).get(rev, []) if row else []
+        files = history_text.row_revisions(row).get(rev, []) if row else []
         path = opener.pick_drawing(files) if drawing else opener.pick_model(files)
         if path is None:
             self._say(f"{pn.short} Rev {rev} has no {'drawing' if drawing else 'file'}.", "warn")
@@ -4758,9 +4773,9 @@ class App(ctk.CTk):
     def _confirm_revise(self, repo, revise_plan):
         pn = revise_plan.pn
         if not revise_plan.ok:
-            messagebox.showwarning("Can't revise yet", logic.revise_problem_text(pn, revise_plan.problems))
+            messagebox.showwarning("Can't revise yet", confirmations.revise_problem_text(pn, revise_plan.problems))
             return
-        reason = ReasonDialog(self, f"Revise {pn.short}", logic.revise_confirm_text(revise_plan),
+        reason = ReasonDialog(self, f"Revise {pn.short}", confirmations.revise_confirm_text(revise_plan),
                               "Why is it being revised? (a few words)", "Revise").show()
         if not reason:
             return
@@ -4780,10 +4795,10 @@ class App(ctk.CTk):
     def _confirm_cancel_revision(self, repo, cancel_plan):
         pn = cancel_plan.pn
         if not cancel_plan.ok:
-            messagebox.showwarning("Can't cancel", logic.cancel_problem_text(pn, cancel_plan.problems))
+            messagebox.showwarning("Can't cancel", confirmations.cancel_problem_text(pn, cancel_plan.problems))
             return
         reason = ReasonDialog(self, f"Cancel Rev {cancel_plan.revision} of {pn.short}",
-                              logic.cancel_confirm_text(cancel_plan),
+                              confirmations.cancel_confirm_text(cancel_plan),
                               "Why is it being cancelled? (a few words)", "Cancel revision").show()
         if not reason:
             return
@@ -4804,20 +4819,20 @@ class App(ctk.CTk):
     def _confirm_make_cots(self, repo, plans):
         good, bad = [p for p in plans if p.ok], [p for p in plans if not p.ok]
         if not good:
-            messagebox.showwarning("Can't make COTS yet", logic.plans_problem_text(bad, "made COTS"))
+            messagebox.showwarning("Can't make COTS yet", confirmations.plans_problem_text(bad, "made COTS"))
             return
         if len(plans) == 1:
             title = f"Make {good[0].pn} COTS"
-            text = logic.make_cots_confirm_text(good[0].pn, good[0].name, good[0].files)
+            text = confirmations.make_cots_confirm_text(good[0].pn, good[0].name, good[0].files)
         else:
-            title, text = f"Make {len(good)} parts COTS", logic.make_cots_many_confirm_text(good, bad)
+            title, text = f"Make {len(good)} parts COTS", confirmations.make_cots_many_confirm_text(good, bad)
         if not messagebox.askokcancel(title, text):
             return
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
         self.run_task(lambda: lifecycle.make_cots_many(repo, pns), "",
-                      on_success=lambda result: self._after_batch("make_cots", logic.ActionPlan(pns, skipped), result),
-                      label=logic.job_label("make_cots", len(pns)), parts=pns)
+                      on_success=lambda result: self._after_batch("make_cots", action_rules.ActionPlan(pns, skipped), result),
+                      label=job_text.job_label("make_cots", len(pns)), parts=pns)
 
     def _ask_reason(self, text, title):
         """Ask for a reason. Returns None if cancelled or left blank (and says so)."""
@@ -4838,14 +4853,14 @@ class App(ctk.CTk):
         repo, pns = self.repo(), list(plan.targets)
         cots = [pn for pn in pns if self.rows_by_pn[pn].kind == "cots"]
         if cots and not messagebox.askyesno("Unrelease COTS part" + ("s" if len(cots) > 1 else ""),
-                                            logic.reopen_cots_warning(cots)):
+                                            confirmations.reopen_cots_warning(cots)):
             return
         what = str(pns[0]) if len(pns) == 1 else f"these {len(pns)} parts"
         reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being unreleased?", "Unrelease")
         if reason:
             self.run_task(lambda: lifecycle.reopen_many(repo, pns, reason), "",
                           on_success=lambda result: self._after_batch("reopen", plan, result),
-                          label=logic.job_label("reopen", len(pns)), parts=pns)
+                          label=job_text.job_label("reopen", len(pns)), parts=pns)
 
     def void(self):
         plan = self._plan("void")
@@ -4856,7 +4871,7 @@ class App(ctk.CTk):
         repo = self.repo()
         pns, skipped = [], list(plan.skipped)
         for pn in plan.targets:
-            problem = logic.void_problem(self.rows_by_pn[pn])
+            problem = confirmations.void_problem(self.rows_by_pn[pn])
             if problem:
                 skipped.append((pn, problem))
             else:
@@ -4871,11 +4886,11 @@ class App(ctk.CTk):
         if not messagebox.askyesno(
                 "Void part" + ("s" if len(pns) != 1 else ""),
                 f"Void {pns[0]}?\n\nIts number will never be used again, and it can't be checked out."
-                if len(pns) == 1 else logic.void_many_confirm_text(pns)):
+                if len(pns) == 1 else confirmations.void_many_confirm_text(pns)):
             return
         self.run_task(lambda: lifecycle.void_many(repo, pns, reason), "",
-                      on_success=lambda result: self._after_batch("void", logic.ActionPlan(pns, skipped), result),
-                      label=logic.job_label("void", len(pns)), parts=pns)
+                      on_success=lambda result: self._after_batch("void", action_rules.ActionPlan(pns, skipped), result),
+                      label=job_text.job_label("void", len(pns)), parts=pns)
 
     def show_history(self, event=None):
         if event is not None and self.tree.identify_column(event.x) == "#1":
@@ -4890,7 +4905,7 @@ class App(ctk.CTk):
             messagebox.showerror("Litterbox", str(e))
             return
         row = self.rows_by_pn.get(chosen[0])
-        HistoryWindow(self, record, logic.row_revisions(row) if row else {},
+        HistoryWindow(self, record, history_text.row_revisions(row) if row else {},
                       on_open=lambda rev, drawing, pn=chosen[0]: self._open_revision(pn, rev, drawing))
 
 

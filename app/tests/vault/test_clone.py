@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 
-from litterbox.gui.logic import gui_logic as logic
+from litterbox.gui.logic import org_menu
 from litterbox.vault import clone as vault_clone
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
@@ -47,17 +47,17 @@ class ParsingTheUrl(unittest.TestCase):
 
 class Planning(unittest.TestCase):
     def test_the_folder_is_inside_the_root(self):
-        target, problem = logic.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox", {})
+        target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox", {})
         self.assertEqual((target, problem), (Path("/root/Litterbox/hcr-litterbox"), ""))
 
     def test_a_vault_that_is_already_added_is_not_cloned_again(self):
-        target, problem = logic.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox",
+        target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox",
                                              {"HCR": "/root/Litterbox/hcr-litterbox"})
         self.assertIsNone(target)
         self.assertIn("HCR is already added", problem)
 
     def test_a_bad_url_gives_its_reason(self):
-        target, problem = logic.plan_add_org("nonsense", "/root/Litterbox", {})
+        target, problem = org_menu.plan_add_org("nonsense", "/root/Litterbox", {})
         self.assertIsNone(target)
         self.assertIn("repository URL", problem)
 
@@ -85,7 +85,7 @@ class Cloning(unittest.TestCase):
     def test_a_clone_lands_in_the_target_and_is_a_vault(self):
         target = self.root / "Litterbox" / "remote"                    # parent folder does not exist yet
         self.assertEqual(vault_clone.clone(self.url, target), target)
-        self.assertEqual(logic.inspect_vault_folder(target), ("HCR", ""))
+        self.assertEqual(org_menu.inspect_vault_folder(target), ("HCR", ""))
         self.assertTrue(any("git clone" in line for line in self.lines))
 
     def test_a_failed_clone_says_why(self):
@@ -97,7 +97,7 @@ class Cloning(unittest.TestCase):
         empty = self.root / "empty.git"
         git(self.root, "init", "--bare", "-b", "main", str(empty))
         target = vault_clone.clone(empty.as_uri(), self.root / "empty")
-        org, problem = logic.inspect_vault_folder(target)
+        org, problem = org_menu.inspect_vault_folder(target)
         self.assertEqual(org, "")
         self.assertIn("Create new vault", problem)
 
