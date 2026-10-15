@@ -9,13 +9,14 @@ from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.cad.solidworks import com
+from litterbox.cad.solidworks import sw_backend
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
-from litterbox.cad.solidworks import sw_backend
 from litterbox.parts import batch_core
 from litterbox.parts import permission_check
 from litterbox.parts import revision_files
@@ -106,6 +107,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
             for rel in files:                                 # nobody else may pick the files up meanwhile
                 lfs_locks.lock(repo, rel, pn)
                 locked.append(rel)
+            lfs_download.download(repo, files, f"{pn} Rev {record.revision} to keep")     # SolidWorks copies the real files
             moves = [(rel, revision_files.cancelled_name(rel)) for rel in files]
             clashes = [new for _old, new in moves if (Path(repo) / new).exists()]
             if clashes:

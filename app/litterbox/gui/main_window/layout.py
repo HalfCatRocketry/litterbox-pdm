@@ -104,7 +104,9 @@ class WindowLayout:
         self._button(toolbar, "Refresh", self.refresh, width=84, height=34,
                      fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=4, padx=(0, 8))
         self._button(toolbar, "Get Latest", self.get_latest, width=100, height=34,
-                     fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=5)
+                     fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=5, padx=(0, 8))
+        self._button(toolbar, "Download All", self.download_all, width=110, height=34,
+                     fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=6)
 
         # The list of parts
         frame = ctk.CTkFrame(self, fg_color=theme.BG_PANEL, corner_radius=10)

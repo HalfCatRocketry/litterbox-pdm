@@ -3,19 +3,17 @@ reference_rescan.py - reading every assembly's references again from its files a
 records (for vaults whose records predate reference tracking, or after a fix by hand).
 """
 
-from pathlib import Path
 
 from litterbox.cad import file_types
 from litterbox.cad.solidworks import com
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
-from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.parts import batch_core
 from litterbox.records import record_files
 from litterbox.records import record_lifecycle
 from litterbox.records import record_store
-from litterbox.references import reference_model
 from litterbox.references import reference_reader
 
 
@@ -80,9 +78,7 @@ def _rescan_one(repo, pn, revisions, backend):
         for revision, files in revisions.items():
             if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in files):
                 continue
-            for f in files:
-                if read_only.is_pointer(Path(repo) / f):
-                    raise reference_model.ReferencesError(f"{f} has not been downloaded. Run Get Latest.")
+            lfs_download.download(repo, files, f"files of {pn} Rev {revision}")    # SolidWorks reads the file itself
             found[revision] = reference_reader.read_assembly_references(repo, pn, revision, backend, files)
     current = record_store.load(repo, pn)
     if all(current.references.get(rev) == sorted(set(stems), key=str.lower)

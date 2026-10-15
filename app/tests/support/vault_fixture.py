@@ -5,7 +5,11 @@ TwoUserVault builds, in a temporary folder:
     remote.git   a bare repo standing in for GitHub / Azure
     a            Alex's copy of the vault
     b            Bea's copy of the vault
-and puts tests/fake_git_lfs.py in place of Git LFS (see that file for why).
+and puts tests/support/fake_git_lfs.py in place of Git LFS (see that file for why).
+
+Set LFS = True on a test class to store the CAD files through (fake) Git LFS from the first commit, as a real vault
+does; set ON_DEMAND = True as well to make Bea's copy download on demand (cloned without the CAD files, like
+Add org... makes it).
 
 The vault starts with one part, HCR-00001-001, with a part file, a drawing,
 and a record. Use `with self.user("Alex"):` to act as one user or the other.
@@ -52,6 +56,9 @@ def is_writable(path):
 class TwoUserVault:
     """Mix this into a unittest.TestCase."""
 
+    LFS = False                 # store CAD files through the fake Git LFS
+    ON_DEMAND = False           # Bea's copy downloads on demand (needs LFS)
+
     def setUp(self):
         root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, root, ignore_errors=True)
@@ -72,6 +79,11 @@ class TwoUserVault:
         empty_config.write_text("")
         os.environ["GIT_CONFIG_GLOBAL"] = str(empty_config)
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+        if self.LFS or self.ON_DEMAND:
+            os.environ["LFS_OBJECTS"] = str(root / "lfs-objects")      # the LFS "server"
+            for key, value in (("filter.lfs.clean", "git-lfs clean -- %f"),
+                               ("filter.lfs.smudge", "git-lfs smudge -- %f"), ("filter.lfs.required", "true")):
+                subprocess.run(["git", "config", "--file", str(empty_config), key, value], check=True)
 
         git(root, "init", "--bare", "-b", "main", "remote.git")
         remote = str(root / "remote.git")
@@ -83,6 +95,9 @@ class TwoUserVault:
         git(self.a, "symbolic-ref", "HEAD", "refs/heads/main")
         self.config(self.a, "Alex")
         (self.a / "cad").mkdir()
+        if self.LFS or self.ON_DEMAND:
+            (self.a / ".gitattributes").write_text("".join(f"*.{ext} filter=lfs -text\n"
+                                                           for ext in ("SLDPRT", "SLDASM", "SLDDRW")))
         (self.a / PRT).write_bytes(b"version 1")
         (self.a / DRW).write_bytes(b"drawing 1")
         record_store.create_record(self.a, PART, "Front upright", "Alex")
@@ -91,7 +106,15 @@ class TwoUserVault:
         git(self.a, "push", "-u", "origin", "main")
 
         self.b = root / "b"
-        git(root, "clone", remote, "b")
+        if self.ON_DEMAND:                                  # like Add org...: no CAD files, then download on demand
+            os.environ["GIT_LFS_SKIP_SMUDGE"] = "1"
+            try:
+                git(root, "clone", remote, "b")
+            finally:
+                del os.environ["GIT_LFS_SKIP_SMUDGE"]
+            git(self.b, "lfs", "install", "--local", "--skip-smudge")
+        else:
+            git(root, "clone", remote, "b")
         self.config(self.b, "Bea")
 
         with self.user("Alex"):

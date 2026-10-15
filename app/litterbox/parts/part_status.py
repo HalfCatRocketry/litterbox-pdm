@@ -37,6 +37,7 @@ class PartStatus:
     revisions: dict = field(default_factory=dict)   # {revision: [files]} for every revision that has files
     refs_outdated: bool = False         # an assembly whose list of parts used is missing or out of date
     pending: dict = field(default_factory=dict)     # a release request waiting for sign-offs (see workflow.py)
+    not_downloaded: bool = False        # the working revision's files are pointers (see git/lfs_download.py)
 
 
 def get_status(repo):
@@ -70,8 +71,6 @@ def get_status(repo):
 
         if record.status == record_model.STATUS_VOID:
             state, kind = "Void", "void"
-        elif not_downloaded:
-            state, kind = "Not downloaded", "missing"
         elif record.pending:
             from litterbox.workflows import signoff_slots
             state, kind = signoff_slots.describe_pending(record.pending), "pending"
@@ -101,8 +100,11 @@ def get_status(repo):
         outdated = any(record_lifecycle.references_need_update(record, rev, fs) for rev, fs in revisions.items())
         if outdated and kind not in ("error", "missing"):
             state += " (references need updating)"
+        if not_downloaded and kind != "void":
+            state += " (not downloaded)"         # Check Out and Open download it; nothing else needs the files
 
         rows.append(PartStatus(pn, record.name, record.status, state, kind, owner, files,
                                record.description, record.cots, record.import_path,
-                               record.revision, record.released_revision, revisions, outdated, record.pending))
+                               record.revision, record.released_revision, revisions, outdated, record.pending,
+                               not_downloaded))
     return rows

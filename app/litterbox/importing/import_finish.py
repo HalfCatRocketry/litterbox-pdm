@@ -5,6 +5,7 @@ journal so an import that stops half way can be put back.
 
 import uuid
 
+from litterbox.git import lfs_download
 from litterbox.git import read_only
 from litterbox.importing import import_copying
 from litterbox.importing import import_errors
@@ -61,6 +62,11 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
             return import_plan.Result(pns=pns, warnings=plan.warnings, plan=plan, dry_run=True, version=prepared.version,
                           renumbered=renumbered)
 
+        # Copies may point at parts already in the vault (imported before); SolidWorks needs those files themselves.
+        new_targets = set(plan.copies.values())
+        lfs_download.download(repo, sorted({import_paths.relative_path(repo, target)
+                                            for entries in plan.repoints.values() for _stored, target in entries
+                                            if target not in new_targets}), "parts this import uses")
         new_files = [import_paths.relative_path(repo, plan.copies[p]) for p in plan.order]
         record_paths = [record_store.record_relpath(pn) for pn in pns]
         token = uuid.uuid4().hex[:12]

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
-from litterbox.git import read_only
+from litterbox.git import lfs_download
 from litterbox.parts import batch_core
 from litterbox.parts import planning
 from litterbox.records import record_lifecycle
@@ -27,12 +27,14 @@ from litterbox.workflows import workflow_templates
 
 
 def file_hashes(repo, files):
-    """{file: sha256} for CAD files (paths relative to the vault)."""
+    """{file: sha256} for CAD files (paths relative to the vault), downloaded or not."""
     result = {}
     for rel in files:
         path = Path(repo) / rel
-        if read_only.is_pointer(path):
-            raise workflow_templates.WorkflowError(f"{rel} hasn't been downloaded. Run Get Latest.")
+        oid = lfs_download.pointer_oid(path)
+        if oid is not None:                 # not downloaded: the pointer holds the file's SHA-256 already
+            result[rel] = oid
+            continue
         digest = hashlib.sha256()
         try:
             with open(path, "rb") as f:

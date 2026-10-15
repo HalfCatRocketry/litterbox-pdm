@@ -70,5 +70,15 @@ class TestDebugMode(unittest.TestCase):
             self.assertFalse(settings.is_debug(settings.load(Path(d) / "missing.yaml")))
 
 
+class DownloadSetting(unittest.TestCase):
+    def test_on_demand_unless_it_says_all(self):
+        from litterbox.user import settings
+        self.assertTrue(settings.downloads_on_demand({}))
+        self.assertTrue(settings.downloads_on_demand({"download": "on_demand"}))
+        self.assertTrue(settings.downloads_on_demand({"download": 3}))             # nonsense: the default
+        self.assertFalse(settings.downloads_on_demand({"download": "all"}))
+        self.assertFalse(settings.downloads_on_demand({"download": " Everything "}))
+
+
 if __name__ == "__main__":
     unittest.main()

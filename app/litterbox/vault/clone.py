@@ -15,8 +15,9 @@ import subprocess
 import urllib.parse
 from pathlib import Path
 
-from litterbox.errors import LitterboxError
 from litterbox import diagnostics
+from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 
 SCHEMES = ("https://", "http://", "ssh://", "git://", "file://")
 
@@ -46,13 +47,18 @@ def target_folder(root, name):
     return Path(root) / name
 
 
-def clone(url, target):
+def clone(url, target, on_demand=True):
     """git clone url into target (made if needed). Never asks for a password on a console that is not there: a
-    sign-in the host needs comes from the Git credential manager's own window. Raises LitterboxError."""
+    sign-in the host needs comes from the Git credential manager's own window. Raises LitterboxError.
+
+    on_demand=True (download on demand): the CAD files are not downloaded, and the new copy keeps it that way until
+    a file is used (see parts/downloads.py)."""
     target = Path(target)
     target.parent.mkdir(parents=True, exist_ok=True)
     diagnostics.LOG(f"> git clone {url} {target}")
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    if on_demand:
+        env["GIT_LFS_SKIP_SMUDGE"] = "1"                # leave the CAD files as pointers
     try:
         result = subprocess.run(
             ["git", "clone", url, str(target)], cwd=str(target.parent), capture_output=True, text=True,
@@ -62,4 +68,6 @@ def clone(url, target):
         raise LitterboxError("Could not run 'git'. Is Git installed?") from None
     if result.returncode != 0:
         raise LitterboxError(f"Could not clone {url}\n\n{(result.stderr or result.stdout).strip()}")
+    if on_demand:
+        lfs_download.set_on_demand(target, True)
     return target

@@ -7,11 +7,12 @@ import uuid
 from dataclasses import dataclass, field
 
 from litterbox.cad.solidworks import com
+from litterbox.cad.solidworks import sw_backend
+from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import remote
 from litterbox.git import repository
-from litterbox.cad.solidworks import sw_backend
 from litterbox.parts import batch_core
 from litterbox.parts import permission_check
 from litterbox.parts import planning
@@ -87,6 +88,7 @@ def revise(repo, pn, reason, backend=None, log=print):
             remote.pull(repo)                                   # lock first, THEN pull
             record = record_store.load(repo, pn)
             files = record_files.cad_files(repo, pn, record.revision)
+            lfs_download.download(repo, files, f"{pn} Rev {record.revision} to copy")    # SolidWorks copies the real files
             if record_revisions.can_revise(record) or record.revision != plan.revision:
                 raise revision_files.RevisionFailed(f"{pn} was changed by someone else a moment ago. Run Get Latest and try again.")
             copies, _kept, problems = revision_files.copy_list(repo, record, files)

@@ -5,15 +5,14 @@ released revision of the parts they use. Released assemblies are frozen: to chan
 
 import os
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from litterbox.cad import file_types
 from litterbox.cad.solidworks import com
 from litterbox.core import filenames
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
-from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.parts import checkin
 from litterbox.parts import checkout
@@ -120,8 +119,10 @@ def _plan_replacement(repo, parent, items, locks):
             if new_rel is None:
                 return ReplaceResult(parent, "failed", f"Rev {latest} of {item.child} has no model file here. "
                                                          "Run Get Latest.")
-            if read_only.is_pointer(Path(repo) / new_rel):
-                return ReplaceResult(parent, "failed", f"{new_rel} has not been downloaded. Run Get Latest.")
+            try:                            # SolidWorks needs the new revision's file itself, not a pointer
+                lfs_download.download(repo, [new_rel], f"{item.child} Rev {latest}")
+            except LitterboxError as e:
+                return ReplaceResult(parent, "failed", f"{new_rel} could not be downloaded. {e}")
             old_name = filenames.filename(item.child, item.old_revision, file_types.extension(new_rel))
             edits.append((item, old_name, os.path.join(str(repo), new_rel)))
             names.append(f"{item.child} Rev {item.old_revision} -> {latest}")

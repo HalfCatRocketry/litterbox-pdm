@@ -4,14 +4,12 @@ be frozen, and what stands in the way (ReleasePlan).
 """
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.core import revision_letters
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
-from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
@@ -98,8 +96,7 @@ def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK
     for f in cad:
         if f.lower() in modified:
             problems.append(f"{f} has changes that are not checked in.")
-        elif read_only.is_pointer(Path(repo) / f):
-            problems.append(f"{f} has not been downloaded. Run Get Latest.")
+        # A file that is not downloaded is fine: releasing only changes the record (download on demand).
 
     if (repository.count(repo, "@{u}..HEAD", group) or 0) > 0:
         problems.append("Some changes have not been uploaded yet.")

@@ -46,7 +46,9 @@ class UndoAndStatus(EngineFixture, unittest.TestCase):
             git(self.b, "restore", "--", PRT)
             (self.b / DRW).chmod(0o644)
             (self.b / DRW).write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 9\n")
-            self.assertEqual(self.status_of(self.b).kind, "missing")
+            row = self.status_of(self.b)                # a pointer: flagged as not downloaded (in a real LFS vault the
+            self.assertTrue(row.not_downloaded)         # part stays "ok"; see tests/parts/test_downloads.py)
+            self.assertIn("(not downloaded)", row.state)
 
 
 if __name__ == "__main__":

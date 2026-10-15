@@ -7,11 +7,14 @@ from tkinter import messagebox
 
 from litterbox.cad import opener
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 from litterbox.gui.dialogs import revision_picker
 from litterbox.gui.logic import checkin_text
+from litterbox.gui.logic import download_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import opening_text
 from litterbox.gui.windows import history_window
+from litterbox.parts import downloads
 from litterbox.records import record_model
 from litterbox.records import record_store
 
@@ -56,6 +59,20 @@ class OpenActions:
         if path is None:
             self._say(f"{pn.short} Rev {rev} has no {'drawing' if drawing else 'file'}.", "warn")
             return
+        repo = self.repo()
+        try:
+            missing = lfs_download.stubs(repo, downloads.files_to_open(repo, pn, rev))
+        except LitterboxError:
+            missing = []
+        if missing:                                 # download on demand: fetch the files first, then open
+            self.run_task(lambda: downloads.download_for_open(repo, pn, rev),
+                          download_text.downloaded_for_open(pn, rev, len(missing)),
+                          on_success=lambda _done: self._open_path(path), refresh=True,
+                          label=download_text.downloading_label(pn, len(missing)), parts=[pn])
+            return
+        self._open_path(path)
+
+    def _open_path(self, path):
         try:
             opener.open_path(Path(self.repo()) / path, self.settings.get("open_with"))
         except LitterboxError as e:

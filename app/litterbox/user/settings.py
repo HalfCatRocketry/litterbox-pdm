@@ -3,7 +3,10 @@ settings.py - your personal Litterbox settings and log file.
 
 These live OUTSIDE the vault, on your own computer, and are never shared:
 
-    C:\\Litterbox\\settings.yaml        which vault the app opens
+    C:\\Litterbox\\settings.yaml        which vault the app opens, and options such as
+                                       debug_mode: true      more detail in the log
+                                       update_check: false   don't look for a newer Litterbox
+                                       download: all         download every CAD file, not just those you use
     C:\\Litterbox\\logs\\litterbox.log   every git command and error, for troubleshooting
 
 Nothing in here is ever allowed to crash the app: if a file can't be read or
@@ -33,6 +36,13 @@ def update_check_enabled(data):
     if isinstance(value, str):
         return value.strip().lower() not in ("false", "no", "off", "0")
     return value is not False and value != 0
+
+
+def downloads_on_demand(data):
+    """Download CAD files only when they are used (download: on_demand, the default), or everything (download: all).
+    See parts/downloads.py."""
+    value = data.get("download", "on_demand") if isinstance(data, dict) else "on_demand"
+    return not (isinstance(value, str) and value.strip().lower() in ("all", "everything"))
 
 
 def is_debug(data):

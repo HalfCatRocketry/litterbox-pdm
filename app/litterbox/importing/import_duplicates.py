@@ -6,6 +6,7 @@ imported twice.
 import os
 from pathlib import Path
 
+from litterbox.git import lfs_download
 from litterbox.importing import import_paths
 from litterbox.records import record_files
 from litterbox.records import record_model
@@ -59,14 +60,15 @@ def find_duplicates(repo, prepared):
     for pn, revisions in record_files.cad_index(repo).items():
         for rel in sorted(f for files in revisions.values() for f in files):
             path = Path(repo) / rel
+            pointer = lfs_download.pointer_info(path)          # not downloaded: the pointer knows size and hash
             try:
-                key = (path.stat().st_size, import_paths.ext_of(rel))
+                key = (pointer[1] if pointer else path.stat().st_size, import_paths.ext_of(rel))
             except OSError:
                 continue
             if key not in wanted:
                 continue
             try:
-                hashes.setdefault(_sha256(path), []).append(pn)
+                hashes.setdefault(pointer[0] if pointer else _sha256(path), []).append(pn)
             except OSError:
                 continue
     digests = {}

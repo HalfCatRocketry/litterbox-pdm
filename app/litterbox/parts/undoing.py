@@ -5,6 +5,7 @@ back its locks.
 
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import repository
@@ -51,6 +52,11 @@ def _undo_batch(repo, pns):
     to_restore = [p for p in everything if p.lower() in tracked]
     if to_restore:
         runner.run_chunked(["git", "restore"], to_restore, repo)
+        try:            # download on demand: git puts back a pointer; you had the file, so you get it back
+            lfs_download.download(repo, [p for p in to_restore if lfs_download.is_stub(repo, p)], "restored files")
+        except LitterboxError as e:
+            diagnostics.LOG(f"WARNING: some restored files could not be downloaded again; they show as not "
+                            f"downloaded. {e}")
     for pn, group in groups.items():
         batch.results[pn] = [p for p in group if p.lower() not in tracked]       # never uploaded: kept, not deleted
 

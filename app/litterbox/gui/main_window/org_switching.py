@@ -80,7 +80,7 @@ class OrgSwitching:
                 if any(target.iterdir()):
                     raise LitterboxError(f"{target} already exists and isn't a vault. Rename or remove it, "
                                                 "then try again.")
-            vault_clone.clone(url.strip(), target)
+            vault_clone.clone(url.strip(), target, settings.downloads_on_demand(self.settings))
             try:
                 read_only.enforce_read_only(target)
             except LitterboxError as e:

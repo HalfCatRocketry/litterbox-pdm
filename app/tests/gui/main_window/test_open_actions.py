@@ -118,5 +118,37 @@ class OpenWiring(unittest.TestCase):
         self.assertIn("no file", self.said[-1])
 
 
+class OpenDownloadsFirst(unittest.TestCase):
+    """Download on demand: a part (or an assembly's parts) that isn't downloaded is fetched in the background,
+    and opened once it is there."""
+    A, B = OpenWiring.A, OpenWiring.B
+
+    def setUp(self):
+        OpenWiring.setUp(self)                              # the same window, without OpenWiring's own tests
+        self.tasks = []
+        self.app.run_task = lambda work, done, on_success=None, **kw: self.tasks.append((work, done, on_success, kw))
+        self.needed = ["cad/HCR-00007-001_B.SLDPRT"]
+        replace(self, self.gui.downloads, "files_to_open", lambda repo, pn, rev: list(self.needed))
+        replace(self, self.gui.lfs_download, "stubs", lambda repo, files: [f for f in files if f in self.needed])
+        self.fetched = []
+        replace(self, self.gui.downloads, "download_for_open", lambda repo, pn, rev: self.fetched.append(rev) or ["x"])
+
+    def test_a_part_that_is_not_downloaded_is_fetched_then_opened(self):
+        self.app._open_revision(self.pn, "B")
+        self.assertEqual(self.opened, [])                                   # not yet: it is being downloaded
+        work, done, on_success, kw = self.tasks[0]
+        self.assertEqual(kw["label"], "Downloading 1 file for 00007-001")
+        self.assertEqual(kw["parts"], [self.pn])
+        on_success(work())                                                  # the job finishes
+        self.assertEqual(self.fetched, ["B"])
+        self.assertEqual(self.opened[0][0], "HCR-00007-001_B.SLDPRT")
+
+    def test_a_downloaded_part_opens_at_once(self):
+        self.needed = []
+        self.app._open_revision(self.pn, "B")
+        self.assertEqual(self.tasks, [])
+        self.assertEqual(self.opened[0][0], "HCR-00007-001_B.SLDPRT")
+
+
 if __name__ == "__main__":
     unittest.main()

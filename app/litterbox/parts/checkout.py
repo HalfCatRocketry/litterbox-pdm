@@ -12,6 +12,7 @@ from pathlib import Path
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
 from litterbox.git import committing
+from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import remote
@@ -87,6 +88,14 @@ def _checkout_batch(repo, pns):
             if bad is not None:
                 give_up(pn, bad)
                 del plan[pn]
+
+        try:                                        # download on demand: you can't edit a pointer
+            lfs_download.download(repo, [f for _record, files in plan.values() for f in files], "files to check out")
+        except LitterboxError as e:
+            for pn, (_record, files) in list(plan.items()):
+                if lfs_download.stubs(repo, files):
+                    give_up(pn, LitterboxError(f"{pn} was not checked out: its files could not be downloaded.\n\n{e}"))
+                    del plan[pn]
 
         changed = set(repository.changed_between(repo, before, repository.head(repo)))
         for pn, (record, files) in list(plan.items()):

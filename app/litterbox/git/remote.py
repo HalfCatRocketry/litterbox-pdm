@@ -1,19 +1,28 @@
 """
 remote.py - getting the latest from the vault's remote, and pushing to it.
 
-A pull tells util/file_snapshot first, because git's autostash changes file times.
+A pull tells util/file_snapshot first, because git's autostash changes file times. In a vault that downloads on
+demand, a pull leaves every changed CAD file as a pointer, so the files that were on disk before the pull are
+downloaded again: what you had stays downloaded, and nothing else is.
 """
 
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_download
 from litterbox.git import runner
 from litterbox.util import file_snapshot
 
 
 def pull(repo):
+    on_disk = lfs_download.downloaded_cad_files(repo)
     file_snapshot.before_pull(repo)
     try:
         runner.run(["git", "pull", "--rebase", "--autostash"], repo)
+        try:
+            lfs_download.download(repo, on_disk, "updated files you already had")
+        except LitterboxError as e:             # the pull itself worked: say so, and carry on
+            diagnostics.LOG(f"WARNING: some files you had could not be downloaded again; they show as not "
+                            f"downloaded. {e}")
     finally:
         file_snapshot.after_pull(repo)
 

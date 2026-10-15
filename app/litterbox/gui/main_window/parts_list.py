@@ -5,16 +5,20 @@ selection, and which buttons are usable.
 
 import time
 from concurrent.futures import ThreadPoolExecutor
+from tkinter import messagebox
 
 from litterbox import diagnostics
 from litterbox.core.part_number import parse as parse_pn
 from litterbox.errors import LitterboxError
 from litterbox.gui.logic import action_rules
+from litterbox.gui.logic import download_text
 from litterbox.gui.logic import job_text
 from litterbox.gui.logic import list_view
+from litterbox.parts import downloads
 from litterbox.parts import get_latest
 from litterbox.parts import part_status
 from litterbox.team import team_identity
+from litterbox.user import settings
 
 
 class PartsList:
@@ -104,6 +108,7 @@ class PartsList:
 
     def refresh(self):
         repo = self.repo()
+        on_demand = settings.downloads_on_demand(getattr(self, "settings", {}))
         def work():
             def find_out_who():
                 try:
@@ -112,6 +117,7 @@ class PartsList:
                     return team_identity.Identity(team_identity.UNVERIFIED, detail=str(e).splitlines()[0])
 
             started = time.monotonic()
+            self._use_download_setting(repo, on_demand)
             with ThreadPoolExecutor(max_workers=2) as pool:      # the list and "who am I" don't depend on each other
                 who_job = pool.submit(find_out_who)
                 rows = part_status.get_status(repo)
@@ -128,6 +134,20 @@ class PartsList:
 
         self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",
                       kind="refresh")
+
+    def _use_download_setting(self, repo, on_demand):
+        """Once per vault and session: make the vault download on demand, or everything, as settings.yaml says
+        (see parts/downloads.py). Runs in the background, with the refresh. A problem is logged, never fatal."""
+        done = self.__dict__.setdefault("_download_setting_used", set())
+        if repo in done:
+            return
+        done.add(repo)
+        try:
+            if downloads.apply_mode(repo, on_demand):
+                diagnostics.LOG("This vault now downloads " + ("CAD files when they are used." if on_demand
+                                                               else "every CAD file."))
+        except LitterboxError as e:
+            diagnostics.LOG(f"WARNING: could not set how this vault downloads files. {e}")
 
     def _show_rows(self, rows):
         self.rows = rows
@@ -177,3 +197,10 @@ class PartsList:
         repo = self.repo()
         self.run_task(lambda: get_latest.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
                       on_success=lambda changed: self._warn_open_files(changed))
+
+    def download_all(self):
+        """Download every CAD file of the vault, not just the ones you use. Get Latest then keeps them all current."""
+        if not messagebox.askyesno("Download All", download_text.DOWNLOAD_ALL_QUESTION, parent=self):
+            return
+        repo = self.repo()
+        self.run_task(lambda: downloads.download_all(repo), "Downloaded every CAD file", label="Downloading everything")

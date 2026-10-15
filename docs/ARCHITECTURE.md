@@ -80,9 +80,9 @@ The few imports that go up a layer are listed, each with its reason, in `KNOWN_E
    new modules on their own.
 5. Run `python tools/update_architecture_map.py` to bring the map below up to date.
 
-The roadmap (`docs/REMINDERS.md`) has places waiting: download on demand in `git/` and `parts/`, the SolidWorks
-watcher in `cad/solidworks/` with a job in `jobs/`, and change orders, BOM export, tickets and quality records as new
-folders at layer 4.
+Download on demand lives in `git/lfs_download.py` (pointers, `git lfs pull`) and `parts/downloads.py` (what a part
+needs). The roadmap (`docs/REMINDERS.md`) has places waiting: change orders, BOM export, tickets and quality records
+as new folders at layer 4.
 
 ## The command line
 
@@ -123,6 +123,7 @@ litterbox/
         revision_letters.py               revisions: A, B ... Z, AA, AB ... (at most three letters)
     git/                                  The only place that runs git and git-lfs
         committing.py                     making commits from a list of paths, and putting files back
+        lfs_download.py                   CAD files that are not downloaded yet, and downloading them
         lfs_locks.py                      Git LFS locks: reading them, taking them and giving them back
         read_only.py                      Git LFS pointer files, and keeping other people's files read-only
         remote.py                         getting the latest from the vault's remote, and pushing to it
@@ -155,6 +156,7 @@ litterbox/
             action_rules.py               which buttons may act on which parts: the part kinds each action ...
             checkin_text.py               texts around Check In, Save Progress and Undo: parts with no changes ...
             confirmations.py              the "Are you sure?" and "can't do that" texts for Release, Make COTS ...
+            download_text.py              what the window says about downloading CAD files on demand (see ...
             error_text.py                 turning an error into plain-language advice for the banner and the ...
             history_text.py               the History window and revision lists: event labels, local times, and ...
             icon_files.py                 which window icon to use (white or black) and finding its file
@@ -224,6 +226,7 @@ litterbox/
         checkout.py                       Check Out: lock a part (record first, then its CAD files) so you can ...
         create.py                         New Part and New Variant: give a part its number by creating its ...
         create_batch.py                   creating many part records at once, in one commit and one push (the ...
+        downloads.py                      downloading what a part needs, when it needs it (download on demand)
         get_latest.py                     Get Latest: download what changed in the vault and make other people's ...
         lifecycle.py                      Release, Make COTS, Unrelease (reopen) and Void, for one part or many
         number_suggestions.py             what the New Part dialog shows: the suggested part and variant ...

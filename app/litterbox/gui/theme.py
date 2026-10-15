@@ -54,7 +54,7 @@ ROW_COLORS = {
     "theirs": "#f0a35e",      # checked out by someone else
     "unclaimed": "#e5c07b",   # modified, and nobody has it checked out
     "stray": "#e5c07b",       # modified without being checked out
-    "missing": "#e06c75",     # not downloaded
+    "missing": "#e06c75",     # no longer used for parts (a part that is not downloaded keeps its colour)
     "released": "#6cb6ff",
     "cots": "#4fc1c9",        # purchased part
     "void": "#7a7a7a",

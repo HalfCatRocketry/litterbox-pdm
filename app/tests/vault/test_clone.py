@@ -13,6 +13,8 @@ from litterbox.vault import clone as vault_clone
 from litterbox.errors import LitterboxError
 from litterbox import diagnostics
 from tests.support.gui_source import gui_source
+from tests.support.vault_fixture import DRW, PRT, REC, SKIP_ON_WINDOWS, TwoUserVault
+from litterbox.git import lfs_download
 
 
 def git(cwd, *args):
@@ -85,19 +87,19 @@ class Cloning(unittest.TestCase):
 
     def test_a_clone_lands_in_the_target_and_is_a_vault(self):
         target = self.root / "Litterbox" / "remote"                    # parent folder does not exist yet
-        self.assertEqual(vault_clone.clone(self.url, target), target)
+        self.assertEqual(vault_clone.clone(self.url, target, on_demand=False), target)
         self.assertEqual(org_menu.inspect_vault_folder(target), ("HCR", ""))
         self.assertTrue(any("git clone" in line for line in self.lines))
 
     def test_a_failed_clone_says_why(self):
         with self.assertRaises(LitterboxError) as caught:
-            vault_clone.clone((self.root / "nothing-here.git").as_uri(), self.root / "x")
+            vault_clone.clone((self.root / "nothing-here.git").as_uri(), self.root / "x", on_demand=False)
         self.assertIn("Could not clone", str(caught.exception))
 
     def test_an_empty_repository_clones_but_is_not_a_vault_yet(self):
         empty = self.root / "empty.git"
         git(self.root, "init", "--bare", "-b", "main", str(empty))
-        target = vault_clone.clone(empty.as_uri(), self.root / "empty")
+        target = vault_clone.clone(empty.as_uri(), self.root / "empty", on_demand=False)
         org, problem = org_menu.inspect_vault_folder(target)
         self.assertEqual(org, "")
         self.assertIn("Create new vault", problem)
@@ -106,10 +108,31 @@ class Cloning(unittest.TestCase):
 class Wiring(unittest.TestCase):
     def test_add_org_asks_for_a_url_and_clones_in_the_background(self):
         source = gui_source()
-        for text in ("class CloneDialog", "CloneDialog(self, settings.ROOT).show()", "vault_clone.clone(url.strip(), target)",
+        for text in ("class CloneDialog", "CloneDialog(self, settings.ROOT).show()", "vault_clone.clone(url.strip(), target, settings.downloads_on_demand(self.settings))",
                      'label="Cloning the vault', "self.add_org()"):
             self.assertIn(text, source)
         self.assertNotIn("self._org_setup(None)", source)
+
+
+@SKIP_ON_WINDOWS
+class CloningOnDemand(TwoUserVault, unittest.TestCase):
+    """Add org... with download on demand: the new copy has every record but no CAD files yet."""
+    LFS = True
+
+    def test_the_new_copy_has_pointers_and_downloads_on_demand(self):
+        target = self.root / "Litterbox" / "fresh"
+        with self.user("Cy"):
+            vault_clone.clone(self.remote.as_uri(), target)
+        self.assertEqual(lfs_download.stubs(target, [PRT, DRW]), [PRT, DRW])
+        self.assertTrue(lfs_download.is_on_demand(target))
+        self.assertTrue((target / REC).is_file())                              # the records are all there
+
+    def test_without_on_demand_everything_is_downloaded(self):
+        target = self.root / "Litterbox" / "full"
+        vault_clone.clone(self.remote.as_uri(), target, on_demand=False)
+        self.assertEqual(lfs_download.stubs(target, [PRT, DRW]), [])
+        self.assertEqual((target / PRT).read_bytes(), b"version 1")
+
 
 
 if __name__ == "__main__":
