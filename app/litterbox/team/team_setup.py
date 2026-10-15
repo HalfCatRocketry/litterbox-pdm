@@ -10,6 +10,7 @@ from litterbox.errors import LitterboxError
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
+from litterbox.team import guarded_push
 from litterbox.team import team_identity
 from litterbox.team import team_model
 from litterbox.team import team_store
@@ -39,7 +40,7 @@ def setup_team(repo, name=None, email=None, roles=None):
                           encoding="utf-8")
         runner.run(["git", "add", "--", layout.WHOAMI_FILE], repo)
         runner.run(["git", "commit", "-m", "Team: add whoami file", "--", layout.WHOAMI_FILE], repo)
-        remote.push_with_retry(repo)
+        guarded_push.push(repo)
     host_name = team_identity.probe_host_name(repo)
     person_id = re.sub(r"[^a-z0-9._-]+", "-", host_name.lower()).strip("-.")[:40] or "owner"
     if not team_model.ID_PATTERN.match(person_id):
@@ -50,7 +51,7 @@ def setup_team(repo, name=None, email=None, roles=None):
     try:
         runner.run(["git", "add", "--", layout.PEOPLE_FILE], repo)
         runner.run(["git", "commit", "-m", f"Team: set up with {name} as Owner", "--", layout.PEOPLE_FILE], repo)
-        remote.push_with_retry(repo)
+        guarded_push.push(repo)
     except BaseException:
         try:
             runner.run(["git", "reset", "--soft", "HEAD~1"], repo)

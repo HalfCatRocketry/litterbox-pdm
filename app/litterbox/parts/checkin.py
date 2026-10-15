@@ -13,7 +13,6 @@ from litterbox.errors import LitterboxError, NoChangesError
 from litterbox.git import committing
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
-from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
@@ -24,6 +23,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import guarded_push
 from litterbox.util import file_snapshot
 from litterbox.vault import config
 
@@ -165,7 +165,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
 
     if not groups:
         return batch
-    remote.push_with_retry(repo)                                   # one upload for all of them
+    guarded_push.push(repo)                                   # one upload for all of them
 
     if keep_lock:
         # Brand-new files weren't lockable before they were uploaded. Lock them now.

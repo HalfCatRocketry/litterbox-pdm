@@ -102,7 +102,7 @@ def reassign(repo, pns, slot, person_id):
             template = pending["template"]
             ids = [s["id"] for i, s in enumerate(pending["slots"]) if i != slot] + [new["id"]]
             if not template.get("allow_same_person", False) and len(set(ids)) != len(ids):
-                raise record_model.RegistryError(f"This workflow doesn't let one person fill more than one sign-off.")
+                raise record_model.RegistryError("This workflow doesn't let one person fill more than one sign-off.")
             if not template.get("requester_may_sign", True) and new["id"] == pending.get("requested_by_id"):
                 raise record_model.RegistryError("This workflow doesn't let the person who asked sign.")
             pending["slots"][slot] = new

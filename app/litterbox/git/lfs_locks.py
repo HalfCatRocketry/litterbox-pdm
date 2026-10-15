@@ -3,14 +3,64 @@ lfs_locks.py - Git LFS locks: reading them, taking them and giving them back.
 
 "Check out" means taking the LFS lock. git-lfs locks one file per command, so several commands run at the same
 time (LOCK_WORKERS).
+
+git-lfs keeps its own cache of your locks in .git/lfs/lockcache.db. If that file is damaged, every lock command
+fails ("lock cache initialization: ... gob: bad data"). Every lock command here goes through run_lfs, which then
+moves the damaged file aside (git-lfs starts a new one) and tries once more.
 """
 
 import json
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
 from litterbox.git import runner
+
+LOCK_CACHE = "lockcache.db"
+_HEALING = threading.Lock()         # lock commands run several at a time: only one of them moves the file
+
+
+def lock_cache_path(repo):
+    return Path(repo) / ".git" / "lfs" / LOCK_CACHE
+
+
+def cache_is_damaged(error):
+    """True if git-lfs failed because its lock cache file can't be read."""
+    text = str(error).lower()
+    return LOCK_CACHE in text or "lock cache" in text
+
+
+def heal_lock_cache(repo):
+    """Move a damaged lock cache aside (to lockcache.db.broken-<time>), so git-lfs starts a new one. The cache only
+    remembers your own locks, which git-lfs reads again from the server. Returns where it was moved, or None if
+    there was nothing to move (another command got there first)."""
+    with _HEALING:
+        path = lock_cache_path(repo)
+        if not path.exists():
+            return None
+        target = path.with_name(f"{LOCK_CACHE}.broken-{time.strftime('%Y%m%d-%H%M%S')}")
+        number = 1
+        while target.exists():
+            number += 1
+            target = path.with_name(f"{LOCK_CACHE}.broken-{time.strftime('%Y%m%d-%H%M%S')}-{number}")
+        path.replace(target)
+        diagnostics.LOG(f"WARNING: Git LFS's lock cache was damaged. Litterbox moved it aside ({target.name}) and "
+                        "tried again; Git LFS makes a new one.")
+        return target
+
+
+def run_lfs(command, repo, quiet=False):
+    """runner.run for git-lfs lock commands: if git-lfs's lock cache is damaged, move it aside and try once more."""
+    try:
+        return runner.run(command, repo, quiet=quiet)
+    except LitterboxError as e:
+        if not cache_is_damaged(e):
+            raise
+        heal_lock_cache(repo)
+        return runner.run(command, repo, quiet=quiet)
 
 
 def get_locks(repo, strict=False):
@@ -23,7 +73,7 @@ def get_locks(repo, strict=False):
                   for "nothing is locked".
     """
     try:
-        out = runner.run(["git", "lfs", "locks", "--verify", "--json"], repo, quiet=True)
+        out = run_lfs(["git", "lfs", "locks", "--verify", "--json"], repo, quiet=True)
         data = json.loads(out) if out else {}
     except (LitterboxError, json.JSONDecodeError) as e:
         if strict:
@@ -50,7 +100,7 @@ def is_mine(locks, path):
 def lock(repo, path, label):
     """Lock one file. `label` is the PN, used in the error message."""
     try:
-        runner.run(["git", "lfs", "lock", path], repo)
+        run_lfs(["git", "lfs", "lock", path], repo)
     except LitterboxError:
         lock = get_locks(repo).get(path.lower())
         if lock and lock[0] == "you":
@@ -101,7 +151,7 @@ def unlock_mine(repo, paths):
     """Unlock every one of these paths that you hold. Returns [(path, error), ...] for failures."""
     locks = get_locks(repo, strict=True)
     mine = [path for path in paths if is_mine(locks, path)]
-    results = _parallel(lambda path: runner.run(["git", "lfs", "unlock", path], repo), mine)
+    results = _parallel(lambda path: run_lfs(["git", "lfs", "unlock", path], repo), mine)
     return [(path, str(error)) for path, (_value, error) in zip(mine, results) if error is not None]
 
 
@@ -109,7 +159,7 @@ def force_unlock_quietly(repo, paths):
     """Used when rolling back after an error: release locks, never raise."""
     paths = list(paths)
     for path, (_value, error) in zip(paths, _parallel(
-            lambda path: runner.run(["git", "lfs", "unlock", "--force", path], repo), paths)):
+            lambda path: run_lfs(["git", "lfs", "unlock", "--force", path], repo), paths)):
         if error is not None:
             diagnostics.LOG(f"WARNING: could not release the lock on {path}: {error}")
 

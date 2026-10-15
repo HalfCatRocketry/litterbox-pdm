@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass, field
 
 from litterbox.cad import file_types
+from litterbox.cad.solidworks import sw_errors
 from litterbox.core import filenames
 from litterbox.core import part_number
 from litterbox.core import revision_letters
@@ -59,7 +60,7 @@ def read_references(items, backend, progress=None, cancel=None):
             progress(number, len(paths), f"Reading references: {os.path.basename(path)}")
         try:
             refs[import_paths.path_key(path)] = (path, backend.references(path))
-        except import_errors.ImportFailed:
+        except (import_errors.ImportFailed, sw_errors.SolidWorksError):     # already says what went wrong
             raise
         except Exception as e:
             raise import_errors.ImportFailed(f"Could not read the references of {path}:\n{e}") from e

@@ -14,11 +14,11 @@ from litterbox.core import filenames
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
-from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.importing import import_journal
 from litterbox.records import record_revisions
+from litterbox.team import guarded_push
 from litterbox.util import journal as journal_file
 
 
@@ -203,4 +203,4 @@ def commit_and_push(repo, message, add, remove, record_path):
         runner.run(["git", "rm", "-q", "-f", "--"] + remove, repo)
     runner.run(["git", "add", "--"] + add + [record_path], repo)
     runner.run(["git", "commit", "-m", message, "--"] + add + remove + [record_path], repo)
-    remote.push_with_retry(repo)
+    guarded_push.push(repo)

@@ -22,6 +22,7 @@ from litterbox.git import runner
 from litterbox.parts import permission_check
 from litterbox.records import record_model
 from litterbox.records import record_store
+from litterbox.team import guarded_push
 
 
 def as_pn(value):
@@ -147,7 +148,7 @@ def edit_records(repo, items, atomic=False):
             subject, body = batch_message([message for _pn, _path, message in edited])
             committing.commit_paths(repo, subject, body, edited_paths)    # ONE commit for every record changed
             committed = 1
-            remote.push_with_retry(repo)
+            guarded_push.push(repo)
     except BaseException:
         try:
             if committed:

@@ -3,7 +3,6 @@ SolidWorks installed.) Run from tools/solidworks with the app folder on PYTHONPA
 
 import contextlib
 import io
-import os
 import tempfile
 import unittest
 from pathlib import Path

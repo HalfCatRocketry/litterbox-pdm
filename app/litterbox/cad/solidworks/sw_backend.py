@@ -9,8 +9,8 @@ import os
 import shutil
 
 from litterbox import diagnostics
+from litterbox.cad.solidworks import sw_errors
 from litterbox.cad.solidworks import sw_process
-from litterbox.importing import import_errors
 
 
 def pair_references(stored, found):
@@ -61,8 +61,8 @@ class SolidWorksBackend:
                         self._pid = sw_process.own_process_id(self._sw, before)
             except Exception as e:
                 if self.attach_only:
-                    raise import_errors.ImportFailed("SolidWorks is not open.") from None
-                raise import_errors.ImportFailed("Litterbox could not connect to SolidWorks. Is it installed on this computer?\n\n"
+                    raise sw_errors.SolidWorksError("SolidWorks is not open.") from None
+                raise sw_errors.SolidWorksError("Litterbox could not connect to SolidWorks. Is it installed on this computer?\n\n"
                                    f"{e}") from None
         return self._sw
 
@@ -92,7 +92,7 @@ class SolidWorksBackend:
             if alone:
                 shutil.copyfile(src, dst)
                 return
-        raise import_errors.ImportFailed(f"SolidWorks could not copy {src} (it returned {result!r}).\n\nIf the file is open in "
+        raise sw_errors.SolidWorksError(f"SolidWorks could not copy {src} (it returned {result!r}).\n\nIf the file is open in "
                            "SolidWorks, close it and try again. Check that you can open it, and that it is not "
                            "in a folder SolidWorks can't read.")
 

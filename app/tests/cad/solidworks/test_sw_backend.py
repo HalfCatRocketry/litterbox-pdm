@@ -4,7 +4,7 @@ import unittest
 import shutil
 from pathlib import Path
 from litterbox.cad.solidworks import sw_backend
-from litterbox.importing import import_errors
+from litterbox.cad.solidworks import sw_errors
 
 
 class PairReferences(unittest.TestCase):
@@ -61,13 +61,13 @@ class CopyingWhenSolidWorksRefuses(unittest.TestCase):
         src = self.dir / "bracket.SLDASM"
         src.write_bytes(b"asm")
         dst = self.dir / "out" / "x.SLDASM"
-        with self.assertRaises(import_errors.ImportFailed) as ctx:
+        with self.assertRaises(sw_errors.SolidWorksError) as ctx:
             self.backend([]).copy(str(src), str(dst))
         self.assertIn("it returned 2", str(ctx.exception))
         self.assertFalse(dst.exists())
         part = self.dir / "uses.SLDPRT"
         part.write_bytes(b"p")
-        with self.assertRaises(import_errors.ImportFailed):
+        with self.assertRaises(sw_errors.SolidWorksError):
             self.backend(["C:/other.SLDPRT"]).copy(str(part), str(self.dir / "out" / "y.SLDPRT"))
 
 

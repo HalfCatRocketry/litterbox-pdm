@@ -97,7 +97,8 @@ def edit_directory(repo, change, message, action="manage_people"):
         runner.run(["git", "add", "--"] + paths, repo)
         runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
         committed = True
-        remote.push_with_retry(repo)
+        from litterbox.team import guarded_push
+        guarded_push.push(repo)
     except BaseException:
         try:
             if committed:

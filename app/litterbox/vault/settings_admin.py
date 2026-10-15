@@ -15,17 +15,18 @@ values the next time they get the latest.
 
 from pathlib import Path
 
-from litterbox.vault import config
-from litterbox.vault import config_write
-from litterbox.team import team_permissions
-from litterbox.errors import LitterboxError
-from litterbox.records.error_conversion import converts_errors
 from litterbox import diagnostics
 from litterbox import layout
+from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
+from litterbox.records.error_conversion import converts_errors
+from litterbox.team import guarded_push
+from litterbox.team import team_permissions
+from litterbox.vault import config
+from litterbox.vault import config_write
 
 CONFIG_REL = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
 
@@ -58,7 +59,7 @@ def edit(repo, **values):
             runner.run(["git", "add", "--", CONFIG_REL], repo)
             runner.run(["git", "commit", "-m", f"Vault settings: {names}", "--", CONFIG_REL], repo)
             committed = True
-            remote.push_with_retry(repo)
+            guarded_push.push(repo)
     except BaseException:
         try:
             if committed:

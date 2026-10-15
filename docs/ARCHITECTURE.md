@@ -78,7 +78,7 @@ The few imports that go up a layer are listed, each with its reason, in `KNOWN_E
 3. Put its tests in the matching folder under `tests/`.
 4. Run the tests: the architecture tests say if a rule is broken, and the self-test and the PyInstaller recipe find
    new modules on their own.
-5. Run `python tools/package_map.py` and paste the result over the map below.
+5. Run `python tools/update_architecture_map.py` to bring the map below up to date.
 
 The roadmap (`docs/REMINDERS.md`) has places waiting: download on demand in `git/` and `parts/`, the SolidWorks
 watcher in `cad/solidworks/` with a job in `jobs/`, and change orders, BOM export, tickets and quality records as new
@@ -91,7 +91,7 @@ From `app/`: `python -m litterbox <command>`, with `status` (and the part action
 
 ## Map of the package
 
-Printed by `python tools/package_map.py`.
+Printed by `python tools/package_map.py`; `python tools/update_architecture_map.py` writes it here.
 
 ```
 litterbox/
@@ -107,6 +107,7 @@ litterbox/
         solidworks/                       SolidWorks over COM. The only place that imports win32com or pythoncom
             com.py                        talking to SolidWorks over COM
             sw_backend.py                 SolidWorks as the importer, Revise and Update references use it: read ...
+            sw_errors.py                  what can go wrong talking to SolidWorks (not open, not installed ...
             sw_process.py                 the SolidWorks program as a process: finding a SolidWorks Litterbox ...
     cli/                                  The command line: python -m litterbox <command> (see commands.py)
         commands.py                       the command line: python -m litterbox <command> [options] (run from ...
@@ -250,6 +251,7 @@ litterbox/
     team/                                 Who may do what: the team file, identity, permissions, signed commits
         commit_signing.py                 optional signed commits, using SSH keys (the kind Git 2.34+ and ...
         draft.py                          team edits that are collected first and saved all at once
+        guarded_push.py                   every upload Litterbox makes: first check that the vault's latest team ...
         team_editing.py                   changes to the team, in memory: adding and changing people, switching ...
         team_identity.py                  who you are on this vault's team
         team_model.py                     the team: people, their access level (Owner, Admin, Member) and roles ...

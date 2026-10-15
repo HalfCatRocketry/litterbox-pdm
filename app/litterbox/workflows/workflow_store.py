@@ -15,6 +15,7 @@ from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import guarded_push
 from litterbox.team import team_identity
 from litterbox.team import team_permissions
 from litterbox.team import team_store
@@ -100,7 +101,7 @@ def edit_templates(repo, change, message):
         runner.run(["git", "add", "--"] + paths, repo)
         runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
         committed = True
-        remote.push_with_retry(repo)
+        guarded_push.push(repo)
     except BaseException:
         try:
             if committed:

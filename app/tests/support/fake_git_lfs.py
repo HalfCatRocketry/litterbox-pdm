@@ -50,6 +50,15 @@ args = sys.argv[1:]
 command = args[0] if args else ""
 paths = [a.replace("\\", "/") for a in args[1:] if not a.startswith("--")]
 
+# Like real git-lfs, every lock command first reads the lock cache; a damaged one (a test writes "broken" into it)
+# makes the command fail with the message git-lfs gives.
+CACHE = os.path.join(".git", "lfs", "lockcache.db")
+if command in ("lock", "unlock", "locks") and os.path.exists(CACHE):
+    with open(CACHE, "rb") as f:
+        if f.read().startswith(b"broken"):
+            fail("Unable to create lock system: lock cache initialization: problem reading updated key/value data "
+                 f"from {os.path.abspath(CACHE)}: gob: bad data: field numbers out of bounds")
+
 if command == "lock":
     path = paths[0]
     locks = load()

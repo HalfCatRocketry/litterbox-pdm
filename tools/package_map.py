@@ -4,8 +4,8 @@ the first line of its docstring.
 
     python tools/package_map.py            (from the repository's top folder)
 
-Paste the output over the map in docs/ARCHITECTURE.md after adding, moving or renaming modules. A test
-(tests/architecture/test_docs.py) checks that every module is mentioned there.
+tools/update_architecture_map.py writes it into docs/ARCHITECTURE.md; run that after adding, moving or renaming
+modules. A test (tests/architecture/test_docs.py) checks that every module is mentioned there.
 """
 
 import ast

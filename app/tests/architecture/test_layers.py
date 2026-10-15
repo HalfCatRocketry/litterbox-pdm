@@ -25,8 +25,6 @@ KNOWN_EXCEPTIONS = {
         "validate_repo applies the vault's part-number digits as it checks the folder is a vault",
     ("litterbox.git.repository", "litterbox.team.team_identity"):
         "get_user asks the team who you are when git has no user name",
-    ("litterbox.git.remote", "litterbox.team.team_store"):
-        "TO FIX (refactor_plan/FINDINGS.md): push_with_retry checks the team file before pushing",
     ("litterbox.user.selftest", "litterbox.gui.logic.icon_files"):
         "the build self-test checks the window's icon files are in the build",
 }

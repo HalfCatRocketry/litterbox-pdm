@@ -12,7 +12,7 @@ class Docs(unittest.TestCase):
         text = ARCHITECTURE.read_text(encoding="utf-8")
         missing = sorted(m.name for m in modules().values()
                          if m.path.name != "__init__.py" and f" {m.path.name}" not in text)
-        self.assertEqual(missing, [], "run python tools/package_map.py and paste the map into docs/ARCHITECTURE.md")
+        self.assertEqual(missing, [], "run python tools/update_architecture_map.py")
 
 
 if __name__ == "__main__":

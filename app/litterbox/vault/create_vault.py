@@ -37,6 +37,7 @@ from litterbox import version
 from litterbox.core import part_number
 from litterbox.core.part_number import PNError, check_org
 from litterbox.errors import LitterboxError
+from litterbox.git import lfs_locks
 from litterbox.git import runner
 from litterbox.team import team_setup
 from litterbox.vault import config
@@ -336,7 +337,7 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
     result = InitResult(org=org, files=paths, pushed=push, warnings=warnings)
     if push:
         try:
-            runner.run(["git", "lfs", "locks"], repo, quiet=True)
+            lfs_locks.run_lfs(["git", "lfs", "locks"], repo, quiet=True)
         except LitterboxError as e:
             warnings.append("The host did not answer a request about file locks. Check that Git LFS and file "
                             f"locking are available on this repository.\n{e}")

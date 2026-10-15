@@ -14,7 +14,6 @@ from pathlib import Path
 from litterbox import layout
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
-from litterbox.git import runner
 from litterbox.team import team_model
 from litterbox.team import team_store
 
@@ -117,7 +116,7 @@ def probe_host_name(repo, attempts=5):
     last = None
     for attempt in range(attempts):
         try:
-            runner.run(["git", "lfs", "lock", layout.WHOAMI_FILE], repo, quiet=True)
+            lfs_locks.run_lfs(["git", "lfs", "lock", layout.WHOAMI_FILE], repo, quiet=True)
             break
         except LitterboxError as e:             # someone else is probing at this moment: wait and retry
             last = e
@@ -132,7 +131,7 @@ def probe_host_name(repo, attempts=5):
         return mine[1]
     finally:
         try:
-            runner.run(["git", "lfs", "unlock", "--force", layout.WHOAMI_FILE], repo, quiet=True)
+            lfs_locks.run_lfs(["git", "lfs", "unlock", "--force", layout.WHOAMI_FILE], repo, quiet=True)
         except LitterboxError:
             pass
         try:
