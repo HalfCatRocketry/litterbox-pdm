@@ -9,23 +9,30 @@ A build that fails this is never published.
 """
 
 import importlib
+import pkgutil
 import sys
 from pathlib import Path
 
-APP_MODULES = ("litterbox.vault.config", "litterbox.parts.create", "litterbox.gui.logic.action_rules", "litterbox.gui.logic.icon_files",
-               "litterbox.importing.session", "litterbox.importing.import_finish", "litterbox.cad.solidworks.sw_backend", "litterbox.parts.checkin",
-               "litterbox.importing.manifest", "litterbox.cad.opener", "litterbox.team.team_store", "litterbox.core.part_number",
-               "litterbox.references.reference_queries", "litterbox.records.record_store", "litterbox.parts.revise",
-               "litterbox.importing.scan", "litterbox.user.settings", "litterbox.team.commit_signing",
-               "litterbox.cad.solidworks.com", "litterbox.user.updater", "litterbox.version", "litterbox.build_info")
+MIN_MODULES = 150           # the program has about 185 modules; finding far fewer means the build lost some
 LIBRARIES = ("yaml", "customtkinter", "tkinter", "cryptography")
 WINDOWS_LIBRARIES = ("win32com.client", "pythoncom", "pywintypes", "win32timezone")
+
+
+def app_modules():
+    """Every module of the litterbox package (found by walking it, so a new module is checked without a list to
+    keep up to date). Works from source and in the PyInstaller build."""
+    import litterbox
+    return sorted(info.name for info in pkgutil.walk_packages(litterbox.__path__, "litterbox.")
+                  if not info.name.endswith("__main__"))           # __main__ runs the command line when imported
 
 
 def problems(assets_dir=None):
     """A list of what is wrong; empty if all is well."""
     found = []
-    for name in APP_MODULES + LIBRARIES + (WINDOWS_LIBRARIES if sys.platform == "win32" else ()):
+    modules = app_modules()
+    if len(modules) < MIN_MODULES:
+        found.append(f"only {len(modules)} litterbox modules were found (expected at least {MIN_MODULES})")
+    for name in modules + list(LIBRARIES) + list(WINDOWS_LIBRARIES if sys.platform == "win32" else ()):
         try:
             importlib.import_module(name)
         except Exception as e:

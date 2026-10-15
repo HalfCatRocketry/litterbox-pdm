@@ -1,7 +1,7 @@
-"""python -m litterbox <command>: the command line (see litterbox/cli/__init__.py)."""
+"""python -m litterbox <command>: the command line (see litterbox/cli/commands.py)."""
 
 import sys
 
-from litterbox import cli
+from litterbox.cli import commands
 
-sys.exit(cli.main())
+sys.exit(commands.main())

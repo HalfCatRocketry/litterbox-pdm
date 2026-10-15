@@ -18,9 +18,10 @@ Litterbox checks for a newer version when it starts and asks before updating. To
 
 ```
 pip install -r requirements.txt
-cd app
-python litterbox_gui.py
+python app/main.py
 ```
+
+The command line (from the `app` folder): `python -m litterbox <command>`; run `python -m litterbox` to list the commands.
 
 The title bar says "(from source)" for a source copy, which never updates itself.
 
@@ -28,6 +29,8 @@ The title bar says "(from source)" for a source copy, which never updates itself
 
 | Folder | What is in it |
 |---|---|
-| `app/` | The program (Python), its `assets/` (icons) and `tests/` |
+| `app/` | The program: `main.py` starts it, `litterbox/` is the code (see `docs/ARCHITECTURE.md`), `tests/` the tests |
+| `docs/` | How the code is laid out (`ARCHITECTURE.md`) and the roadmap (`REMINDERS.md`) |
+| `tools/` | SolidWorks experiments and small developer scripts |
 | `packaging/` | Builds the installer and signs updates (PyInstaller, Inno Setup, scripts) |
 | `.github/workflows/` | The pipeline that builds and publishes a release when you push a version tag |

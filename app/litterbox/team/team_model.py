@@ -35,7 +35,7 @@ OWNER_ACTIONS = frozenset({"transfer_owner"})
 STANDARD_ROLES = ["Responsible Engineer", "Manufacturing", "Quality", "Analysis", "Manager", "Chief"]
 
 
-_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
+ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 
 
 class PeopleError(LitterboxError):
@@ -87,7 +87,7 @@ class Directory:
         return {"roles": list(self.roles), "people": [p.to_dict() for p in self.people]}
 
 
-def _text_list(value, what):
+def text_list(value, what):
     if value in (None, ""):
         return []
     if isinstance(value, str):
@@ -107,12 +107,12 @@ def from_dict(data):
         people.append(Person(
             id=str(entry.get("id", "")).strip().lower(), name=" ".join(str(entry.get("name", "")).split()),
             email=str(entry.get("email", "") or "").strip(),
-            host_names=_text_list(entry.get("host_names"), "host_names"),
+            host_names=text_list(entry.get("host_names"), "host_names"),
             access=str(entry.get("access", MEMBER)).strip().lower(),
-            roles=_text_list(entry.get("roles"), "roles"),
+            roles=text_list(entry.get("roles"), "roles"),
             active=bool(entry.get("active", True)),
-            signing_keys=_text_list(entry.get("signing_keys"), "signing_keys")))
-    directory = Directory(people, _text_list(data.get("roles"), "roles"))
+            signing_keys=text_list(entry.get("signing_keys"), "signing_keys")))
+    directory = Directory(people, text_list(data.get("roles"), "roles"))
     validate(directory)
     return directory
 
@@ -128,7 +128,7 @@ def validate(directory):
             raise PeopleError(f"The role '{role}' can't contain a comma or a line break.")
     owners = 0
     for p in directory.people:
-        if not _ID_RE.match(p.id):
+        if not ID_PATTERN.match(p.id):
             raise PeopleError(f"'{p.id}' is not a valid id. Use lowercase letters, numbers, '.', '-' or '_' "
                               "(for example 'alex').")
         if p.id in seen_ids:

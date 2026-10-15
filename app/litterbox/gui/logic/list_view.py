@@ -51,7 +51,7 @@ def sort_order(values, reverse=False):
 
 
 def file_types(files):
-    """['cad/HCR-00001-001.SLDPRT', 'cad/HCR-00001-001.SLDDRW'] -> 'PRT, DRW'"""
+    """['cad/HCR-00001-001_A.SLDPRT', 'cad/HCR-00001-001_A.SLDDRW'] -> 'PRT, DRW'"""
     kinds = []
     for path in files:
         ext = PurePosixPath(path).suffix.lstrip(".").upper()

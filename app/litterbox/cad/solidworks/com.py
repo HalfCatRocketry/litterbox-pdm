@@ -43,3 +43,25 @@ def connect():
         return win32com.client.GetActiveObject("SldWorks.Application"), False
     except Exception:
         return win32com.client.Dispatch("SldWorks.Application"), True
+
+
+def show_hidden_solidworks():
+    """If a SolidWorks is running but hidden (one that a program started and that never closed), show it.
+
+    Opening a file hands it to the SolidWorks that is already running, so without this the part would
+    load into a window that can't be seen. Returns True if it had to show one. Never raises."""
+    try:
+        import pythoncom
+        import win32com.client
+        pythoncom.CoInitialize()
+        try:
+            sw = win32com.client.GetActiveObject("SldWorks.Application")
+            hidden = not sw.Visible
+            if hidden:
+                sw.Visible = True
+            del sw
+            return hidden
+        finally:
+            pythoncom.CoUninitialize()
+    except Exception:
+        return False

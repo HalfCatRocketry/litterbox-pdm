@@ -1,5 +1,5 @@
 """
-vault_settings.py - changing the vault's shared settings (.litterbox/config.yaml) from the program.
+settings_admin.py - changing the vault's shared settings (.litterbox/config.yaml) from the program.
 
 The settings here:
     commit_style        "per_part" (default) or "per_batch": one commit per part or one for the whole batch when

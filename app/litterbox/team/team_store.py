@@ -139,7 +139,7 @@ def check_before_push(repo):
         upstream = team_model.from_dict(yaml.safe_load(text) or {})
     except (yaml.YAMLError, team_model.PeopleError):
         return
-    host_name, _checked = team_identity._read_cache(repo)
+    host_name, _checked = team_identity.read_cache(repo)
     identity = team_identity.resolve(upstream, host_name)
     if identity.state in (team_identity.NOT_LISTED, team_identity.INACTIVE):
         raise team_model.PeopleError("Nothing was uploaded. " + identity.message().replace(

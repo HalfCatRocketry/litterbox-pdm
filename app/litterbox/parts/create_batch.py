@@ -153,7 +153,7 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
     """ONE attempt at creating records for already-chosen PNs, plus other files, in ONE commit and ONE push.
 
     `specs` must already be cleaned (see clean_specs) and `planned` is one PN per spec.
-    `extra_paths` are files (relative to the repo, like 'cad/HCR-00002-001.SLDPRT') that are
+    `extra_paths` are files (relative to the repo, like 'cad/HCR-00002-001_A.SLDPRT') that are
     committed together with the records. If anything fails, the commit and the records are taken
     back; the extra files are NOT deleted here (the caller made them, the caller removes them).
     If the push is rejected because the numbers were taken meanwhile, NumbersTaken is raised

@@ -86,7 +86,7 @@ def cache_path(repo):
     return Path(repo) / ".git" / IDENTITY_CACHE
 
 
-def _read_cache(repo):
+def read_cache(repo):
     try:
         with open(cache_path(repo), encoding="utf-8") as f:
             data = json.load(f)
@@ -95,7 +95,7 @@ def _read_cache(repo):
         return "", 0.0
 
 
-def _write_cache(repo, host_name):
+def write_cache(repo, host_name):
     try:
         with open(cache_path(repo), "w", encoding="utf-8") as f:
             json.dump({"host_name": host_name, "checked_at": time.time()}, f)
@@ -164,13 +164,13 @@ def current(repo, refresh=False, probe=True):
     directory = team_store.load(repo)
     if directory is None:
         return Identity(LEGACY)
-    host_name, checked = _read_cache(repo)
+    host_name, checked = read_cache(repo)
     stale = (time.time() - checked) > IDENTITY_MAX_AGE
     error = ""
     if probe and (refresh or not host_name or stale):
         try:
             host_name = probe_host_name(repo)
-            _write_cache(repo, host_name)
+            write_cache(repo, host_name)
         except LitterboxError as e:
             error = str(e).splitlines()[0] if str(e) else "offline?"
             if refresh:

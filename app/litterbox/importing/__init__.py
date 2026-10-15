@@ -7,7 +7,7 @@ importer.py - bring the files listed in a manifest into the vault.
 
 What it does
   Every included item that has no part number yet gets a NEW one. Its SolidWorks files are
-  copied (never moved, never changed) into the vault's cad folder as HCR-00042-001.SLDPRT and
+  copied (never moved, never changed) into the vault's cad folder as HCR-00042-001_A.SLDPRT and
   so on, and every reference inside the copies is pointed at the other copies, so the imported
   files only know about each other. Your old folders are not written to.
 

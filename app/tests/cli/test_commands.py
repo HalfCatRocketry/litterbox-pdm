@@ -7,7 +7,7 @@ import sys
 import unittest
 from unittest import mock
 
-from litterbox import cli
+from litterbox.cli import commands as cli
 
 
 class Commands(unittest.TestCase):

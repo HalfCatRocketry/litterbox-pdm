@@ -1,5 +1,5 @@
 """
-team_draft.py - team edits that are collected first and saved all at once.
+draft.py - team edits that are collected first and saved all at once.
 
 Saving a change to the team goes through Git (lock, pull, commit, push, unlock) and takes several seconds. When
 you are making several changes that is a lot of waiting, so the Team window works on a DRAFT instead:

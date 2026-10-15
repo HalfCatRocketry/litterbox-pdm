@@ -78,7 +78,7 @@ def _norm(path):
     return os.path.normcase(os.path.normpath(str(path)))
 
 
-def _inside(path, folder):
+def path_inside(path, folder):
     path, folder = _norm(path), _norm(folder)
     return path == folder or path.startswith(folder.rstrip("\\/") + os.sep)
 
@@ -126,7 +126,7 @@ def _walk(sources, skip_folders, stats, errors):
         for folder, dirs, files in os.walk(source, onerror=on_error, followlinks=False):
             dirs[:] = sorted(d for d in dirs
                              if d.lower() not in IGNORED_FOLDERS
-                             and not any(_inside(os.path.join(folder, d), s) for s in skip))
+                             and not any(path_inside(os.path.join(folder, d), s) for s in skip))
             for filename in sorted(files):
                 yield folder, filename
 
@@ -135,7 +135,7 @@ def _folder_warnings(folder, sources):
     """Warnings that come from where a file lives."""
     relative = folder
     for source in sources:
-        if _inside(folder, source):
+        if path_inside(folder, source):
             relative = os.path.relpath(folder, source)
             break
     parts = [p for p in re.split(r"[\\/]", relative) if p and p != "."]

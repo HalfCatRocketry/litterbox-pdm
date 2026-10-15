@@ -1,5 +1,5 @@
 """
-signing.py - optional signed commits, using SSH keys (the kind Git 2.34+ and Windows' built-in OpenSSH support).
+commit_signing.py - optional signed commits, using SSH keys (the kind Git 2.34+ and Windows' built-in OpenSSH support).
 
 WHY      A commit's author name is just text anyone can type. A signature proves the commit was made by
          someone holding a particular private key. The team file lists each person's public signing key(s);

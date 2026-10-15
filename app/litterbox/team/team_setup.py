@@ -42,7 +42,7 @@ def setup_team(repo, name=None, email=None, roles=None):
         remote.push_with_retry(repo)
     host_name = team_identity.probe_host_name(repo)
     person_id = re.sub(r"[^a-z0-9._-]+", "-", host_name.lower()).strip("-.")[:40] or "owner"
-    if not team_model._ID_RE.match(person_id):
+    if not team_model.ID_PATTERN.match(person_id):
         person_id = "owner"
     directory = team_model.Directory([team_model.Person(person_id, name, email, [host_name], team_model.OWNER, [], True, [])],
                           list(roles if roles is not None else team_model.STANDARD_ROLES))
@@ -59,5 +59,5 @@ def setup_team(repo, name=None, email=None, roles=None):
         except (LitterboxError, OSError):
             pass
         raise
-    team_identity._write_cache(repo, host_name)
+    team_identity.write_cache(repo, host_name)
     return directory.people[0]

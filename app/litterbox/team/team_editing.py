@@ -16,8 +16,8 @@ def add_person(directory, actor, person_id, name, email="", host_names=(), acces
     if directory.get(person_id):
         raise team_model.PeopleError(f"There is already someone with the id '{person_id}'.")
     person = team_model.Person(str(person_id).strip().lower(), " ".join(str(name).split()), str(email).strip(),
-                    team_model._text_list(list(host_names), "host_names"), access, team_model._text_list(list(roles), "roles"), True,
-                    team_model._text_list(list(signing_keys), "signing_keys"))
+                    team_model.text_list(list(host_names), "host_names"), access, team_model.text_list(list(roles), "roles"), True,
+                    team_model.text_list(list(signing_keys), "signing_keys"))
     directory.people.append(person)
     team_model.validate(directory)
     return person
@@ -44,7 +44,7 @@ def update_person(directory, actor, person_id, **changes):
     before = person.to_dict()
     for key, value in changes.items():
         if key in ("host_names", "roles", "signing_keys"):
-            value = team_model._text_list(value, key)
+            value = team_model.text_list(value, key)
         elif key == "name":
             value = " ".join(str(value).split())
         setattr(person, key, value)
@@ -96,7 +96,7 @@ def set_roles(directory, actor, roles, scrub=False):
     has it (the Roles window asks the Admin to confirm that first)."""
     if actor.access not in (team_model.OWNER, team_model.ADMIN):
         raise team_model.PeopleError("Only an Admin can change the list of roles.")
-    roles = [" ".join(r.split()) for r in team_model._text_list(list(roles), "roles")]
+    roles = [" ".join(r.split()) for r in team_model.text_list(list(roles), "roles")]
     keep = {r.lower() for r in roles}
     for p in directory.people:
         gone = [r for r in p.roles if r.lower() not in keep]

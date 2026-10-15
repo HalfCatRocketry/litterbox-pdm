@@ -18,8 +18,9 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from litterbox.errors import LitterboxError
 from litterbox.cad import file_types
+from litterbox.cad.solidworks import com
+from litterbox.errors import LitterboxError
 
 
 def open_order(files):
@@ -57,28 +58,6 @@ def program_for(path, open_with):
     return None
 
 
-def show_hidden_solidworks():
-    """If a SolidWorks is running but hidden (one that a program started and that never closed), show it.
-
-    Opening a file hands it to the SolidWorks that is already running, so without this the part would
-    load into a window that can't be seen. Returns True if it had to show one. Never raises."""
-    try:
-        import pythoncom
-        import win32com.client
-        pythoncom.CoInitialize()
-        try:
-            sw = win32com.client.GetActiveObject("SldWorks.Application")
-            hidden = not sw.Visible
-            if hidden:
-                sw.Visible = True
-            del sw
-            return hidden
-        finally:
-            pythoncom.CoUninitialize()
-    except Exception:
-        return False
-
-
 def open_path(path, open_with=None, startfile=None, popen=None, show_hidden=None):
     """Open one file. Raises LitterboxError with a plain message if it can't be opened.
 
@@ -101,7 +80,7 @@ def open_path(path, open_with=None, startfile=None, popen=None, show_hidden=None
             startfile(str(path))
         elif hasattr(os, "startfile"):
             if path.suffix.lower() in file_types.SOLIDWORKS_EXTENSIONS:
-                (show_hidden or show_hidden_solidworks)()
+                (show_hidden or com.show_hidden_solidworks)()
             os.startfile(str(path))                                    # Windows
         else:
             (popen or subprocess.Popen)(["open" if sys.platform == "darwin" else "xdg-open", str(path)])

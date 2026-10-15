@@ -1,5 +1,5 @@
 """
-import_session.py - runs an import for the window, with no window code in it.
+session.py - runs an import for the window, with no window code in it.
 
 The Import window (gui/windows/import_window) talks only to an ImportSession. All the slow work (scanning,
 reading references, copying, committing) happens on ONE background thread that lives as long
@@ -26,6 +26,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+from litterbox.cad.solidworks import com
 from litterbox.cad.solidworks import sw_backend
 from litterbox.importing import import_duplicates
 from litterbox.importing import import_errors
@@ -59,35 +60,26 @@ class ImportSession:
 
     # -- the worker thread -------------------------------------------------
     def _worker(self):
-        try:
-            import pythoncom
-            pythoncom.CoInitialize()
-        except Exception:                       # not Windows, or no pywin32 (tests)
-            pythoncom = None
-        try:
-            while True:
-                job = self._jobs.get()
-                if job is None:
-                    break
-                work, on_done = job
-                result = error = None
-                try:
-                    result = work()
-                except BaseException as e:      # shown to the user by the window
-                    error = e
-                self.post(lambda r=result, e=error, d=on_done: self._complete(d, r, e))
-        finally:
-            prepared, self.prepared = self.prepared, None
-            if prepared is not None:
-                try:
-                    prepared.close()
-                except Exception:
-                    pass
-            if pythoncom is not None:
-                try:
-                    pythoncom.CoUninitialize()
-                except Exception:
-                    pass
+        with com.com_thread():                 # SolidWorks (COM) is used from this thread only
+            try:
+                while True:
+                    job = self._jobs.get()
+                    if job is None:
+                        break
+                    work, on_done = job
+                    result = error = None
+                    try:
+                        result = work()
+                    except BaseException as e:      # shown to the user by the window
+                        error = e
+                    self.post(lambda r=result, e=error, d=on_done: self._complete(d, r, e))
+            finally:
+                prepared, self.prepared = self.prepared, None
+                if prepared is not None:
+                    try:
+                        prepared.close()
+                    except Exception:
+                        pass
 
     def _complete(self, on_done, result, error):
         self.busy = False

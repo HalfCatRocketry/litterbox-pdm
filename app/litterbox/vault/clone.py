@@ -1,5 +1,5 @@
 """
-vault_clone.py - Add org...: copy a vault that already exists on the Git host onto this computer.
+clone.py - Add org...: copy a vault that already exists on the Git host onto this computer.
 
 The user pastes the repository's URL (the one the host's Clone button gives, like
 https://dev.azure.com/team/project/_git/hcr-litterbox). It is cloned into a folder named after the repository, inside
