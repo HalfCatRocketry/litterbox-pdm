@@ -21,7 +21,7 @@ from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
 from litterbox.parts import checkout
 from litterbox.parts import get_latest
-from litterbox.git import remote
+from litterbox.team import guarded_push
 
 
 @SKIP_ON_WINDOWS
@@ -113,7 +113,7 @@ class RequireSignatures(TeamFixture, unittest.TestCase):
         with self.user("Bea"):
             checkout.checkout(self.b, PART)
             (self.b / PRT).write_bytes(b"x")
-            with mock.patch.object(remote, "push_with_retry"):               # commit but do not upload
+            with mock.patch.object(guarded_push, "push"):                    # commit but do not upload
                 checkin.checkin(self.b, PART, "Local only")
         bad = signing.untrusted_unpushed(self.b)
         self.assertEqual([(s.result, s.subject) for s in bad], [(signing.NONE, f"{PART}: Local only")])
