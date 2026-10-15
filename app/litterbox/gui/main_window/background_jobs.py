@@ -114,6 +114,8 @@ class BackgroundJobs:
                     self._offer_update(payload)
                 elif kind == "done":
                     self._finish(payload)
+                elif kind == "solidworks":
+                    self._solidworks_changed(payload)
         except queue.Empty:
             pass
 

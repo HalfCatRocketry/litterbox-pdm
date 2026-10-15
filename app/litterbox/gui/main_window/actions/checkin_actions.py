@@ -7,6 +7,7 @@ from tkinter import messagebox
 
 from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.logic import checkin_text
+from litterbox.gui.logic import solidworks_text
 from litterbox.parts import checkin
 from litterbox.parts import part_changes
 from litterbox.references import reference_reader
@@ -43,6 +44,9 @@ class CheckinActions:
         plan = self._plan(action)
         if not plan:
             return
+        files = [f for pn in plan.targets for f in getattr(self.rows_by_pn.get(pn), "files", [])]
+        if not self._saved_in_solidworks(files, "save progress" if keep_lock else "check in"):
+            return
         if keep_lock:                       # saving progress with no changes just does nothing
             self._ask_comment_and_check_in(action, plan)
             return
@@ -74,6 +78,11 @@ class CheckinActions:
         self._check_in(keep_lock=True)
 
     def _warn_open_files(self, paths):
+        still_open = self._open_in_solidworks(paths)
+        if still_open is not None:                  # watching SolidWorks: name only the files that are open there
+            if still_open:
+                messagebox.showinfo("Newer versions downloaded", solidworks_text.reopen_note(still_open))
+            return
         names = checkin_text.cad_changes(paths)
         if names:
             messagebox.showinfo(

@@ -195,6 +195,9 @@ class PartsList:
 
     def get_latest(self):
         repo = self.repo()
+        others = [f for row in getattr(self, "rows", []) if row.kind != "mine" for f in row.files]
+        if not self._closed_in_solidworks(others):         # a download may replace a file open in SolidWorks
+            return
         self.run_task(lambda: get_latest.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
                       on_success=lambda changed: self._warn_open_files(changed))
 

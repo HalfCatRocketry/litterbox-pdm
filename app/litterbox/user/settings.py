@@ -45,6 +45,24 @@ def downloads_on_demand(data):
     return not (isinstance(value, str) and value.strip().lower() in ("all", "everything"))
 
 
+def _switch(data, name, default):
+    value = data.get(name, default) if isinstance(data, dict) else default
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "yes", "on", "1")
+    return value is True or (value == 1 and not isinstance(value, bool))
+
+
+def solidworks_watch(data):
+    """Watch what SolidWorks has open (solidworks_watch: true; off by default). See cad/solidworks/sw_watcher.py."""
+    return _switch(data, "solidworks_watch", False)
+
+
+def solidworks_popups(data):
+    """With the SolidWorks watcher on, ask and warn in pop-ups (the default), or only in the log
+    (solidworks_popups: false)."""
+    return _switch(data, "solidworks_popups", True)
+
+
 def is_debug(data):
     """Read debug_mode from loaded settings. Only a real true / "true" / "yes" / "on" turns it on."""
     value = data.get("debug_mode", False) if isinstance(data, dict) else False

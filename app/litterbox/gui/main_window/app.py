@@ -33,6 +33,7 @@ from litterbox.gui.main_window.background_jobs import BackgroundJobs
 from litterbox.gui.main_window.layout import WindowLayout
 from litterbox.gui.main_window.org_switching import OrgSwitching
 from litterbox.gui.main_window.parts_list import PartsList
+from litterbox.gui.main_window.solidworks_watch import SolidWorksWatch
 from litterbox.gui.main_window.task_actions import TaskActions
 from litterbox.gui.main_window.team_admin import TeamAdmin
 from litterbox.gui.main_window.update_checks import UpdateChecks
@@ -50,7 +51,7 @@ AUTO_GET_LATEST_ON_START = False
 
 class App(WindowLayout, UpdateChecks, OrgSwitching, BackgroundJobs, PartsList, TaskActions, TeamAdmin,
           CreateActions, CheckoutActions, CheckinActions, ReleaseActions, ReviseActions, OpenActions, ReferenceActions,
-          DetailsActions, ctk.CTk):
+          DetailsActions, SolidWorksWatch, ctk.CTk):
     """The main Litterbox window. Each area lives in its own file (the classes above); this file starts the window
     and holds the small helpers every area uses."""
 
@@ -106,6 +107,7 @@ class App(WindowLayout, UpdateChecks, OrgSwitching, BackgroundJobs, PartsList, T
         else:
             self._say("Choose Add org... in the box next to the title to get started.", "warn")
 
+        self._start_solidworks_watcher()
         self.after(120, self._reveal)
         self.after(4000, self._start_update_check)
 
@@ -152,6 +154,7 @@ class App(WindowLayout, UpdateChecks, OrgSwitching, BackgroundJobs, PartsList, T
                 "Litterbox is still working in the background. Closing now can leave a check-in half done "
                 "(your locks stay, and you can run it again next time).\n\nClose anyway?", parent=self):
             return
+        self._stop_solidworks_watcher()
         self.destroy()
 
     def _ask(self, text, title):

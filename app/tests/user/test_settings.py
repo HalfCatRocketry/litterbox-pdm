@@ -80,5 +80,20 @@ class DownloadSetting(unittest.TestCase):
         self.assertFalse(settings.downloads_on_demand({"download": " Everything "}))
 
 
+class SolidWorksSettings(unittest.TestCase):
+    def test_the_watcher_is_off_unless_switched_on(self):
+        from litterbox.user import settings
+        self.assertFalse(settings.solidworks_watch({}))
+        self.assertTrue(settings.solidworks_watch({"solidworks_watch": True}))
+        self.assertTrue(settings.solidworks_watch({"solidworks_watch": "yes"}))
+        self.assertFalse(settings.solidworks_watch({"solidworks_watch": "maybe"}))
+
+    def test_popups_are_on_unless_switched_off(self):
+        from litterbox.user import settings
+        self.assertTrue(settings.solidworks_popups({}))
+        self.assertFalse(settings.solidworks_popups({"solidworks_popups": False}))
+        self.assertFalse(settings.solidworks_popups({"solidworks_popups": "off"}))
+
+
 if __name__ == "__main__":
     unittest.main()
