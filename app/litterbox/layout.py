@@ -4,6 +4,7 @@ layout.py - where everything lives inside a vault. One place for every fixed fol
     PN-logs/HCR-00042-001.yaml        the part records                    LOG_DIR_NAME
     cad/HCR-00042-001_A.SLDPRT        CAD files (Git LFS, lockable)       CAD_DIR_NAME
     cancelled-revs/CANCELLED_...      revisions cancelled before release  CANCELLED_DIR_NAME, CANCELLED_PREFIX
+    ECO/ECO-0001.yaml                 engineering change orders           ECO_DIR_NAME
     .litterbox/config.yaml            shared vault settings               CONFIG_DIR, CONFIG_FILE
     .litterbox/people.yaml            the team                            PEOPLE_FILE
     .litterbox/workflows.yaml         sign-off templates                  WORKFLOWS_FILE
@@ -17,6 +18,7 @@ LOG_DIR_NAME = "PN-logs"
 CAD_DIR_NAME = "cad"
 CANCELLED_DIR_NAME = "cancelled-revs"       # revisions that were cancelled before release are kept here
 CANCELLED_PREFIX = "CANCELLED_"
+ECO_DIR_NAME = "ECO"                         # engineering change orders (change_orders/)
 
 CONFIG_DIR = ".litterbox"
 CONFIG_FILE = "config.yaml"                 # a file name inside CONFIG_DIR (the others below are paths)

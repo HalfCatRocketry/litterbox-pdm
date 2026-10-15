@@ -46,13 +46,14 @@ def role_warnings(template, directory):
     return warnings
 
 
-def set_template(templates, action, name, rows, allow_same_person=False, requester_may_sign=True, old_name=None):
+def set_template(templates, action, name, rows, allow_same_person=False, requester_may_sign=True, old_name=None,
+                 require_eco=False):
     """Put a template in `templates`. `rows` is a list of role lists. With old_name, that template is renamed or
     replaced in the same place. For use inside edit_templates() or a staged change."""
     name = workflow_templates.tidy_name(name)
     named = templates.setdefault(action, {})
     template = workflow_templates.Template(action, name, [workflow_templates.Row([" ".join(str(r).split()) for r in roles]) for roles in rows],
-                        allow_same_person, requester_may_sign)
+                        allow_same_person, requester_may_sign, require_eco)
     others = [k for k in named if k != old_name]
     if any(k.lower() == name.lower() for k in others):
         raise workflow_templates.WorkflowError(f"There is already a {workflow_templates.label_of(action)} workflow called '{name}'.")
@@ -73,13 +74,13 @@ def remove_template(templates, action, name):
 def apply_ops(templates, ops):
     """Apply the changes the Workflows window collected (see gui_logic.WorkflowEditor.ops) to `templates`.
     Each op is {'op': 'remove', 'action', 'name'} or {'op': 'set', 'action', 'name', 'rows', 'same',
-    'requester', 'old'}. Replaying them on newer files keeps what other people changed meanwhile."""
+    'requester', 'old', 'eco'}. Replaying them on newer files keeps what other people changed meanwhile."""
     for op in ops:
         if op["op"] == "remove":
             remove_template(templates, op["action"], op["name"])
         else:
             set_template(templates, op["action"], op["name"], op["rows"], op["same"], op["requester"],
-                         old_name=op.get("old"))
+                         old_name=op.get("old"), require_eco=op.get("eco", False))
 
 
 def add_standard(templates, directory):
@@ -88,7 +89,8 @@ def add_standard(templates, directory):
     for action, items in workflow_templates.STANDARD_WORKFLOWS.items():
         for name, rows in items:
             if name.lower() not in {k.lower() for k in templates.get(action, {})}:
-                set_template(templates, action, name, rows)
+                set_template(templates, action, name, rows,
+                             require_eco=(action, name) in workflow_templates.STANDARD_REQUIRE_ECO)
     return missing_standard_roles(directory)
 
 

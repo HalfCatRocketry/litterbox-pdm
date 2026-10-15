@@ -10,8 +10,10 @@ import uuid
 from pathlib import Path
 
 from litterbox import diagnostics
+from litterbox.change_orders import eco_store
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
+from litterbox.git import runner
 from litterbox.parts import batch_core
 from litterbox.parts import planning
 from litterbox.records import record_lifecycle
@@ -22,6 +24,7 @@ from litterbox.team import team_identity
 from litterbox.team import team_permissions
 from litterbox.team import team_store
 from litterbox.workflows import signoff_slots
+from litterbox.workflows import workflow_ecos
 from litterbox.workflows import workflow_store
 from litterbox.workflows import workflow_templates
 
@@ -105,9 +108,13 @@ def _problems(repo, pn, action, reason, fetch, ctx=None):
 
 
 @converts_errors
-def request(repo, pns, action, template_name, assignments, extras=(), reason=""):
+def request(repo, pns, action, template_name, assignments, extras=(), reason="", eco=None):
     """Start a workflow on one or more parts: check every part first (nothing happens if any can't go ahead),
-    then record the request in each. Returns the new request's id."""
+    then record the request in each. Returns the new request's id.
+
+    If the template requires an ECO, `eco` is {"name", "description"}: the ECO file is written in the same commit
+    (see workflow_ecos.py and change_orders/), and each part's request names it.
+    """
     pns = as_pns(pns)
     if action not in workflow_templates.ACTIONS:
         raise workflow_templates.WorkflowError(f"'{action}' can't have a workflow.")
@@ -117,6 +124,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
         raise workflow_templates.WorkflowError(f"There is no {workflow_templates.label_of(action)} workflow called '{template_name}'. Run Get Latest.")
     directory = team_store.load(repo)
     slots = signoff_slots.build_slots(template, directory, me.id, assignments, extras)
+    fields = workflow_ecos.eco_fields(template, eco)
     reason = " ".join((reason or "").split())
     if action in workflow_templates.NEEDS_REASON and not reason:
         raise workflow_templates.WorkflowError(f"A reason is required to {workflow_templates.label_of(action).lower()} a part.")
@@ -135,6 +143,9 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
     hashes = {pn: file_hashes(repo, files[pn]) for pn in pns}
 
     batch_id = uuid.uuid4().hex[:8]
+    prepare, made = workflow_ecos.opener(
+        repo, fields, action, template.name, batch_id,
+        lambda: [(pn, record_store.load(repo, pn).revision) for pn in pns])         # read after the pull
     items = []
     for pn in pns:
         def edit(record, user, pn=pn):
@@ -148,15 +159,30 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="")
                 "template": template.to_dict(), "parts": [str(p) for p in pns], "slots": copy.deepcopy(slots),
                 "files": dict(hashes[pn]), "signoffs": [],
                 **({"reason": reason} if reason else {}),
+                **({"eco": made["eco"]} if made.get("eco") else {}),
             }
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REQUESTED, user, action=action,
                                waiting_on=signoff_slots.waiting_on(record.pending), files=list(files[pn]) or None,
-                               reason=reason or None)
+                               reason=reason or None, eco=made.get("eco"))
         items.append((pn, action, edit, f"{pn}: {workflow_templates.label_of(action)} requested"))
-    try:
-        batch = batch_core.edit_records(repo, items, atomic=True)      # all or nothing: one download, one upload
-    except (LitterboxError, record_model.RegistryError) as e:
-        raise workflow_templates.WorkflowError(f"Could not start the workflow, so nothing was changed:\n\n{e}")
+    for attempt in range(1, 4):
+        try:
+            batch = batch_core.edit_records(repo, items, atomic=True, prepare=prepare)    # all or nothing
+            break
+        except (LitterboxError, record_model.RegistryError) as e:
+            if made.get("eco") and attempt < 3 and _eco_taken_upstream(repo, made.pop("eco")):
+                continue                        # someone took that ECO number a moment ago: use the next one
+            raise workflow_templates.WorkflowError(f"Could not start the workflow, so nothing was changed:\n\n{e}")
     if batch.notice:
         diagnostics.LOG(batch.notice)
     return batch_id
+
+
+def _eco_taken_upstream(repo, number):
+    """True if the vault's latest commit (after a fetch) already has this ECO."""
+    try:
+        runner.run(["git", "fetch"], repo, quiet=True)
+        runner.run(["git", "cat-file", "-e", f"@{{u}}:{eco_store.relpath(number)}"], repo, quiet=True)
+        return True
+    except LitterboxError:
+        return False

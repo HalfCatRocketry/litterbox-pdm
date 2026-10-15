@@ -6,6 +6,8 @@ getting its own history entry, and everything put back if the push fails. A part
 and the rest carry on.
 """
 
+import os
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -77,7 +79,7 @@ def batch_message(messages):
 
 
 @diagnostics.timed("record change")
-def edit_records(repo, items, atomic=False):
+def edit_records(repo, items, atomic=False, prepare=None, finish=None):
     """Change several records with ONE download and ONE upload.
 
     `items` is [(pn, action, edit, message)]: `action` is the permission needed, `edit(record, user)` changes the
@@ -90,6 +92,10 @@ def edit_records(repo, items, atomic=False):
     every record is put back, the locks are released and the error is raised. All the records go in ONE commit
     (several parts: a subject saying what was done to how many, and a line for each part in the body).
     Returns a Batch: results[pn] is True for each part that was changed.
+
+    Other files can go in the same commit: prepare(user) runs after the pull and before the edits, and
+    finish(user, edited part numbers) after them; each writes its files and returns their paths (an ECO, see
+    change_orders/). If anything fails they are taken back with the records: new files removed, others restored.
     """
     repository.validate_repo(repo)
     user = repository.get_user(repo)
@@ -127,9 +133,11 @@ def edit_records(repo, items, atomic=False):
     if not locked:
         return batch
 
-    committed, edited = 0, []
+    committed, edited, extra = 0, [], []
     try:
         remote.pull(repo)
+        if prepare is not None:
+            extra += prepare(user) or []
         for pn, path, edit, message in locked:
             try:
                 record = record_store.load(repo, pn)       # reload after the pull
@@ -142,8 +150,12 @@ def edit_records(repo, items, atomic=False):
             edited.append((pn, path, message))
         if atomic and batch.errors:
             raise next(iter(batch.errors.values()))
+        if edited and finish is not None:
+            extra += finish(user, [pn for pn, _path, _message in edited]) or []
+        if not edited and extra:
+            _take_back(repo, extra)
         if edited:
-            edited_paths = [path for _pn, path, _message in edited]
+            edited_paths = [path for _pn, path, _message in edited] + extra
             runner.run_chunked(["git", "add"], edited_paths, repo)
             subject, body = batch_message([message for _pn, _path, message in edited])
             committing.commit_paths(repo, subject, body, edited_paths)    # ONE commit for every record changed
@@ -154,6 +166,7 @@ def edit_records(repo, items, atomic=False):
             if committed:
                 runner.run(["git", "reset", "--soft", f"HEAD~{committed}"], repo)       # take back our unpushed commits
             runner.run_chunked(["git", "restore", "--staged", "--worktree"], paths, repo)
+            _take_back(repo, extra)
         except LitterboxError as e:
             diagnostics.LOG(f"WARNING: could not fully undo the change to {', '.join(paths)}: {e}")
         lfs_locks.force_unlock_quietly(repo, paths)
@@ -166,6 +179,19 @@ def edit_records(repo, items, atomic=False):
     if failed:
         batch.notice = lfs_locks.unlock_failure_message(failed)
     return batch
+
+
+def _take_back(repo, rels):
+    """Undo files a batch wrote besides its records: a file the vault already had is restored, a new one removed."""
+    for rel in rels:
+        if repository.in_head(repo, rel):
+            runner.run(["git", "restore", "--staged", "--worktree", "--", rel], repo, quiet=True)
+        else:
+            runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", rel], repo, quiet=True)
+            file = Path(repo) / rel
+            if file.exists():
+                os.chmod(file, stat.S_IWUSR | stat.S_IREAD)
+                file.unlink()
 
 
 def edit_record(repo, pn, action, edit, message):

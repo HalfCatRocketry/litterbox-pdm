@@ -102,7 +102,7 @@ BUTTON_ACTIONS = {
     "Check Out": "checkout", "Check In": "checkin", "Save Progress": "save", "Undo Checkout": "undo",
     "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
-    "Unrelease": "reopen", "Void": "void", "History": "history",
+    "Unrelease": "reopen", "Void": "void", "Details": "history",
 }
 
 

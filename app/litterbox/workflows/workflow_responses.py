@@ -4,6 +4,7 @@ and reassign a slot to someone else.
 """
 
 from litterbox import diagnostics
+from litterbox.change_orders import eco_model
 from litterbox.errors import LitterboxError
 from litterbox.parts import batch_core
 from litterbox.records import record_lifecycle
@@ -12,14 +13,15 @@ from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 from litterbox.team import team_store
 from litterbox.workflows import signoff_slots
+from litterbox.workflows import workflow_ecos
 from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_signoff
 from litterbox.workflows import workflow_templates
 
 
-def _each(repo, pns, edit_for, action_name, message):
+def _each(repo, pns, edit_for, action_name, message, ecos=None):
     """Apply a change to every part of a batch that still has a request (parts already dealt with are skipped),
-    with one download and one upload."""
+    with one download and one upload. `ecos` (an EcoCloser) closes the ECOs of requests that end."""
     failed, items = {}, []
     for pn in workflow_request.as_pns(pns):
         try:
@@ -31,7 +33,7 @@ def _each(repo, pns, edit_for, action_name, message):
             items.append((pn, action_name, edit_for(record.pending.get("id")), message.replace("{pn}", str(pn))))
     done = []
     if items:
-        batch = batch_core.edit_records(repo, items)
+        batch = batch_core.edit_records(repo, items, finish=ecos.finish if ecos is not None else None)
         done = list(batch.results)
         failed.update({pn: str(e) for pn, e in batch.errors.items()})
         if batch.notice:
@@ -48,9 +50,12 @@ def reject(repo, pns, comment):
     if not comment:
         raise workflow_templates.WorkflowError("Say why you are rejecting it, so the person who asked knows what to fix.")
 
+    ecos = workflow_ecos.EcoCloser(repo, eco_model.REJECTED, comment)
+
     def edit_for(batch_id):
         def edit(record, user):
             pending = workflow_request.pending_of(record, batch_id)
+            ecos.note(pending)
             if not (signoff_slots.is_signer(pending, me) or signoff_slots.is_admin(me)):
                 raise record_model.RegistryError("Only a person named to sign this (or an Admin) can reject it.")
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REJECTED, user, action=pending["action"],
@@ -59,7 +64,7 @@ def reject(repo, pns, comment):
             record.pending = {}
         return edit
 
-    return _each(repo, pns, edit_for, "signoff", "{pn}: request rejected - " + comment)
+    return _each(repo, pns, edit_for, "signoff", "{pn}: request rejected - " + comment, ecos)
 
 
 @converts_errors
@@ -68,9 +73,12 @@ def withdraw(repo, pns, reason=""):
     me = workflow_request.current_member(repo, "signoff")
     reason = " ".join((reason or "").split())
 
+    ecos = workflow_ecos.EcoCloser(repo, eco_model.WITHDRAWN, reason)
+
     def edit_for(batch_id):
         def edit(record, user):
             pending = workflow_request.pending_of(record, batch_id)
+            ecos.note(pending)
             if not (pending.get("requested_by_id") == me.id or signoff_slots.is_admin(me)):
                 raise record_model.RegistryError("Only the person who asked, or an Admin, can withdraw the request.")
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_WITHDRAWN, user, action=pending["action"],
@@ -78,7 +86,7 @@ def withdraw(repo, pns, reason=""):
             record.pending = {}
         return edit
 
-    return _each(repo, pns, edit_for, "signoff", "{pn}: request withdrawn")
+    return _each(repo, pns, edit_for, "signoff", "{pn}: request withdrawn", ecos)
 
 
 @converts_errors

@@ -127,6 +127,10 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
             ctk.CTkCheckBox(foot, text="The person who asks may be a signer", variable=req,
                             command=lambda: item.update(requester=bool(req.get()))).grid(row=2, column=0,
                                                                                          sticky="w", pady=(6, 0))
+            eco = tk.BooleanVar(value=item["eco"])
+            ctk.CTkCheckBox(foot, text="Require ECO (an engineering change order is filled in when it starts)",
+                            variable=eco, command=lambda: item.update(eco=bool(eco.get()))).grid(
+                row=3, column=0, sticky="w", pady=(6, 0))
 
     def _draw_row(self, holder, action, index, number, roles):
         line = ctk.CTkFrame(holder, fg_color="transparent")

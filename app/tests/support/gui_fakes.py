@@ -33,13 +33,18 @@ class Anything:
 
 class FakeVar:
     def __init__(self, value=None, **kwargs):
-        self.value = value
+        self.value, self.watchers = value, []
 
     def get(self):
         return self.value
 
     def set(self, value):
         self.value = value
+        for watcher in self.watchers:
+            watcher("", "", "write")
+
+    def trace_add(self, mode, callback):
+        self.watchers.append(callback)
 
 
 class FakeTree(Anything):

@@ -6,6 +6,7 @@ and the standard ones offered to new vaults.
 
 from dataclasses import dataclass, field
 
+from litterbox import version
 from litterbox.errors import LitterboxError
 
 
@@ -28,9 +29,10 @@ MAX_NAME = 40
 
 
 MIN_VERSION = "0.3.0"      # the first Litterbox that understands this format; a vault with a workflow requires it
+ECO_MIN_VERSION = "0.4.0"  # the first that understands "Require ECO" (change_orders/); a vault using it requires it
 
 
-# Offered by "Add standard workflows" in the Workflows window.
+# Offered by "Add standard workflows" in the Workflows window. Those in STANDARD_REQUIRE_ECO ask for an ECO.
 STANDARD_WORKFLOWS = {
     RELEASE: [("T1", [["Responsible Engineer"], ["Manufacturing"], ["Analysis"], ["Manager"]]),
               ("T2", [["Responsible Engineer"], ["Manufacturing"]]),
@@ -39,6 +41,7 @@ STANDARD_WORKFLOWS = {
     VOID: [("T1", [["Manager", "Chief"]])],
     MAKE_COTS: [("T1", [["Responsible Engineer"]])],
 }
+STANDARD_REQUIRE_ECO = {(RELEASE, "T1")}
 
 
 class WorkflowError(LitterboxError):
@@ -65,10 +68,14 @@ class Template:
     rows: list = field(default_factory=list)
     allow_same_person: bool = False
     requester_may_sign: bool = True
+    require_eco: bool = False           # starting it asks for an engineering change order (change_orders/)
 
     def to_dict(self):
-        return {"allow_same_person": self.allow_same_person, "requester_may_sign": self.requester_may_sign,
-                "signoffs": [{"roles": list(r.roles)} for r in self.rows]}
+        data = {"allow_same_person": self.allow_same_person, "requester_may_sign": self.requester_may_sign}
+        if self.require_eco:                    # only written when on, so older files stay as they were
+            data["require_eco"] = True
+        data["signoffs"] = [{"roles": list(r.roles)} for r in self.rows]
+        return data
 
     @classmethod
     def from_dict(cls, action, name, data):
@@ -76,7 +83,7 @@ class Template:
         if not isinstance(data, dict):
             raise WorkflowError(f"{where} should list its sign-offs.")
         flags = {}
-        for key, default in (("allow_same_person", False), ("requester_may_sign", True)):
+        for key, default in (("allow_same_person", False), ("requester_may_sign", True), ("require_eco", False)):
             value = data.get(key, default)
             if not isinstance(value, bool):
                 raise WorkflowError(f"{key} in {where} must be true or false.")
@@ -88,6 +95,14 @@ class Template:
                 raise WorkflowError(f"Every sign-off in {where} needs a list of roles.")
             rows.append(Row([" ".join(str(r).split()) for r in roles]))
         return cls(action, str(name), rows, **flags)
+
+
+def min_version_for(templates, running):
+    """The oldest Litterbox a vault with these templates needs (`templates` is {action: {name: Template}}), but
+    never newer than the one running (`running`, version.VERSION), which must still be able to open the vault."""
+    uses_eco = any(t.require_eco for named in templates.values() for t in named.values())
+    wanted = ECO_MIN_VERSION if uses_eco else MIN_VERSION
+    return running if version.parse(wanted) > version.parse(running) else wanted
 
 
 def tidy_name(name):

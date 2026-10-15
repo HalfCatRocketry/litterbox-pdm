@@ -3,8 +3,11 @@ remote.py - getting the latest from the vault's remote, and pushing to it.
 
 A pull tells util/file_snapshot first, because git's autostash changes file times. In a vault that downloads on
 demand, a pull leaves every changed CAD file as a pointer, so the files that were on disk before the pull are
-downloaded again: what you had stays downloaded, and nothing else is.
+downloaded again: what you had stays downloaded, and nothing else is. A pull that can't finish (someone
+else changed the same file) is undone, so your copy is never left half-way.
 """
+
+from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
@@ -17,7 +20,11 @@ def pull(repo):
     on_disk = lfs_download.downloaded_cad_files(repo)
     file_snapshot.before_pull(repo)
     try:
-        runner.run(["git", "pull", "--rebase", "--autostash"], repo)
+        try:
+            runner.run(["git", "pull", "--rebase", "--autostash"], repo)
+        except LitterboxError:
+            _abort_rebase(repo)                 # never leave your copy half-way through a sync
+            raise
         try:
             lfs_download.download(repo, on_disk, "updated files you already had")
         except LitterboxError as e:             # the pull itself worked: say so, and carry on
@@ -25,6 +32,18 @@ def pull(repo):
                             f"downloaded. {e}")
     finally:
         file_snapshot.after_pull(repo)
+
+
+
+def _abort_rebase(repo):
+    """If a pull stopped part-way (someone else changed the same file), put your copy back as it was."""
+    try:
+        states = [runner.run(["git", "rev-parse", "--git-path", name], repo, quiet=True).strip()
+                  for name in ("rebase-merge", "rebase-apply")]
+        if any((Path(repo) / state).exists() for state in states):
+            runner.run(["git", "rebase", "--abort"], repo, quiet=True)
+    except LitterboxError as e:
+        diagnostics.LOG(f"WARNING: could not undo an unfinished sync: {e}")
 
 
 def push_with_retry(repo, attempts=3):

@@ -43,7 +43,7 @@ class TestWorkflowText(unittest.TestCase):
         task = SimpleNamespace(id="ab12", label="HCR-00001-001 +1 more", action="reopen",
                                parts=[("HCR-00001-001", "Upright", "A"), ("HCR-00002-001", "Arm", "A")],
                                requested_by="Alex Smith", requested_at="2026-10-11T00:00:00Z",
-                               summary="Unrelease pending 0/1: waiting on Cy", reason="Drawing error",
+                               summary="Unrelease pending 0/1: waiting on Cy", reason="Drawing error", eco="ECO-0003",
                                slots=[{"text": "Manager", "name": "Cy", "done": False},
                                       {"text": "Quality", "name": "Bea", "done": True}])
         (iid, values), = task_text.tasks_table([task], local=False)
@@ -54,6 +54,7 @@ class TestWorkflowText(unittest.TestCase):
         self.assertIn("HCR-00001-001, HCR-00002-001", detail)
         self.assertIn("… Manager: Cy (waiting)", detail)
         self.assertIn("✓ Quality: Bea", detail)
+        self.assertIn("ECO: ECO-0003", detail)
         self.assertIn("Reason: Drawing error", detail)
         self.assertEqual(task_text.tasks_button_text(0), "My Tasks")
         self.assertEqual(task_text.tasks_button_text(3), "My Tasks (3)")

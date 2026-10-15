@@ -1,11 +1,12 @@
 """
-open_actions.py - Open, Open Drawing, opening an older revision, and History.
+open_actions.py - Open, Open Drawing, opening an older revision, a part's Details and History, and ECOs.
 """
 
 from pathlib import Path, PurePosixPath
 from tkinter import messagebox
 
 from litterbox.cad import opener
+from litterbox.change_orders import eco_store
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
 from litterbox.gui.dialogs import revision_picker
@@ -13,6 +14,8 @@ from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import download_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import opening_text
+from litterbox.gui.windows import eco_list_window
+from litterbox.gui.windows import eco_view_window
 from litterbox.gui.windows import history_window
 from litterbox.parts import downloads
 from litterbox.records import record_model
@@ -20,7 +23,7 @@ from litterbox.records import record_store
 
 
 class OpenActions:
-    """Open, Open Drawing, opening an older revision, and History. (a part of the main window, App)."""
+    """Open, Open Drawing, opening an older revision, Details/History and ECOs. (a part of the main window, App)."""
 
     def open_part(self, drawing=False):
         """Open the part's model, or (drawing=True) its drawing, in the program for that file type.
@@ -88,7 +91,7 @@ class OpenActions:
             return                                              # double-clicking a tick box isn't asking for history
         chosen = self._selected_pns("open")                    # the highlighted row, or the one selected part
         if len(chosen) != 1:
-            self._say("Click one part to see its history.", "warn")
+            self._say("Click one part to see its details and history.", "warn")
             return
         try:
             record = record_store.load(self.repo(), chosen[0])
@@ -97,4 +100,18 @@ class OpenActions:
             return
         row = self.rows_by_pn.get(chosen[0])
         history_window.HistoryWindow(self, record, history_text.row_revisions(row) if row else {},
-                      on_open=lambda rev, drawing, pn=chosen[0]: self._open_revision(pn, rev, drawing))
+                      on_open=lambda rev, drawing, pn=chosen[0]: self._open_revision(pn, rev, drawing),
+                      on_view_eco=self.view_eco)
+
+    def show_ecos(self):
+        """The ECOs window: every engineering change order in your copy of the vault."""
+        ecos, problems = eco_store.load_all(self.repo())
+        eco_list_window.EcoListWindow(self, ecos, problems, lambda eco: eco_view_window.EcoViewWindow(self, eco))
+
+    def view_eco(self, number):
+        try:
+            eco = eco_store.load(self.repo(), number)
+        except LitterboxError as e:
+            messagebox.showerror("Litterbox", str(e))
+            return
+        eco_view_window.EcoViewWindow(self, eco)

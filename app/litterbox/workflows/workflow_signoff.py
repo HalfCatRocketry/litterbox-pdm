@@ -7,6 +7,7 @@ reason.
 from dataclasses import dataclass, field
 
 from litterbox import diagnostics
+from litterbox.change_orders import eco_model
 from litterbox.errors import LitterboxError
 from litterbox.parts import batch_core
 from litterbox.parts import planning
@@ -15,6 +16,7 @@ from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
 from litterbox.workflows import signoff_slots
+from litterbox.workflows import workflow_ecos
 from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_templates
 
@@ -98,7 +100,8 @@ def _approval_entry(pending, completed_by, override=None, files=None, action=Non
         entry.update({"requested_by": pending.get("requested_by"), "requested_at": pending.get("requested_at"),
                       "template_name": pending.get("template_name"), "template": pending.get("template"),
                       "slots": pending.get("slots"), "signoffs": list(pending.get("signoffs", [])),
-                      "files": dict(pending.get("files", {})), "parts": pending.get("parts")})
+                      "files": dict(pending.get("files", {})), "parts": pending.get("parts"),
+                      "eco": pending.get("eco")})
     else:
         entry.update({"signoffs": [], "files": dict(files or {})})
     if reason:
@@ -110,7 +113,7 @@ def _approval_entry(pending, completed_by, override=None, files=None, action=Non
     return {k: v for k, v in entry.items() if v is not None}
 
 
-def _finish_edit(repo, action, plan, override_reason):
+def _finish_edit(repo, action, plan, override_reason, ecos=None):
     """The change that does the action on a record. Shared by complete() and override()."""
     def edit(record, user):
         pending = record.pending or None
@@ -122,13 +125,15 @@ def _finish_edit(repo, action, plan, override_reason):
         act = pending["action"] if pending else action
         reason = (pending or {}).get("reason") or override_reason
         signed = [e.get("by") for e in (pending or {}).get("signoffs", [])]
-        details, override = {"signoffs": signed or None}, None
+        details, override = {"signoffs": signed or None, "eco": (pending or {}).get("eco")}, None
         if override_reason is not None:
             missing = signoff_slots.waiting_on(pending) if pending else ["every sign-off"]
             override = {"by": user, "reason": override_reason, "missing": missing}
             details.update(override=True, reason=override_reason)
         files = workflow_request.file_hashes(repo, plan.files) if (plan is not None and not pending) else None
         approval = _approval_entry(pending, user, override, files, act, reason)
+        if ecos is not None:
+            ecos.note(pending)                                 # its ECO is closed too
         record.pending = {}                                    # the checks in mark_* refuse a pending part
         if act == workflow_templates.RELEASE:
             record_lifecycle.mark_released(record, user, plan.files, **details)
@@ -146,6 +151,7 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
     """Do the action now on several parts, with one download and one upload (the vault is checked once).
     Returns (done, failed, files): done is [pn], failed is {pn: error}, files is {pn: [files released]}."""
     ctx, failed, items, files = planning.PlanContext(repo), {}, [], {}
+    ecos = workflow_ecos.EcoCloser(repo, eco_model.RELEASED, override_reason or "")
     for pn in workflow_request.as_pns(pns):
         try:
             record0 = record_store.load(repo, pn)
@@ -165,11 +171,11 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
             continue
         message = f"{pn}: {workflow_templates.label_of(action)} done" + (" (Admin override)" if override_reason is not None
                                                       else " after sign-offs")
-        items.append((pn, action, _finish_edit(repo, action, plan, override_reason), message))
+        items.append((pn, action, _finish_edit(repo, action, plan, override_reason, ecos), message))
         files[pn] = list(plan.files) if plan is not None else []
     done = []
     if items:
-        batch = batch_core.edit_records(repo, items)
+        batch = batch_core.edit_records(repo, items, finish=ecos.finish)
         done = list(batch.results)
         failed.update(batch.errors)
         if batch.notice:

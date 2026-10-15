@@ -9,6 +9,7 @@ import yaml
 
 from litterbox import diagnostics
 from litterbox import layout
+from litterbox import version
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.git import remote
@@ -96,7 +97,7 @@ def edit_templates(repo, change, message):
         if templates:
             # Older versions don't know about pending requests and would let a part slip past its sign-offs, so
             # the vault now asks everyone to update before working in it.
-            config_write.stamp(repo, min_version=workflow_templates.MIN_VERSION)
+            config_write.stamp(repo, min_version=workflow_templates.min_version_for(templates, version.VERSION))
             paths.append(config_rel)
         runner.run(["git", "add", "--"] + paths, repo)
         runner.run(["git", "commit", "-m", message, "--"] + paths, repo)

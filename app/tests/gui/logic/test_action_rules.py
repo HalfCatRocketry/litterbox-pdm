@@ -221,10 +221,10 @@ class TestButtonStates(unittest.TestCase):
 
     def test_looking_buttons_follow_the_highlight(self):
         s = self.states(ticked=[1, 2], highlighted=[3])
-        self.assertTrue(s["Open"] and s["Open Drawing"] and s["References..."] and s["History"])
+        self.assertTrue(s["Open"] and s["Open Drawing"] and s["References..."] and s["Details"])
         self.assertFalse(s["Check In"])                          # the changing buttons ignore the highlight
         self.assertFalse(self.states(ticked=[1, 2])["Open"])      # two ticks, nothing highlighted
-        self.assertTrue(self.states(ticked=[1])["History"])       # one tick stands in for a highlight
+        self.assertTrue(self.states(ticked=[1])["Details"])       # one tick stands in for a highlight
 
     def test_void_parts_can_be_looked_at_but_not_changed(self):
         s = self.states(ticked=[5])

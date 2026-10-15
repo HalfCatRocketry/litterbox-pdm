@@ -55,12 +55,15 @@ class WindowLayout:
         team_button = self._button(who_box, "Team...", self.show_team, width=90, height=30, fg_color=theme.GRAY,
                                    hover_color=theme.GRAY_HOVER)
         team_button.grid(row=0, column=2)
-        for button in (team_button, self.tasks_button):
+        ecos_button = self._button(who_box, "ECOs...", self.show_ecos, width=80, height=30, fg_color=theme.GRAY,
+                                   hover_color=theme.GRAY_HOVER)
+        ecos_button.grid(row=0, column=3, padx=(6, 0))
+        for button in (team_button, self.tasks_button, ecos_button):
             self.buttons.remove(button)         # opening these windows only reads, so they work while busy
         self.update_button = ctk.CTkButton(
             who_box, text=f"Version {version.display()}  -  check for updates", width=0, height=22, fg_color="transparent",
             hover_color=theme.GRAY_HOVER, text_color=theme.MUTED, font=ctk.CTkFont(size=11), command=self.check_for_updates)
-        self.update_button.grid(row=1, column=0, columnspan=3, sticky="e", pady=(4, 0))
+        self.update_button.grid(row=1, column=0, columnspan=4, sticky="e", pady=(4, 0))
         ctk.CTkLabel(header, text="Shared vault check-in / check-out", text_color=theme.MUTED,
                      anchor="w").grid(row=1, column=0, sticky="w")
         self.folder_label = ctk.CTkLabel(header, text=self.repo(), text_color=theme.MUTED, anchor="w")
@@ -187,7 +190,7 @@ class WindowLayout:
             ("Make COTS", self.make_cots, theme.TEAL, theme.TEAL_HOVER),
             ("Unrelease", self.reopen, theme.GRAY, theme.GRAY_HOVER),
             ("Void", self.void, theme.GRAY, theme.GRAY_HOVER),
-            ("History", self.show_history, theme.GRAY, theme.GRAY_HOVER),
+            ("Details", self.show_history, theme.GRAY, theme.GRAY_HOVER),
         )):
             self._button(row3, text, command, height=34, fg_color=color,
                          hover_color=hover).grid(row=0, column=column, sticky="ew",

@@ -20,11 +20,11 @@ class WorkflowEditor:
             for name, t in named.items():
                 self.items.setdefault(action, []).append(
                     {"origin": name, "name": name, "rows": [list(r.roles) for r in t.rows],
-                     "same": t.allow_same_person, "requester": t.requester_may_sign})
+                     "same": t.allow_same_person, "requester": t.requester_may_sign, "eco": t.require_eco})
         self.initial = self._snapshot()
 
     def _snapshot(self):
-        return {a: [(i["origin"], i["name"], [list(r) for r in i["rows"]], i["same"], i["requester"])
+        return {a: [(i["origin"], i["name"], [list(r) for r in i["rows"]], i["same"], i["requester"], i["eco"])
                     for i in items] for a, items in self.items.items()}
 
     @property
@@ -41,7 +41,7 @@ class WorkflowEditor:
         while f"T{number}".lower() in taken:
             number += 1
         self.items[action].append({"origin": None, "name": f"T{number}", "rows": [[roles[0]] if roles else []],
-                                   "same": False, "requester": True})
+                                   "same": False, "requester": True, "eco": False})
         return len(self.items[action]) - 1
 
     def delete(self, action, index):
@@ -97,7 +97,8 @@ class WorkflowEditor:
         for action, items in self.items.items():
             for i in items:
                 result.setdefault(action, {})[i["name"].strip()] = workflow_templates.Template(
-                    action, i["name"].strip(), [workflow_templates.Row(list(r)) for r in i["rows"]], i["same"], i["requester"])
+                    action, i["name"].strip(), [workflow_templates.Row(list(r)) for r in i["rows"]], i["same"], i["requester"],
+                    i["eco"])
         return result
 
     def ops(self):
@@ -107,12 +108,13 @@ class WorkflowEditor:
             kept = {i["origin"] for i in items if i["origin"] is not None}
             initial = {o for o, *_rest in self.initial[action] if o is not None}
             removals += [{"op": "remove", "action": action, "name": origin} for origin in sorted(initial - kept)]
-            before = {o: (n, r, sm, rq) for o, n, r, sm, rq in self.initial[action]}
+            before = {o: (n, r, sm, rq, eco) for o, n, r, sm, rq, eco in self.initial[action]}
             for i in items:
-                now = (i["name"].strip(), [list(r) for r in i["rows"]], i["same"], i["requester"])
+                now = (i["name"].strip(), [list(r) for r in i["rows"]], i["same"], i["requester"], i["eco"])
                 if i["origin"] is None or before.get(i["origin"]) != now:
                     sets.append({"op": "set", "action": action, "name": i["name"].strip(), "rows": now[1],
-                                 "same": i["same"], "requester": i["requester"], "old": i["origin"]})
+                                 "same": i["same"], "requester": i["requester"], "eco": i["eco"],
+                                 "old": i["origin"]})
         return removals + sets
 
     def add_standard(self, roles):
@@ -128,7 +130,8 @@ class WorkflowEditor:
                     skipped.append((f"{workflow_templates.label_of(action)} {name}", sorted(set(missing))))
                     continue
                 self.items[action].append({"origin": None, "name": name, "rows": [list(r) for r in rows],
-                                           "same": False, "requester": True})
+                                           "same": False, "requester": True,
+                                           "eco": (action, name) in workflow_templates.STANDARD_REQUIRE_ECO})
                 added.append(f"{workflow_templates.label_of(action)} {name}")
         return added, skipped
 

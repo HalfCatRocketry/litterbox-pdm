@@ -11,6 +11,7 @@ import stat
 from pathlib import Path
 
 from litterbox import diagnostics
+from litterbox import layout
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.records import record_files
@@ -52,3 +53,7 @@ def enforce_read_only(repo):
         for rel in every_file + [record_store.record_relpath(pn)]:
             if not lfs_locks.is_mine(locks, rel):
                 _set_read_only(Path(repo) / rel)
+    eco_folder = Path(repo) / layout.ECO_DIR_NAME          # change orders: only Litterbox writes them, never by hand
+    if eco_folder.is_dir():
+        for file in eco_folder.glob("*.yaml"):
+            _set_read_only(file)

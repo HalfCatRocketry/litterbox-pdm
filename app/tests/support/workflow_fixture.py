@@ -65,10 +65,11 @@ class Fixture(TwoUserVault):
             read_only.enforce_read_only(self.a)
         self.get_latest("Bea")
 
-    def set_template(self, action=workflow_templates.RELEASE, name="T", rows=((QUALITY,), (ENGINEER,)), same=False, requester=True):
+    def set_template(self, action=workflow_templates.RELEASE, name="T", rows=((QUALITY,), (ENGINEER,)), same=False, requester=True,
+                     eco=False):
         with self.user("Alex"):
             workflow_store.edit_templates(self.a, lambda t, d: workflow_editing.set_template(t, action, name, [list(r) for r in rows], same,
-                                                                   requester), "Workflow")
+                                                                   requester, require_eco=eco), "Workflow")
         self.get_latest("Bea")
 
     def do(self, user, func, *args, **kwargs):

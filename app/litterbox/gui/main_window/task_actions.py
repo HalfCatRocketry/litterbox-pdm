@@ -9,6 +9,7 @@ from litterbox.errors import LitterboxError
 from litterbox.gui.dialogs.workflow import reassign_dialog
 from litterbox.gui.dialogs.workflow import request_dialog
 from litterbox.gui.logic import error_text
+from litterbox.gui.logic import request_parts
 from litterbox.gui.logic import task_text
 from litterbox.gui.windows import tasks_window
 from litterbox.workflows import signoff_slots
@@ -126,12 +127,15 @@ class TaskActions:
             self._say("Set up the team first (Team... > Set Up Team): sign-offs are done by people on it.", "warn")
             return True
         parts = [(pn, self.rows_by_pn[pn].name) for pn in plan.targets]
-        chosen = request_dialog.WorkflowRequestDialog(self, action, parts, templates, directory, me.id).show()
+        addable = lambda current: request_parts.addable_rows(action, list(self.rows_by_pn.values()), current,
+                                                             self.jobs.pending_parts())
+        chosen = request_dialog.WorkflowRequestDialog(self, action, parts, templates, directory, me.id,
+                                                      addable).show()
         if not chosen:
             return True
-        pns, label = list(plan.targets), workflow_templates.label_of(action)
+        pns, label = list(chosen["parts"]), workflow_templates.label_of(action)
         self.run_task(lambda: workflow_request.request(repo, pns, action, chosen["template"], chosen["assignments"],
-                                               chosen["extras"], chosen["reason"]),
+                                               chosen["extras"], chosen["reason"], chosen["eco"]),
                       f"Started the {label} workflow on {len(pns)} part{'s' if len(pns) != 1 else ''}")
         return True
 

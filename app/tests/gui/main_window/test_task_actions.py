@@ -60,11 +60,12 @@ class WorkflowWiring(unittest.TestCase):
         seen = []
 
         class Dialog:
-            def __init__(inner, parent, action, parts, templates, directory, my_id):
+            def __init__(inner, parent, action, parts, templates, directory, my_id, addable):
                 seen.append((action, parts, list(templates), my_id))
 
             def show(inner):
-                return {"template": "T1", "assignments": ["bea"], "extras": [("Quality", "bea")], "reason": ""}
+                return {"template": "T1", "assignments": ["bea"], "extras": [("Quality", "bea")], "reason": "",
+                        "parts": ["HCR-00001-001", "HCR-00002-001"], "eco": None}
 
         self.gui.request_dialog.WorkflowRequestDialog = Dialog
         calls = []
@@ -75,8 +76,35 @@ class WorkflowWiring(unittest.TestCase):
         work, done, _ = self.tasks.pop()
         work()
         self.assertEqual(calls, [("C:/vault", ["HCR-00001-001", "HCR-00002-001"], "release", "T1", ["bea"],
-                                  [("Quality", "bea")], "")])
+                                  [("Quality", "bea")], "", None)])
         self.assertIn("2 parts", done)
+
+    def test_the_parts_and_eco_chosen_in_the_window_are_used(self):
+        self.targets("HCR-00001-001")
+        self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001"),
+                               "HCR-00003-001": self.row("pending", pn="HCR-00003-001"),
+                               "HCR-00004-001": self.row("ok", pn="HCR-00004-001")}
+        self.app.jobs = self.SimpleNamespace(pending_parts=lambda: {"HCR-00004-001": "Checking in"})
+        offered = []
+
+        class Dialog:
+            def __init__(inner, parent, action, parts, templates, directory, my_id, addable):
+                offered.extend(str(r.pn) for r in addable(["HCR-00001-001"]))
+
+            def show(inner):
+                return {"template": "T1", "assignments": ["bea"], "extras": [], "reason": "",
+                        "parts": ["HCR-00002-001"], "eco": {"name": "Bracket", "description": ""}}
+
+        self.gui.request_dialog.WorkflowRequestDialog = Dialog
+        calls = []
+        replace(self, self.gui.workflow_request, "request", lambda *a: calls.append(a) or "id")
+        self.app.release()
+        self.assertEqual(offered, ["HCR-00002-001"])          # not one already in, waiting, or busy
+        work, done, _ = self.tasks.pop()
+        work()
+        self.assertEqual(calls[0][1], ["HCR-00002-001"])
+        self.assertEqual(calls[0][-1], {"name": "Bracket", "description": ""})
+        self.assertIn("1 part", done)
 
     def test_cancelling_the_workflow_window_does_nothing(self):
         self.targets("HCR-00001-001")
@@ -283,7 +311,7 @@ class WorkflowWiring(unittest.TestCase):
                 if op["op"] == "set":
                     editor.items.setdefault(op["action"], []).append(
                         {"origin": op["old"], "name": op["name"], "rows": op["rows"], "same": op["same"],
-                         "requester": op["requester"]})
+                         "requester": op["requester"], "eco": op.get("eco", False)})
             return self.SimpleNamespace(show=lambda: out.append(apply(result, editor)))
 
         self.gui.workflows_dialog.WorkflowsDialog = dialog

@@ -41,6 +41,8 @@ def format_history(record, local=True):
     rows = []
     for event in reversed(record.history):
         parts = []
+        if event.get("eco"):
+            parts.append(str(event["eco"]))
         if event.get("reason"):
             parts.append(str(event["reason"]))
         if event.get("comment"):

@@ -9,8 +9,9 @@ from litterbox.workflows import workflow_editing
 from litterbox.workflows import workflow_templates
 
 
-def request_confirm_text(action, parts, template, slots, reason="", warnings=()):
-    """The question asked at the end of the Workflow window, before the request is made."""
+def request_confirm_text(action, parts, template, slots, reason="", warnings=(), eco=None):
+    """The question asked at the end of the Workflow window, before the request is made. `eco` is the ECO's
+    {"name", "description"} when the workflow requires one."""
     label = workflow_templates.label_of(action)
     listing = "\n".join(f"  {pn}  {name}".rstrip() for pn, name in parts)
     signers = "\n".join(f"  {signoff_slots.slot_text(s)}: {s['name']}" for s in slots)
@@ -18,6 +19,8 @@ def request_confirm_text(action, parts, template, slots, reason="", warnings=())
             f"sign off:\n{signers}\n\n")
     if reason:
         text += f"Reason: {reason}\n\n"
+    if eco is not None:
+        text += f"An engineering change order (ECO) will be made: {eco['name']}\n\n"
     text += ("While it waits, nobody can check these parts out. You can withdraw the request until it is done."
              + (" It happens as soon as the last person signs." if action in workflow_templates.AUTO_COMPLETE else
                 " When everyone has signed, press the button again to finish it."))
@@ -46,6 +49,8 @@ def task_detail(task):
              for s in task.slots]
     head = ", ".join(str(p[0]) for p in task.parts)
     text = f"{head}\n" + "   ".join(lines)
+    if task.eco:
+        text += f"\nECO: {task.eco}"
     if task.reason:
         text += f"\nReason: {task.reason}"
     return text

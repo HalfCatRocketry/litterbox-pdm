@@ -23,6 +23,7 @@ class Task:
     mine: bool                      # you asked for it
     reason: str = ""
     template_name: str = ""
+    eco: str = ""                   # its engineering change order (ECO-0001), if the workflow asked for one
     can_sign: bool = False
     can_reject: bool = False
     can_complete: bool = False
@@ -66,7 +67,7 @@ def tasks_from_rows(rows, identity):
         task = Task(batch_id, first.get("action", workflow_templates.RELEASE), [(m.pn, m.name, first.get("revision", "")) for m in members],
                     first.get("requested_by", ""), first.get("requested_at", ""), summary, slots, ready,
                     me is not None and first.get("requested_by_id") == me.id, first.get("reason", ""),
-                    first.get("template_name", ""))
+                    first.get("template_name", ""), first.get("eco", ""))
         if me is not None:
             task.can_sign = any(signoff_slots.open_slots(p, me.id) for p in pendings)
             if not task.can_sign:
