@@ -19,7 +19,7 @@ class CreateVaultWiring(unittest.TestCase):
         app._reload_org_menu = lambda: None
         app.settings = {}
         self.app = app
-        self.dialog_result = ("HCR", "C:\\Litterbox\\hcr", 1, 5, 3)
+        self.dialog_result = ("HCR", "C:\\Litterbox\\hcr", 1, 5, 3, "Hidden Creek Robotics")
         self.gui.org_dialog.OrgDialog = lambda *a, **k: SimpleNamespace(show=lambda: self.dialog_result)
         self.plan = SimpleNamespace(ok=True, problems=[], warnings=[], org="HCR")
         replace(self, self.gui.create_vault, "plan", lambda *a, **k: self.plan)
@@ -55,11 +55,12 @@ class CreateVaultWiring(unittest.TestCase):
     def test_creating_runs_in_the_background_and_then_opens_the_new_org(self):
         from types import SimpleNamespace
         calls = []
-        replace(self, self.gui.create_vault, "create", lambda *a, **k: calls.append(a) or "made")
+        replace(self, self.gui.create_vault, "create", lambda *a, **k: calls.extend((a, k)) or "made")
         self.app.create_vault()
         work, done, on_success = self.tasks[0]
         self.assertEqual(work(), "made")
         self.assertEqual(calls[0][:5], ("C:\\Litterbox\\hcr", "HCR", 1, 5, 3))
+        self.assertEqual(calls[1]["org_name"], "Hidden Creek Robotics")
         on_success(SimpleNamespace(org="HCR", pushed=True, owner=None, team_error="", warnings=[]))
         self.assertEqual(self.switched, ["HCR"])
         self.assertEqual(self.app.settings["orgs"], {"HCR": "C:\\Litterbox\\hcr"})

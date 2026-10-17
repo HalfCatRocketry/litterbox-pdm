@@ -79,6 +79,11 @@ class CreatingAVault(EmptyRepo):
         self.assertEqual(data["format_version"], 1)
         self.assertIn("min_litterbox_version", data)
         self.assertEqual(config.get_digits(self.vault), (6, 2))
+        self.assertNotIn("org_name", data)
+
+    def test_the_org_name_is_written_when_given(self):
+        self.make(org_name="Hidden Creek Robotics")
+        self.assertEqual(config.get_org_name(self.vault), "Hidden Creek Robotics")
 
     def test_gitattributes_makes_cad_lockable_lfs_files(self):
         self.make()

@@ -15,6 +15,7 @@ def main(argv=None, prog=None):
     parser = argparse.ArgumentParser(prog=prog, description="Turn an empty cloned repository into a Litterbox vault.")
     parser.add_argument("folder", help="the cloned, empty repository")
     parser.add_argument("--org", required=True, help="org code, 2 to 4 letters (HCR)")
+    parser.add_argument("--org-name", help="the org's full name, for people to read (Hidden Creek Robotics)")
     parser.add_argument("--start", type=int, default=1, help="first part number to hand out (default 1)")
     parser.add_argument("--base-digits", type=int, default=part_number.NEW_VAULT_BASE_DIGITS)
     parser.add_argument("--variant-digits", type=int, default=part_number.DEFAULT_VARIANT_DIGITS)
@@ -40,7 +41,8 @@ def main(argv=None, prog=None):
             return 1
     try:
         result = create_vault.create(args.folder, args.org, args.start, args.base_digits, args.variant_digits,
-                        push=not args.no_push, set_up_team=not args.no_team, name=args.name, email=args.email)
+                        push=not args.no_push, set_up_team=not args.no_team, name=args.name, email=args.email,
+                        org_name=args.org_name)
     except LitterboxError as e:
         print(f"Failed. Nothing was left behind.\n{e}")
         return 1

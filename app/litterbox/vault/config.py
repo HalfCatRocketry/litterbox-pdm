@@ -3,6 +3,7 @@ config.py - the vault's shared settings, read from .litterbox/config.yaml (insid
 team uses the same ones):
 
     org: HCR              the org code that starts every part number
+    org_name: Hidden Creek Robotics   the org's full name, for people to read (optional, default the code)
     start_number: 10001   the first part number to hand out (optional, default 1). Numbers count up from here to
                           the highest the digits allow, then start again at 1 and stop just below it
     pn_base_digits: 5     digits in the part number (HCR-10001-001), default 5
@@ -81,6 +82,31 @@ def get_org(repo):
     raise ConfigError(
         f"This vault has part numbers from several orgs ({', '.join(orgs)}), so Litterbox can't "
         f"tell which to use. Set one in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}, for example:\n  org: {orgs[0]}")
+
+
+ORG_NAME_MAX = 80               # characters in an org's full name
+
+
+def check_org_name(text):
+    """An org's full name, tidied: one line, spaces trimmed, at most ORG_NAME_MAX characters. "" means none.
+    Raises ConfigError if it can't be used."""
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        raise ConfigError("The org name must be text.")
+    name = " ".join(text.split())
+    if len(name) > ORG_NAME_MAX:
+        raise ConfigError(f"The org name can be at most {ORG_NAME_MAX} characters.")
+    return name
+
+
+def get_org_name(repo):
+    """The org's full name ('Hidden Creek Robotics'), or the org code when the vault has no name set."""
+    try:
+        name = check_org_name(load(repo).get("org_name"))
+    except ConfigError:
+        name = ""
+    return name or get_org(repo)
 
 
 def get_start_number(repo):

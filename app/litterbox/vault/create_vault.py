@@ -284,7 +284,7 @@ class _Writer:
 
 def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
            variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True, set_up_team=True, name=None, email=None,
-           min_version=version.VERSION):
+           min_version=version.VERSION, org_name=None):
     """Turn the empty cloned repository in `folder` into a Litterbox vault. Returns an InitResult.
 
     Raises InitError if there are problems (nothing is changed), or if a step fails (everything is undone)."""
@@ -319,7 +319,7 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
         config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
         writer.note(config_rel, None)
         config_write.save(repo, org=org, start_number=start_number, base_digits=base_digits,
-                    variant_digits=variant_digits)
+                    variant_digits=variant_digits, org_name=org_name)
         config_write.stamp(repo, min_version=min_version)
 
         paths = writer.paths

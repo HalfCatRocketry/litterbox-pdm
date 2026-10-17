@@ -103,23 +103,25 @@ class OrgSwitching:
                       label="Cloning the vault (this can take a while)")
 
     def _org_setup(self, org):
-        """Edit an org: its code, vault folder and starting part number."""
+        """Edit an org: its code, full name, vault folder and starting part number."""
         folder = org_menu.known_orgs(self.settings).get(org, "") if org else ""
         start, base_digits, variant_digits = 1, part_number.DEFAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS
+        org_name = ""
         if folder and Path(folder).is_dir():
             try:
                 start = config.get_start_number(folder)
                 base_digits, variant_digits = config.get_digits(folder)
+                org_name = config.check_org_name(config.load(folder).get("org_name"))
             except config.ConfigError:
                 pass
         result = org_dialog.OrgDialog(self, org or "", folder, start, base_digits, variant_digits,
-                           title=f"Org setup - {org}" if org else "Org setup").show()
+                           title=f"Org setup - {org}" if org else "Org setup", org_name=org_name).show()
         if not result:
             return
-        new_org, new_folder, new_start, new_base_digits, new_variant_digits = result
+        new_org, new_folder, new_start, new_base_digits, new_variant_digits, new_name = result
         try:
             config_write.save(new_folder, org=new_org, start_number=new_start,
-                        base_digits=new_base_digits, variant_digits=new_variant_digits)
+                        base_digits=new_base_digits, variant_digits=new_variant_digits, org_name=new_name)
         except (config.ConfigError, OSError) as e:
             messagebox.showerror("Org setup", f"Could not save the settings in the vault:\n\n{e}", parent=self)
             return
@@ -140,7 +142,7 @@ class OrgSwitching:
                            title="Create new vault", save_text="Create").show()
         if not result:
             return
-        org, folder, start, base_digits, variant_digits = result
+        org, folder, start, base_digits, variant_digits, org_name = result
         checked = create_vault.plan(folder, org, start, base_digits, variant_digits)
         if not checked.ok:
             messagebox.showerror("Create new vault", "\n\n".join(checked.problems), parent=self)
@@ -156,5 +158,5 @@ class OrgSwitching:
             self.switch_org(created.org)
             messagebox.showinfo("Create new vault", org_menu.vault_created_text(created), parent=self)
 
-        self.run_task(lambda: create_vault.create(folder, org, start, base_digits, variant_digits),
+        self.run_task(lambda: create_vault.create(folder, org, start, base_digits, variant_digits, org_name=org_name),
                       f"Created the {checked.org} vault", on_success=made, refresh=False)

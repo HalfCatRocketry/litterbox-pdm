@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from litterbox.vault import config
+from litterbox.vault import compatibility
 from litterbox.vault import config_write
 from litterbox.core import part_number
 from litterbox.records import record_store
@@ -92,6 +93,26 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(config.load(self.repo), {"org": "HCR", "start_number": 10001})
         with self.assertRaises(config.ConfigError):
             config_write.save(self.repo, start_number=0)
+
+    def test_the_org_name_is_optional_and_falls_back_to_the_code(self):
+        config_write.save(self.repo, org="HCR")
+        self.assertEqual(config.get_org_name(self.repo), "HCR")
+        config_write.save(self.repo, org_name="  Hidden   Creek\nRobotics ")
+        self.assertEqual(config.load(self.repo)["org_name"], "Hidden Creek Robotics")
+        self.assertEqual(config.get_org_name(self.repo), "Hidden Creek Robotics")
+        config_write.save(self.repo, start_number=10001)                  # other changes keep the name
+        self.assertEqual(config.get_org_name(self.repo), "Hidden Creek Robotics")
+        config_write.save(self.repo, org_name="")                         # "" removes it
+        self.assertNotIn("org_name", config.load(self.repo))
+        with self.assertRaises(config.ConfigError):
+            config_write.save(self.repo, org_name="x" * (config.ORG_NAME_MAX + 1))
+        self.write_config("org: HCR\norg_name: [not, text]\n")             # a bad name is ignored when reading
+        self.assertEqual(config.get_org_name(self.repo), "HCR")
+
+    def test_an_older_litterbox_can_read_a_config_with_an_org_name(self):
+        self.write_config("org: HCR\norg_name: Hidden Creek Robotics\n")
+        self.assertEqual(config.get_org(self.repo), "HCR")
+        compatibility.check_compatible(self.repo)
 
     def test_no_org_has_its_own_error(self):
         with self.assertRaises(config.NoOrgError):

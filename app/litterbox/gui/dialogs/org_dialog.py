@@ -1,5 +1,5 @@
 """
-org_dialog.py - Org setup...: an org's code, vault folder, first part number and digits.
+org_dialog.py - Org setup...: an org's code, full name, vault folder, first part number and digits.
 """
 
 import os
@@ -16,21 +16,22 @@ from litterbox.gui import window_chrome
 from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
+from litterbox.vault import config
 
 
 class OrgDialog(modal_dialog.ModalDialog):
     """Set up an org: its code, its vault folder, and the first part number it hands out.
 
         result = OrgDialog(parent, org="HCR", folder=r"C:\\...", start=1, base_digits=5, variant_digits=3).show()
-        # None if cancelled, else (org, folder, start, base_digits, variant_digits)
+        # None if cancelled, else (org, folder, start, base_digits, variant_digits, org_name)
     """
 
     def __init__(self, parent, org="", folder="", start=1, base_digits=5, variant_digits=3, title="Org setup",
-                 save_text="Save"):
+                 save_text="Save", org_name=""):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result = None
-        width, height = 520, 420
+        width, height = 520, 490
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title(title)
@@ -40,6 +41,7 @@ class OrgDialog(modal_dialog.ModalDialog):
         self.columnconfigure(0, weight=1)
 
         self.org_var = tk.StringVar(value=org)
+        self.name_var = tk.StringVar(value=org_name)
         self.folder_var = tk.StringVar(value=folder)
         self.start_var = tk.StringVar(value=str(start))
         self.base_digits_var = tk.StringVar(value=str(base_digits))
@@ -49,24 +51,28 @@ class OrgDialog(modal_dialog.ModalDialog):
             row=0, column=0, sticky="ew", padx=20, pady=(20, 2))
         ctk.CTkEntry(self, textvariable=self.org_var, height=34).grid(row=1, column=0, sticky="ew", padx=20)
 
-        ctk.CTkLabel(self, text="Vault folder", anchor="w").grid(
+        ctk.CTkLabel(self, text="Org name (optional, for example Hidden Creek Robotics)", anchor="w").grid(
             row=2, column=0, sticky="ew", padx=20, pady=(12, 2))
+        ctk.CTkEntry(self, textvariable=self.name_var, height=34).grid(row=3, column=0, sticky="ew", padx=20)
+
+        ctk.CTkLabel(self, text="Vault folder", anchor="w").grid(
+            row=4, column=0, sticky="ew", padx=20, pady=(12, 2))
         row = ctk.CTkFrame(self, fg_color="transparent")
-        row.grid(row=3, column=0, sticky="ew", padx=20)
+        row.grid(row=5, column=0, sticky="ew", padx=20)
         row.columnconfigure(0, weight=1)
         ctk.CTkEntry(row, textvariable=self.folder_var, height=34).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         release_button.ReleaseButton(row, text="Browse", width=90, height=34, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                       command=self._browse).grid(row=0, column=1)
 
         ctk.CTkLabel(self, text="First part number to hand out (for example 10001)", anchor="w").grid(
-            row=4, column=0, sticky="ew", padx=20, pady=(12, 2))
+            row=6, column=0, sticky="ew", padx=20, pady=(12, 2))
         ctk.CTkEntry(self, textvariable=self.start_var, height=34, width=140).grid(
-            row=5, column=0, sticky="w", padx=20)
+            row=7, column=0, sticky="w", padx=20)
 
         ctk.CTkLabel(self, text="Digits in the part number and in the variant (for example 6 and 3)", anchor="w").grid(
-            row=6, column=0, sticky="ew", padx=20, pady=(12, 2))
+            row=8, column=0, sticky="ew", padx=20, pady=(12, 2))
         digits = ctk.CTkFrame(self, fg_color="transparent")
-        digits.grid(row=7, column=0, sticky="w", padx=20)
+        digits.grid(row=9, column=0, sticky="w", padx=20)
         ctk.CTkEntry(digits, textvariable=self.base_digits_var, height=34, width=70).grid(row=0, column=0)
         ctk.CTkLabel(digits, text="-", width=18).grid(row=0, column=1)
         ctk.CTkEntry(digits, textvariable=self.variant_digits_var, height=34, width=70).grid(row=0, column=2)
@@ -74,7 +80,7 @@ class OrgDialog(modal_dialog.ModalDialog):
             row=0, column=3, padx=(14, 0))
 
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=8, column=0, sticky="ew", padx=20, pady=20)
+        buttons.grid(row=10, column=0, sticky="ew", padx=20, pady=20)
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         release_button.ReleaseButton(buttons, text="Cancel", height=38, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                       command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -96,6 +102,11 @@ class OrgDialog(modal_dialog.ModalDialog):
         except PNError as e:
             messagebox.showwarning("Org setup", str(e), parent=self)
             return
+        try:
+            org_name = config.check_org_name(self.name_var.get())
+        except config.ConfigError as e:
+            messagebox.showwarning("Org setup", str(e), parent=self)
+            return
         folder = self.folder_var.get().strip()
         if not folder or not Path(folder).is_dir():
             messagebox.showwarning("Org setup", "Choose the vault folder for this org.", parent=self)
@@ -112,5 +123,5 @@ class OrgDialog(modal_dialog.ModalDialog):
         except ValueError as e:
             messagebox.showwarning("Org setup", str(e), parent=self)
             return
-        self.result = (org, folder, int(text), base_digits, variant_digits)
+        self.result = (org, folder, int(text), base_digits, variant_digits, org_name)
         self.destroy()

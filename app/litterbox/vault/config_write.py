@@ -73,14 +73,20 @@ def stamp(repo, min_version=None):
         yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
 
 
-def save(repo, org=None, start_number=None, base_digits=None, variant_digits=None):
-    """Create or update the vault's config file. Only the values given are changed.
+def save(repo, org=None, start_number=None, base_digits=None, variant_digits=None, org_name=None):
+    """Create or update the vault's config file. Only the values given are changed (org_name="" removes the name).
 
     The digit counts can't be changed once the vault has part numbers in it.
     """
     data = config.load(repo)
     if org is not None:
         data["org"] = check_org(org)
+    if org_name is not None:
+        name = config.check_org_name(org_name)
+        if name:
+            data["org_name"] = name
+        else:
+            data.pop("org_name", None)
     if start_number is not None:
         if isinstance(start_number, bool) or not isinstance(start_number, int) or start_number < 1:
             raise config.ConfigError("The starting part number must be a whole number, 1 or higher.")
@@ -102,7 +108,7 @@ def save(repo, org=None, start_number=None, base_digits=None, variant_digits=Non
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(".tmp-config.yaml")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        yaml.safe_dump(data, f, sort_keys=False)
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
     tmp.replace(path)
     return data
 
