@@ -17,6 +17,9 @@ from litterbox.gui.logic import ui_scale
 from litterbox.gui.widgets import release_button
 
 
+ALT_KEYS = {"File": "f", "Vault": "a", "View": "v", "Help": "h"}      # Alt+F opens File, and so on
+
+
 def dark_menu(parent):
     """An empty Tk menu in the window's colours, with text at the window's scale."""
     scale = scaling.scale_of(parent)
@@ -37,12 +40,13 @@ def open_below(menu, widget):
 
 
 class MenuBar(ctk.CTkFrame):
-    """menus: [(title, fill)] where fill(menu) adds the entries each time the menu opens."""
+    """menus: [(title, fill)] where fill(menu) adds the entries each time the menu opens. Alt and a menu's key
+    opens it (see ALT_KEYS)."""
 
     def __init__(self, master, menus, logo=None):
         super().__init__(master, fg_color=theme.BG_BAR, corner_radius=0, height=30)
         self.columnconfigure(len(menus), weight=1)
-        self.buttons = {}
+        self.buttons, self.fills = {}, dict(menus)
         for column, (title, fill) in enumerate(menus):
             button = ctk.CTkButton(self, text=title, width=0, height=26, corner_radius=4, fg_color="transparent",
                                    hover_color=theme.BG_HOVER, text_color=theme.TEXT,
@@ -60,6 +64,11 @@ class MenuBar(ctk.CTkFrame):
     def set_logo(self, image):
         if self.logo_label is not None and image is not None:
             self.logo_label.configure(image=image)
+
+    def open_named(self, title):
+        """Open a menu from the keyboard (Alt and its key)."""
+        if title in self.fills:
+            self.open(title, self.fills[title])
 
     def open(self, title, fill):
         menu = dark_menu(self)

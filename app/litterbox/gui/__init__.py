@@ -7,10 +7,13 @@ rest of the litterbox package; the git work is in git/.
 
     start.py          opens the window (or runs the build self-test)
     theme.py          colours
+    scaling.py        making the plain Tk parts follow the display's scaling and the Text size
     window_chrome.py  title bar, icon, fade
-    widgets/          small building blocks (ReleaseButton, table sorting, the part number cell editor)
+    widgets/          small building blocks (ReleaseButton, menu bar, tooltips, icons, table sorting, ...)
     dialogs/          one small window per file
-    windows/          the bigger non-modal windows (History, References, My Tasks, Team, Import)
+    windows/          the bigger non-modal windows (a part's Details pop-out, References, ECO, Import)
+    screens/          My Tasks, ECOs and Team, shown in the main window from its sidebar
+    panes/            a part's details, shown beside the parts list
     main_window/      the main window (App), one file per area
     logic/            decisions with no window code
 """

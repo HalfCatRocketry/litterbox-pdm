@@ -137,7 +137,7 @@ def validate(templates, directory=None):
                     for role in row.roles:
                         match = next((r for r in directory.roles if r.lower() == role.lower()), None)
                         if match is None:
-                            raise WorkflowError(f"'{role}' isn't one of this org's roles. Add it in Team... > "
+                            raise WorkflowError(f"'{role}' isn't one of this org's roles. Add it in Team > "
                                                 "Roles first.")
                         fixed.append(match)
                     row.roles = fixed

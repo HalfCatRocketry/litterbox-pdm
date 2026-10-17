@@ -73,7 +73,8 @@ The few imports that go up a layer are listed, each with its reason, in `KNOWN_E
 ## Adding something
 
 1. Pick the layer, then the folder (a new feature area gets its own folder at layer 4, and its window parts go under
-   `gui/`: decisions in `gui/logic/`, dialogs in `gui/dialogs/`, bigger windows in `gui/windows/`).
+   `gui/`: decisions in `gui/logic/`, dialogs in `gui/dialogs/`, bigger windows in `gui/windows/`, and a list that
+   belongs in the main window as a screen of its own in `gui/screens/`, with an entry in the sidebar).
 2. Give the module a name nothing in its callers uses as a variable, and a docstring that says what it is for.
 3. Put its tests in the matching folder under `tests/`.
 4. Run the tests: the architecture tests say if a rule is broken, and the self-test and the PyInstaller recipe find

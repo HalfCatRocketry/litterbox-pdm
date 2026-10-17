@@ -85,6 +85,7 @@ class DetailPane:
             return
         self.pane_view.grid()
         self.pane_view.show(record, history_text.row_revisions(row))
+        self._pane_refs_for = None                          # show() emptied the Uses and Where used tabs
         if self.pane_view.current_tab() in REFERENCE_TABS:
             self._load_pane_references(pn)
 

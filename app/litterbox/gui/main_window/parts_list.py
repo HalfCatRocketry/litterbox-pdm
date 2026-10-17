@@ -12,6 +12,7 @@ from tkinter import messagebox
 from litterbox import diagnostics
 from litterbox.core.part_number import parse as parse_pn
 from litterbox.errors import LitterboxError
+from litterbox.git import remote
 from litterbox.gui import scaling
 from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import download_text
@@ -259,18 +260,20 @@ class PartsList:
 
             started = time.monotonic()
             self._use_download_setting(repo, on_demand)
-            with ThreadPoolExecutor(max_workers=2) as pool:      # the list and "who am I" don't depend on each other
+            with ThreadPoolExecutor(max_workers=3) as pool:      # the list, "who am I" and the server are separate
                 who_job = pool.submit(find_out_who)
+                behind_job = pool.submit(remote.commits_behind, repo)
                 rows = part_status.get_status(repo)
-                who = who_job.result()
+                who, behind = who_job.result(), behind_job.result()
             if diagnostics.DEBUG:
                 diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
-            return rows, who
+            return rows, who, behind
 
         def show(result):
-            rows, who = result
+            rows, who, behind = result
             self.identity = who
             self._show_identity()
+            self._show_behind(behind)
             self._show_rows(rows)
 
         self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",

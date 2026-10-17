@@ -1,5 +1,5 @@
 """
-org_menu.py - the org box in the header: the orgs you have, moving old settings over, Add org planning,
+org_menu.py - the orgs: the org box in the header, the orgs you have, moving old settings over, Add org planning,
 Create new vault text, and checking a folder looks like a vault.
 """
 
@@ -56,11 +56,6 @@ def org_choices(data):
     return list(known_orgs(data)) or ["No org"]
 
 
-def org_menu_values(data):
-    """The dropdown entries: every known org, then the two setup actions."""
-    return list(known_orgs(data)) + [ADD_ORG, CREATE_VAULT, EDIT_ORG]
-
-
 CREATE_VAULT_INTRO = (
     "A new vault starts as an empty repository on your Git host (Azure DevOps, GitHub or GitLab).\n\n"
     "1. Create the empty repository on the host.\n"
@@ -77,7 +72,7 @@ def vault_created_text(result):
         lines.append(f"{result.owner.name} is the team's Owner.")
     elif result.team_error:
         lines.append("The team could not be set up just now, so everyone can still do everything. "
-                     f"Use Team... to set it up later.\n\n{error_text.shorten(result.team_error)}")
+                     f"Use the Team screen to set it up later.\n\n{error_text.shorten(result.team_error)}")
     lines.extend(result.warnings)
     return "\n\n".join(lines)
 
@@ -92,7 +87,7 @@ def plan_add_org(url, root, known):
     target = vault_clone.target_folder(root, name)
     for org, folder in known.items():
         if str(Path(folder)).lower() == str(target).lower():
-            return None, f"{org} is already added: it is in {target}. Choose it from the box next to the title."
+            return None, f"{org} is already added: it is in {target}. Choose it from the org box at the top."
     return target, ""
 
 

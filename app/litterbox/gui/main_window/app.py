@@ -46,6 +46,7 @@ from litterbox.gui.main_window.team_admin import TeamAdmin
 from litterbox.gui.main_window.text_size import TextSize
 from litterbox.gui.main_window.update_checks import UpdateChecks
 from litterbox.gui.widgets import icon_images
+from litterbox.gui.widgets import menu_bar
 from litterbox.jobs import job_queue as jobs
 from litterbox.team import team_identity
 from litterbox.user import settings
@@ -115,6 +116,8 @@ class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateC
         for number, name in enumerate(("parts", "tasks", "ecos", "team"), 1):
             self.bind(f"<Control-Key-{number}>", lambda event, name=name: self.show_screen(name))
         self._bind_text_size_keys()
+        for title, key in menu_bar.ALT_KEYS.items():
+            self.bind(f"<Alt-{key}>", lambda event, title=title: self.menu_bar.open_named(title))
         scaling.watch(self, self._rescale_soon)
         self.after(100, self._poll_queue)
         if settings.DEBUG:

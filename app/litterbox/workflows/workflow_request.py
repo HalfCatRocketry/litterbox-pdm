@@ -53,7 +53,7 @@ def current_member(repo, action):
     """The current user as a team member. Workflows are about people, so a vault with no team can't use them."""
     identity = team_permissions.require(repo, action)
     if identity.state != team_identity.OK or identity.person is None:
-        raise workflow_templates.WorkflowError("Set up the team first (Team... > Set Up Team): sign-offs are done by people on it.")
+        raise workflow_templates.WorkflowError("Set up the team first (Team > Set Up Team): sign-offs are done by people on it.")
     return identity.person
 
 

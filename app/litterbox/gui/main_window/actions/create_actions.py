@@ -21,7 +21,7 @@ class CreateActions:
         if not self._may("create"):
             return
         if not self.org or not Path(self.repo()).is_dir():
-            self._say("Choose an org with a vault folder first (box next to the title).", "warn")
+            self._say("Choose an org with a vault folder first (the org box at the top, or File > Add org...).", "warn")
             return
         repo, org = self.repo(), self.org
         request = new_part_dialog.NewPartDialog(self, repo, org).show()
@@ -57,7 +57,7 @@ class CreateActions:
             self._say("Import needs the vault to itself. Wait for the banner to turn green, then try again.", "warn")
             return
         if not self.org or not Path(self.repo()).is_dir():
-            self._say("Choose an org with a vault folder first (box next to the title).", "warn")
+            self._say("Choose an org with a vault folder first (the org box at the top, or File > Add org...).", "warn")
             return
 
         def imported(result):

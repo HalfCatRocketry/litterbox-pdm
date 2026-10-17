@@ -165,7 +165,7 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
 
     def _new(self, action):
         if not self.roles:
-            self.problem.configure(text="This org has no roles yet. Add some in Team... > Roles first.")
+            self.problem.configure(text="This org has no roles yet. Add some in Team > Roles... first.")
             return
         self.selected[action] = self.editor.add(action, self.roles)
         self._redraw(action)
@@ -210,7 +210,7 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
         if added:
             lines.append("Added: " + ", ".join(added) + ".")
         if skipped:
-            lines.append("Not added because the org lacks these roles (add them in Team... > Roles first): "
+            lines.append("Not added because the org lacks these roles (add them in Team > Roles... first): "
                          + "; ".join(f"{name} needs {', '.join(missing)}" for name, missing in skipped) + ".")
         if not lines:
             lines.append("The standard workflows are all there already.")

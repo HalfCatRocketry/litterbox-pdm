@@ -117,7 +117,7 @@ class InitResult:
     pushed: bool
     warnings: list
     owner: object = None             # the team_model.Person set up as Owner, if the team was set up
-    team_error: str = ""             # why the team wasn't set up (the vault is fine; use Team... later)
+    team_error: str = ""             # why the team wasn't set up (the vault is fine; use the Team screen later)
 
 
 def numbering_warnings(start_number, base_digits, variant_digits):

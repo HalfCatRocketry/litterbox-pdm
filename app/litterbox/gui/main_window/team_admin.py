@@ -172,7 +172,7 @@ class TeamAdmin:
             return
         draft = window.draft
         if not draft.directory.roles:
-            messagebox.showinfo("Workflows", "This org has no roles yet. Add some in Team... > Roles first.",
+            messagebox.showinfo("Workflows", "This org has no roles yet. Add some in Team > Roles... first.",
                                 parent=window)
             return
 

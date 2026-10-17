@@ -59,6 +59,7 @@ class OrgSwitching:
         self._render()                              # clear the list straight away
         self._update_counts()
         self._selection_changed()
+        self._show_behind(0)
         self.folder_label.configure(text=self.repo())
         for screen in self._team_windows():
             screen.reload()

@@ -20,7 +20,7 @@ def main(argv=None, prog=None):
     parser.add_argument("--base-digits", type=int, default=part_number.NEW_VAULT_BASE_DIGITS)
     parser.add_argument("--variant-digits", type=int, default=part_number.DEFAULT_VARIANT_DIGITS)
     parser.add_argument("--no-push", action="store_true", help="commit locally only")
-    parser.add_argument("--no-team", action="store_true", help="don't set up the team (do it later in Team...)")
+    parser.add_argument("--no-team", action="store_true", help="don't set up the team (do it later in Team)")
     parser.add_argument("--name", help="your name for the team list (default: git's user.name)")
     parser.add_argument("--email", help="your email for the team list (default: git's user.email)")
     parser.add_argument("--yes", action="store_true", help="go ahead even when there are warnings")
@@ -50,7 +50,7 @@ def main(argv=None, prog=None):
     if result.owner:
         print(f"{result.owner.name} is the Owner.")
     elif result.team_error:
-        print(f"The team was not set up: {result.team_error}\nYou can do it later with Team... in Litterbox.")
+        print(f"The team was not set up: {result.team_error}\nYou can do it later on the Team screen in Litterbox.")
     for warning in result.warnings:
         print(f"WARNING: {warning}")
     return 0

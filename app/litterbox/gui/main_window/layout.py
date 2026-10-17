@@ -76,6 +76,10 @@ class WindowLayout:
         tooltip.Tooltip(self.org_menu, self._org_tooltip)
         self.folder_label = ctk.CTkLabel(header, text=self.repo(), text_color=theme.MUTED, anchor="w")
         self.folder_label.grid(row=0, column=1, sticky="w", padx=(10, 0))
+        self.behind_label = ctk.CTkLabel(header, text="", text_color=theme.WARN, anchor="w", cursor="hand2")
+        self.behind_label.grid(row=0, column=2, sticky="w", padx=(12, 0))
+        self.behind_label.bind("<Button-1>", lambda event: self.get_latest())
+        tooltip.Tooltip(self.behind_label, lambda: self.behind_text)
         self.identity_label = ctk.CTkLabel(header, text="", text_color=theme.MUTED, anchor="e")
         self.identity_label.grid(row=0, column=3, sticky="e", padx=(0, 10))
         self.tasks_button = release_button.ReleaseButton(header, text="My Tasks", width=100, height=30,
@@ -87,6 +91,22 @@ class WindowLayout:
                                                               command=self.get_latest)
         self.get_latest_button.grid(row=0, column=5)
         tooltip.Tooltip(self.get_latest_button, "Download what others have uploaded since you last looked.")
+
+    behind_text = ""
+
+    def _show_behind(self, count):
+        """How many changes others have uploaded that this copy hasn't got (blank when none, or offline)."""
+        label = getattr(self, "behind_label", None)
+        if label is None:
+            return
+        if not count:
+            label.configure(text="")
+            self.behind_text = ""
+            return
+        changes = f"{count} change{'s' if count != 1 else ''}"
+        label.configure(text=f"\u2193 {changes} to get")
+        self.behind_text = f"{changes} uploaded by others since you last got the latest. Click here or press Get " \
+                           "Latest to bring them in."
 
     def _org_tooltip(self):
         name = self._org_name()

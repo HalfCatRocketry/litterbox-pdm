@@ -46,6 +46,16 @@ def _abort_rebase(repo):
         diagnostics.LOG(f"WARNING: could not undo an unfinished sync: {e}")
 
 
+def commits_behind(repo):
+    """How many changes the vault's server has that this copy hasn't got yet (Get Latest would bring them), after a
+    quick fetch that changes no files. None if that can't be told: offline, or no server to compare with."""
+    try:
+        runner.run(["git", "fetch", "--quiet"], repo, quiet=True)
+        return int(runner.run(["git", "rev-list", "--count", "HEAD..@{upstream}"], repo, quiet=True).strip() or 0)
+    except (LitterboxError, ValueError):
+        return None
+
+
 def push_with_retry(repo, attempts=3):
     """Sync then push. If someone else pushed first, sync again and retry. (Litterbox pushes through
     team/guarded_push.push, which first checks that the team list still lets you upload.)"""

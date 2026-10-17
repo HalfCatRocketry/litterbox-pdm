@@ -120,7 +120,7 @@ class TaskActions:
             return True
         directory, me = self.identity.directory, self.identity.person
         if directory is None or me is None:
-            self._say("Set up the team first (Team... > Set Up Team): sign-offs are done by people on it.", "warn")
+            self._say("Set up the team first (Team > Set Up Team): sign-offs are done by people on it.", "warn")
             return True
         parts = [(pn, self.rows_by_pn[pn].name) for pn in plan.targets]
         addable = lambda current: request_parts.addable_rows(action, list(self.rows_by_pn.values()), current,

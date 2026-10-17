@@ -1,5 +1,5 @@
 """
-error_details.py - the Details... window behind the red banner: what went wrong and what to do.
+error_details.py - the Details... window behind the red status bar: what went wrong and what to do.
 """
 
 import customtkinter as ctk
@@ -10,7 +10,7 @@ from litterbox.gui.widgets import release_button
 
 
 class ErrorDetailsWindow(ctk.CTkToplevel):
-    """The problems behind the red banner: what Litterbox was doing, what went wrong, and what to do about it."""
+    """The problems behind the red status bar: what Litterbox was doing, what went wrong, and what to do about it."""
 
     def __init__(self, parent, text, on_dismiss):
         super().__init__(parent)

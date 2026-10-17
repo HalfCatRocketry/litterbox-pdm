@@ -33,11 +33,12 @@ class TestOrgs(unittest.TestCase):
         self.assertEqual(org_menu.current_org(data), "HCR")           # falls back to the first
         self.assertIsNone(org_menu.current_org({}))
 
-    def test_menu_lists_orgs_then_actions(self):
+    def test_the_org_box_lists_only_orgs(self):
+        self.assertEqual(org_menu.org_choices({}), ["No org"])
         data = {}
         org_menu.remember_org(data, "HCR", "C:/a")
         org_menu.remember_org(data, "SAE", "C:/b")
-        self.assertEqual(org_menu.org_menu_values(data), ["HCR", "SAE", org_menu.ADD_ORG, org_menu.CREATE_VAULT, org_menu.EDIT_ORG])
+        self.assertEqual(org_menu.org_choices(data), ["HCR", "SAE"])
 
 
 class TestVaultCreatedText(unittest.TestCase):
@@ -54,7 +55,7 @@ class TestVaultCreatedText(unittest.TestCase):
 
     def test_team_trouble_is_explained_and_not_fatal(self):
         text = org_menu.vault_created_text(self.result(owner=None, team_error="The host didn't answer."))
-        self.assertIn("Use Team... to set it up later", text)
+        self.assertIn("Use the Team screen to set it up later", text)
         self.assertIn("didn't answer", text)
 
     def test_local_only_and_warnings(self):

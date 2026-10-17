@@ -24,7 +24,7 @@ class Png(unittest.TestCase):
 
     def test_resize_averages_and_ignores_transparent_colour(self):
         pixels = bytearray([255, 0, 0, 255, 0, 0, 255, 0] * 2)            # red, and a transparent blue, twice
-        _w, _h, out = 1, 1, png_images.resize(2, 2, pixels, 1, 1)
+        out = png_images.resize(2, 2, pixels, 1, 1)
         self.assertEqual(tuple(out), (255, 0, 0, 127))
 
     def test_the_litterbox_icon_can_be_read_and_shrunk(self):
