@@ -41,15 +41,15 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
         self.directory, self.my_id, self.addable = directory, my_id, addable
         self.row_vars, self.row_ids, self.extras = [], [], []
         label = workflow_templates.label_of(action)
-        width, height = 720, 820
+        width, height = 980, 760
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title(f"{label} workflow")
         self.geometry(f"{width}x{height}+{x}+{y}")
-        self.minsize(620, 600)
+        self.minsize(860, 600)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(6, weight=1)
+        self.rowconfigure(5, weight=1)
         ctk.CTkLabel(self, text=f"{label}: start a workflow", font=ctk.CTkFont(size=16, weight="bold"),
                      anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 4))
         self._parts_box(row=1)
@@ -70,20 +70,24 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
             ctk.CTkEntry(reason, textvariable=self.reason_var, height=32,
                          placeholder_text=f"Why is this being {label.lower()}ed? (a few words)").grid(
                 row=0, column=1, sticky="ew")
-        self._eco_form(row=4)
         self.note = ctk.CTkLabel(self, text="", text_color=theme.MUTED, anchor="w", justify="left", wraplength=width - 40)
-        self.note.grid(row=5, column=0, sticky="ew", padx=20, pady=(8, 0))
-        self.holder = ctk.CTkScrollableFrame(self, fg_color=theme.BG_PANEL, corner_radius=10)
-        self.holder.grid(row=6, column=0, sticky="nsew", padx=20, pady=(8, 0))
+        self.note.grid(row=4, column=0, sticky="ew", padx=20, pady=(8, 0))
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.grid(row=5, column=0, sticky="nsew", padx=20, pady=(8, 0))
+        body.columnconfigure(0, weight=1)
+        body.rowconfigure(0, weight=1)
+        self.holder = ctk.CTkScrollableFrame(body, fg_color=theme.BG_PANEL, corner_radius=10)
+        self.holder.grid(row=0, column=0, sticky="nsew")
         self.holder.columnconfigure(1, weight=1)
+        self._eco_form(body)
         release_button.ReleaseButton(self, text="Add an optional sign-off", width=190, height=30, fg_color=theme.GRAY,
-                      hover_color=theme.GRAY_HOVER, command=self._add_extra).grid(row=7, column=0, sticky="w", padx=20,
+                      hover_color=theme.GRAY_HOVER, command=self._add_extra).grid(row=6, column=0, sticky="w", padx=20,
                                                                              pady=(8, 0))
         self.problem = ctk.CTkLabel(self, text="", text_color=theme.ERROR, anchor="w", justify="left",
                                     wraplength=width - 40)
-        self.problem.grid(row=8, column=0, sticky="ew", padx=20, pady=(4, 0))
+        self.problem.grid(row=7, column=0, sticky="ew", padx=20, pady=(4, 0))
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=9, column=0, sticky="ew", padx=20, pady=(6, 18))
+        buttons.grid(row=8, column=0, sticky="ew", padx=20, pady=(6, 18))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         release_button.ReleaseButton(buttons, text="Cancel", height=38, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                       command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -148,21 +152,22 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
         self.problem.configure(text="")
 
     # -- the ECO ---------------------------------------------------------------
-    def _eco_form(self, row):
-        self.eco_frame = ctk.CTkFrame(self, fg_color=theme.BG_PANEL, corner_radius=10)
-        self.eco_frame.grid(row=row, column=0, sticky="ew", padx=20, pady=(8, 0))
-        self.eco_frame.columnconfigure(1, weight=1)
+    def _eco_form(self, parent):
+        """The ECO panel, to the right of the sign-off list (hidden by _rebuild when the template needs no ECO)."""
+        self.eco_frame = ctk.CTkFrame(parent, fg_color=theme.BG_PANEL, corner_radius=10, width=320)
+        self.eco_frame.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        self.eco_frame.columnconfigure(0, weight=1)
+        self.eco_frame.rowconfigure(4, weight=1)
         ctk.CTkLabel(self.eco_frame, text="Engineering change order (ECO)", font=ctk.CTkFont(weight="bold"),
-                     anchor="w").grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(8, 2))
-        ctk.CTkLabel(self.eco_frame, text="Name:").grid(row=1, column=0, sticky="w", padx=(10, 8), pady=(4, 0))
+                     anchor="w").grid(row=0, column=0, sticky="w", padx=10, pady=(8, 2))
+        ctk.CTkLabel(self.eco_frame, text="Name:", anchor="w").grid(row=1, column=0, sticky="w", padx=10, pady=(4, 0))
         self.eco_name_var = tk.StringVar()
-        ctk.CTkEntry(self.eco_frame, textvariable=self.eco_name_var, height=32,
-                     placeholder_text="A short title for the change").grid(row=1, column=1, sticky="ew",
-                                                                          padx=(0, 10), pady=(4, 0))
-        ctk.CTkLabel(self.eco_frame, text="Description:").grid(row=2, column=0, sticky="nw", padx=(10, 8),
-                                                               pady=(6, 0))
-        self.eco_description = ctk.CTkTextbox(self.eco_frame, height=70)
-        self.eco_description.grid(row=2, column=1, sticky="ew", padx=(0, 10), pady=(6, 10))
+        ctk.CTkEntry(self.eco_frame, textvariable=self.eco_name_var, width=300, height=32,
+                     placeholder_text="A short title for the change").grid(row=2, column=0, sticky="ew", padx=10)
+        ctk.CTkLabel(self.eco_frame, text="Description:", anchor="w").grid(row=3, column=0, sticky="w", padx=10,
+                                                                           pady=(6, 0))
+        self.eco_description = ctk.CTkTextbox(self.eco_frame, width=300, height=70)
+        self.eco_description.grid(row=4, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
     def _eco(self):
         """The ECO's fields, checked, or None when the template doesn't require one. Raises EcoError."""
