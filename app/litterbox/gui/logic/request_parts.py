@@ -20,4 +20,4 @@ def addable_rows(action, rows, current=(), busy=None):
 
 def search(rows, text):
     """The rows whose part number, name or description match `text` (all of them if it is empty)."""
-    return list_view.filter_rows(rows, text, "All", show_void=True)
+    return list_view.search_rows(rows, text)

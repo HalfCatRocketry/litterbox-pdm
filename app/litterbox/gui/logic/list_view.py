@@ -1,38 +1,59 @@
 """
-list_view.py - the parts list: filtering by search text and view, sorting naturally (part 2 before
+list_view.py - the parts list: its views and filtering by search text, sorting naturally (part 2 before
 part 10), the tick column, and row colours.
 """
 
 import re
 from pathlib import PurePosixPath
 
+from litterbox.gui.logic import search_text
 
-VIEWS = ("All", "Mine", "Checked out", "Released")
+
+VIEWS = ("All", "Mine", "Checked out", "Released", "Not downloaded", "Void")
 
 
-def filter_rows(rows, search="", view="All", show_void=False):
+def in_view(row, view):
+    """Does a part belong in a view (the sidebar's Parts entries)? Void parts show only in the Void view."""
+    if view == "Void":
+        return row.kind == "void"
+    if row.kind == "void":
+        return False
+    if view == "Mine":
+        return row.kind == "mine"
+    if view == "Checked out":
+        return row.kind in ("mine", "theirs")
+    if view == "Released":
+        return row.kind == "released" or bool(getattr(row, "released_revision", ""))
+    if view == "Not downloaded":
+        return bool(getattr(row, "not_downloaded", False))
+    return True
+
+
+def view_counts(rows):
+    """{view: how many parts it has}, for the sidebar."""
+    return {view: sum(1 for row in rows if in_view(row, view)) for view in VIEWS}
+
+
+def default_search_values(row):
+    return (str(row.pn), row.pn.short, row.name, row.description, row.import_path)
+
+
+def filter_rows(rows, search="", view="All", values=None):
     """Pick which PartStatus rows to show.
 
-    search      matches part number, name or description, ignoring capitals
+    search      the search box's text (see search_text.py: plain text is "contains", * and ? are wildcards)
     view        one of VIEWS
-    show_void   void parts are hidden unless this is True
+    values      values(row) -> the texts to search in (the 'search in' box's columns); by default the part
+                number, name, description and where it was imported from
     """
-    needle = (search or "").strip().lower()
-    shown = []
-    for row in rows:
-        if row.kind == "void" and not show_void:
-            continue
-        if view == "Mine" and row.kind != "mine":
-            continue
-        if view == "Checked out" and row.kind not in ("mine", "theirs"):
-            continue
-        if view == "Released" and row.kind != "released" and not getattr(row, "released_revision", ""):
-            continue
-        if needle and not any(needle in text.lower() for text in
-                              (str(row.pn), row.name, row.description, row.import_path)):
-            continue
-        shown.append(row)
-    return shown
+    return search_rows([row for row in rows if in_view(row, view)], search, values)
+
+
+def search_rows(rows, search, values=None):
+    """The rows that match the search text, whatever their view."""
+    match = search_text.matcher(search)
+    values = values or default_search_values
+    return [row for row in rows if search_text.matches_any(match, values(row))]
 
 
 def _natural_key(text):

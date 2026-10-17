@@ -146,6 +146,15 @@ class JobQueue:
         with self._cv:
             return {part: job.label for job in self._jobs for part in job.parts}
 
+    def snapshot(self):
+        """[(label, state)] for every job not yet finished, the running one first, then the waiting ones in order."""
+        with self._cv:
+            running = [self._running] if self._running is not None else []
+            rest = [job for job in self._jobs if job is not self._running]
+            order = {"finishing": 0, "queued": 1}
+            rest.sort(key=lambda job: order.get(job.state, 2))
+            return [(job.label, job.state) for job in running + rest]
+
     def wait_idle(self, timeout=10.0):
         """Block until nothing is left (for tests and for closing). Returns True if it got there in time."""
         end = time.monotonic() + timeout

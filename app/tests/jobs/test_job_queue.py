@@ -96,6 +96,19 @@ class Queue(unittest.TestCase):
         self.assertEqual(c.queue.pending_parts(), {})
         self.assertFalse(c.queue.active())
 
+    def test_snapshot_lists_the_running_job_first(self):
+        collector = Collector()
+        gate = threading.Event()
+        collector.queue.submit(jobs.Job("First", lambda: gate.wait(5)))
+        self.assertTrue(wait_for(lambda: collector.queue.snapshot()[:1] == [("First", "running")]))
+        collector.queue.submit(jobs.Job("Second", lambda: None))
+        self.assertEqual(collector.queue.snapshot(), [("First", "running"), ("Second", "queued")])
+        gate.set()
+        self.assertTrue(wait_for(lambda: len(collector.outcomes) == 2))
+        self.assertEqual([state for _label, state in collector.queue.snapshot()], ["finishing", "finishing"])
+        collector.finish_all()
+        self.assertEqual(collector.queue.snapshot(), [])
+
     def test_only_the_newest_waiting_refresh_is_kept(self):
         c, ran = Collector(), []
         gate = threading.Event()

@@ -236,6 +236,22 @@ class TestButtonStates(unittest.TestCase):
         self.assertEqual(action_rules.NAME["reopen"], "unrelease")
         self.assertEqual(action_rules.PAST["reopen"], "Unreleased")
 
+    def why(self, action, ticked=(), highlighted=(), pending=None):
+        return action_rules.why_not(action, [self.P[b] for b in ticked], [self.P[b] for b in highlighted], BY_PN,
+                                    pending)
+
+    def test_greyed_buttons_say_why(self):
+        self.assertEqual(self.why("checkout", ticked=[1]), "")
+        self.assertEqual(self.why("checkout"), "Tick a part's box first.")
+        self.assertEqual(self.why("open"), "Click a part first.")
+        self.assertEqual(self.why("checkin", ticked=[1]), "Can't check in 00001-001: Available.")
+        self.assertEqual(self.why("revise", ticked=[4]), "")
+        self.assertEqual(self.why("edit", ticked=[2, 1]), "Tick just one part to edit the details of.")
+        self.assertEqual(self.why("history", ticked=[1, 2]), "Click a part first.")
+        self.assertEqual(self.why("checkin", ticked=[2], pending={"HCR-00002-001": "Checking in 1 part"}),
+                         "00002-001 is busy: checking in 1 part.")
+        self.assertEqual(self.why("open", highlighted=[2], pending={"HCR-00002-001": "Checking in 1 part"}), "")
+
 
 if __name__ == "__main__":
     unittest.main()

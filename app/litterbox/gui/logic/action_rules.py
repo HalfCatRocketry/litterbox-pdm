@@ -125,6 +125,30 @@ def action_available(action, ticked, highlighted, rows_by_pn, pending=None):
     return True
 
 
+def why_not(action, ticked, highlighted, rows_by_pn, pending=None):
+    """Why an action's button is greyed out, for its tooltip ("" if it can be used)."""
+    if action_available(action, ticked, highlighted, rows_by_pn, pending):
+        return ""
+    looking = action in VIEW_ONLY or action == "history"
+    targets = choose_targets("open" if action == "history" else action, ticked, highlighted)
+    if not targets:
+        return "Click a part first." if looking else "Tick a part's box first."
+    name = NAME.get(action, "see the details of")
+    if (action == "history" or action not in MULTI) and len(targets) > 1:
+        return f"Tick just one part to {name}."
+    if pending and not looking:
+        for pn in targets:
+            if str(pn) in pending:
+                return f"{pn.short} is busy: {pending[str(pn)].lower()}."
+    for pn in targets:
+        row = rows_by_pn.get(pn)
+        if row is None:
+            return f"{pn.short} is not in the list."
+        if row.kind not in ALLOWED_KINDS.get(action, ()):
+            return f"Can't {name} {pn.short}: {row.state}."
+    return ""
+
+
 def button_states(ticked, highlighted, rows_by_pn, pending=None):
     """{button text: True if it should be usable} for the main window's selection-dependent buttons."""
     return {text: action_available(action, ticked, highlighted, rows_by_pn, pending)

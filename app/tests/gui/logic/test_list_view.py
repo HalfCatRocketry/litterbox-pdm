@@ -12,14 +12,23 @@ class TestFilterRows(unittest.TestCase):
     def test_default_hides_void(self):
         self.assertEqual(self.bases(), [1, 2, 3, 4, 6])
 
-    def test_show_void(self):
-        self.assertEqual(self.bases(show_void=True), [1, 2, 3, 4, 5, 6])
+    def test_void_parts_have_their_own_view(self):
+        self.assertEqual(self.bases(view="Void"), [5])
 
     def test_views(self):
         self.assertEqual(self.bases(view="Mine"), [2])
         self.assertEqual(self.bases(view="Checked out"), [2, 3])
         self.assertEqual(self.bases(view="Released"), [4])
         self.assertEqual(self.bases(view="All"), [1, 2, 3, 4, 6])
+        self.assertEqual(self.bases(view="Not downloaded"), [])
+
+    def test_not_downloaded_view_and_counts(self):
+        from litterbox.parts.part_status import PartStatus
+        from litterbox.core.part_number import PN
+        rows = ROWS + [PartStatus(PN("HCR", 7, 1), "Stub", "in_work", "Available", "ok", not_downloaded=True)]
+        self.assertEqual([r.pn.base for r in list_view.filter_rows(rows, view="Not downloaded")], [7])
+        self.assertEqual(list_view.view_counts(rows), {"All": 6, "Mine": 1, "Checked out": 2, "Released": 1,
+                                                       "Not downloaded": 1, "Void": 1})
 
     def test_search_matches_number_or_description_ignoring_case(self):
         self.assertEqual(self.bases(search="UPRIGHT"), [1, 2])
@@ -31,9 +40,20 @@ class TestFilterRows(unittest.TestCase):
     def test_filters_combine(self):
         self.assertEqual(self.bases(search="upright", view="Mine"), [2])
 
-    def test_void_hidden_even_when_searched_unless_shown(self):
+    def test_void_hidden_even_when_searched_unless_in_the_void_view(self):
         self.assertEqual(self.bases(search="scrapped"), [])
-        self.assertEqual(self.bases(search="scrapped", show_void=True), [5])
+        self.assertEqual(self.bases(search="scrapped", view="Void"), [5])
+
+    def test_wildcards_match_the_whole_value(self):
+        self.assertEqual(self.bases(search="*upright"), [1, 2])
+        self.assertEqual(self.bases(search="F*t"), [1])           # "Front upright"
+        self.assertEqual(self.bases(search="upr*"), [])            # must start with "upr"
+        self.assertEqual(self.bases(search="hcr-0000?-001"), [1, 2, 3, 4, 6])
+
+    def test_search_in_chosen_values_only(self):
+        only_numbers = lambda r: (str(r.pn),)
+        self.assertEqual(self.bases(search="upright", values=only_numbers), [])
+        self.assertEqual(self.bases(search="*-00003-*", values=only_numbers), [3])
 
 
 class TestFileTypes(unittest.TestCase):
@@ -72,7 +92,7 @@ class TestSearchFields(unittest.TestCase):
         rows = [row(1, name="Front upright", description="6061 tag: suspension"),
                 row(2, name="Valve body", import_path=r"D:\Old\valve_v3.SLDPRT")]
         def found(text):
-            return [str(r.pn) for r in list_view.filter_rows(rows, text, "All", False)]
+            return [str(r.pn) for r in list_view.filter_rows(rows, text, "All")]
         self.assertEqual(found("upright"), ["HCR-00001-001"])
         self.assertEqual(found("SUSPENSION"), ["HCR-00001-001"])
         self.assertEqual(found("valve_v3"), ["HCR-00002-001"])
