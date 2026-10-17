@@ -12,9 +12,9 @@ class TickAndSaveWiring(unittest.TestCase):
         self.PN = PN
         app = self.gui.app.App.__new__(self.gui.app.App)
         app.ticked = set()
-        app.tree = SortableFakeTree(["tick", "pn"])
+        app.tree = SortableFakeTree(["pn"])
         for pn in ("HCR-00001-001", "HCR-00002-001", "HCR-00003-001"):
-            app.tree.insert("", "end", iid=pn, values=["\u2610", pn])
+            app.tree.insert("", "end", iid=pn, values=[pn])
         self.said = []
         app._say = lambda text, tone="normal": self.said.append(text)
         self.app = app
@@ -22,7 +22,7 @@ class TickAndSaveWiring(unittest.TestCase):
     def test_ticking_leaves_the_highlight_alone(self):
         self.app.tree.selection_set("HCR-00003-001")
         self.app._set_ticks(["HCR-00001-001", "HCR-00002-001"], True)
-        self.assertEqual(self.app.tree.rows["HCR-00001-001"]["values"][0], "\u2611")
+        self.assertEqual(self.app.ticked, {"HCR-00001-001", "HCR-00002-001"})
         self.assertEqual(self.app.tree.selection(), ("HCR-00003-001",) if isinstance(self.app.tree.selection(), tuple)
                          else ["HCR-00003-001"])
 
@@ -49,8 +49,8 @@ class TickAndSaveWiring(unittest.TestCase):
 
     def _click(self, iid, shift=False):
         tree = self.app.tree
-        tree.identify_region = lambda x, y: "cell"
-        tree.identify_column = lambda x: "#1"
+        tree.identify_region = lambda x, y: "tree"
+        tree.identify_column = lambda x: "#0"
         tree.identify_row = lambda y: iid
         return self.app._on_tree_click(self.SimpleNamespace(x=1, y=1, state=1 if shift else 0))
 
@@ -123,7 +123,7 @@ class TickAndSaveWiring(unittest.TestCase):
         self.app._deselect_all()
         self.assertEqual(self.app.ticked, set())
         self.assertEqual(tuple(self.app.tree.selection()), ())
-        self.assertEqual(self.app.tree.rows["HCR-00001-001"]["values"][0], "\u2610")
+        self.assertEqual(self.app.ticked, set())
 
     def test_shift_click_in_the_references_window(self):
         from types import SimpleNamespace

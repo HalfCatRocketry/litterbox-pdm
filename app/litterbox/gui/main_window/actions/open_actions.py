@@ -14,7 +14,6 @@ from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import download_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import opening_text
-from litterbox.gui.windows import eco_list_window
 from litterbox.gui.windows import eco_view_window
 from litterbox.gui.windows import history_window
 from litterbox.parts import downloads
@@ -87,7 +86,7 @@ class OpenActions:
         self.open_part(drawing=True)
 
     def show_history(self, event=None):
-        if event is not None and self.tree.identify_column(event.x) == "#1":
+        if event is not None and self.tree.identify_column(event.x) == "#0":
             return                                              # double-clicking a tick box isn't asking for history
         chosen = self._selected_pns("open")                    # the highlighted row, or the one selected part
         if len(chosen) != 1:
@@ -104,9 +103,11 @@ class OpenActions:
                       on_view_eco=self.view_eco)
 
     def show_ecos(self):
-        """The ECOs window: every engineering change order in your copy of the vault."""
-        ecos, problems = eco_store.load_all(self.repo())
-        eco_list_window.EcoListWindow(self, ecos, problems, lambda eco: eco_view_window.EcoViewWindow(self, eco))
+        """The ECOs screen: every engineering change order in your copy of the vault."""
+        self.show_screen("ecos")
+
+    def _view_eco_object(self, eco):
+        eco_view_window.EcoViewWindow(self, eco)
 
     def view_eco(self, number):
         try:

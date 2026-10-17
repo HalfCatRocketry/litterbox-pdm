@@ -295,7 +295,7 @@ class WorkflowWiring(unittest.TestCase):
     def _draft_window(self, roles, templates=None):
         directory = self.gui.team_model.Directory(
             [self.gui.team_model.Person("bea", "Bea", "", ["Bea"], "owner", list(roles))], list(roles))
-        draft = self.gui.team_window.TeamDraft(directory, templates or {}, "bea")
+        draft = self.gui.team_screen.TeamDraft(directory, templates or {}, "bea")
         reloaded = []
         window = self.SimpleNamespace(winfo_exists=lambda: True, reload=lambda: reloaded.append(1), draft=draft)
         self.app._may = lambda action: True

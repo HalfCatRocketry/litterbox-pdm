@@ -1,6 +1,6 @@
 """
-team_window.py - the Team window: people, roles, workflows and vault settings (changes are drafted,
-then saved once).
+team_screen.py - the Team screen: people, roles, workflows and vault settings (changes are drafted, then saved
+once). A screen of the main window, chosen in the sidebar; unsaved changes stay while you look at other screens.
 """
 
 from tkinter import ttk
@@ -9,7 +9,6 @@ import customtkinter as ctk
 
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
-from litterbox.gui import window_chrome
 from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.dialogs.team import signing_dialog
 from litterbox.gui.logic import team_text
@@ -21,22 +20,20 @@ from litterbox.team.draft import TeamDraft
 from litterbox.workflows import workflow_store
 
 
-class TeamWindow(ctk.CTkToplevel):
+class TeamScreen(ctk.CTkFrame):
     """The team list: who may do what. Everyone can look; Admins and the Owner can change it."""
 
-    def __init__(self, app):
-        super().__init__(app)
-        window_chrome.set_window_icon(self)
+    def __init__(self, master, app):
+        super().__init__(master, fg_color="transparent")
         self.app = app
-        self.title("Team")
-        self.geometry("1000x560")
-        self.minsize(760, 420)
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
-        self.summary = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=940)
-        self.summary.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 6))
+        self.rowconfigure(2, weight=1)
+        ctk.CTkLabel(self, text="Team", font=ctk.CTkFont(size=18, weight="bold"), anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=16, pady=(12, 0))
+        self.summary = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=900)
+        self.summary.grid(row=1, column=0, sticky="ew", padx=16, pady=(2, 6))
         frame = ctk.CTkFrame(self, fg_color=theme.BG_PANEL, corner_radius=10)
-        frame.grid(row=1, column=0, sticky="nsew", padx=20)
+        frame.grid(row=2, column=0, sticky="nsew", padx=16)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
         columns = (("name", "Name", 170), ("email", "Email", 190), ("access", "Access", 70), ("roles", "Roles", 200),
@@ -50,16 +47,13 @@ class TeamWindow(ctk.CTkToplevel):
         scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 4))
         self.tree.configure(yscrollcommand=scroll.set)
         self.buttons = ctk.CTkFrame(self, fg_color="transparent")
-        self.buttons.grid(row=2, column=0, sticky="ew", padx=20, pady=(14, 4))
-        self.status = ctk.CTkLabel(self, text="", text_color=theme.MUTED, anchor="w", justify="left", wraplength=940)
-        self.status.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 12))
+        self.buttons.grid(row=3, column=0, sticky="ew", padx=16, pady=(14, 4))
+        self.status = ctk.CTkLabel(self, text="", text_color=theme.MUTED, anchor="w", justify="left", wraplength=900)
+        self.status.grid(row=4, column=0, sticky="ew", padx=16, pady=(0, 12))
         self.busy = False
         self.draft = None               # your unsaved changes (team_draft.TeamDraft); None until the team exists
         self.save_button = None
-        self.protocol("WM_DELETE_WINDOW", self.close)
-        self.bind("<Escape>", lambda event: self.close())
         self.reload()
-        self.after(100, self.lift)
 
     BUTTONS_PER_ROW = 5                 # more than this and the buttons start a new row instead of running off
 
@@ -71,11 +65,13 @@ class TeamWindow(ctk.CTkToplevel):
                     pady=(0, 6), sticky="w")
         return button
 
-    def close(self):
-        """Close the window; if there are unsaved changes, ask first."""
-        if self.draft is not None and self.draft.dirty and not confirm_dialogs.ask_discard(self, "all the unsaved team changes"):
-            return
-        self.destroy()
+    def may_leave(self):
+        """Before the org changes: True if there are no unsaved changes, or the person agrees to lose them."""
+        if self.draft is not None and self.draft.dirty and not confirm_dialogs.ask_discard(
+                self.winfo_toplevel(), "all the unsaved team changes"):
+            return False
+        self.draft = None
+        return True
 
     def _new_draft(self):
         identity = self.app.identity
@@ -144,7 +140,6 @@ class TeamWindow(ctk.CTkToplevel):
         if self.draft is not None and (identity.allows("manage_people")[0] or identity.allows("manage_workflows")[0]):
             self.save_button = self._button("Save", lambda: self.app.save_team(self), theme.GREEN, theme.GREEN_HOVER, 100)
             self.save_button.configure(state="normal" if self.draft.dirty and not self.busy else "disabled")
-        self._button("Close", self.close)
         for iid in keep:                                    # keep the same person selected after a change
             if self.tree.exists(iid):
                 self.tree.selection_set(iid)

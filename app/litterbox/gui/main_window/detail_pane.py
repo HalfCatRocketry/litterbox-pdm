@@ -1,0 +1,120 @@
+"""
+detail_pane.py - the details pane beside the parts list: it follows the highlighted part (the blue row), showing
+its status, Details, History, and what it uses and where it is used. The Uses and Where used tabs are read in the
+background, only when one of them is showing. The pane can be hidden (View > Details pane) or popped out into a
+window of its own.
+"""
+
+from litterbox.core.part_number import parse as parse_pn
+from litterbox.errors import LitterboxError
+from litterbox.gui.logic import history_text
+from litterbox.gui.logic import status_icons
+from litterbox.gui.logic import ui_scale
+from litterbox.records import record_model
+from litterbox.records import record_store
+from litterbox.references import reference_model
+from litterbox.references import reference_queries
+from litterbox.user import settings
+
+REFERENCE_TABS = ("Uses", "Where used")
+
+
+class DetailPane:
+    """the details pane (a part of the main window, App)."""
+
+    pane_pn = None
+
+    def details_shown(self):
+        return str(self.detail_frame) in [str(p) for p in self.parts_screen.panes()]
+
+    def set_details_pane(self, shown):
+        """Show or hide the details pane (remembered in settings.yaml as details_pane)."""
+        if shown == self.details_shown():
+            return
+        if shown:
+            self.parts_screen.add(self.detail_frame, weight=0)
+            self.pane_pn = None
+            self._show_details()
+        else:
+            self.parts_screen.forget(self.detail_frame)
+        self.settings["details_pane"] = bool(shown)
+        settings.save(self.settings)
+
+    def _selection_changed(self):
+        """The highlight moved (or the list was redrawn): update the buttons, and the pane a moment later, so
+        running down the list with the arrow keys stays quick."""
+        self._update_buttons()
+        if getattr(self, "pane_view", None) is None:
+            return
+        job = getattr(self, "_pane_job", None)
+        if job is not None:
+            self.after_cancel(job)
+        self._pane_job = self.after(120, self._show_details)
+
+    def _pane_part(self):
+        chosen = self.tree.selection()
+        return parse_pn(chosen[0]) if len(chosen) == 1 else None
+
+    def _show_details(self):
+        self._pane_job = None
+        if not self.details_shown():
+            return
+        pn = self._pane_part()
+        row = self.rows_by_pn.get(pn) if pn is not None else None
+        if row is None:
+            self.pane_pn = None
+            self.pane_icon.configure(image="")
+            self.pane_title.configure(text="")
+            self.pane_state.configure(text="Click a part to see its details.")
+            self.pane_view.grid_remove()
+            return
+        self.pane_icon.configure(image=self.icons.status(row.kind, self._px(ui_scale.ICON + 4)))
+        self.pane_title.configure(text=f"{row.pn.short}   {row.name}")
+        busy = self.jobs.pending_parts().get(str(row.pn))
+        label = status_icons.status_label(row.kind)
+        state = row.state if row.state.lower().startswith(label.lower()) else f"{label}: {row.state}"
+        self.pane_state.configure(text=state + (f"\nBusy: {busy}" if busy else ""))
+        if pn == self.pane_pn and getattr(self, "_pane_rows", None) is self.rows:
+            return                                          # the same part, and nothing reloaded: keep the tab as is
+        self.pane_pn, self._pane_rows = pn, self.rows
+        try:
+            record = record_store.load(self.repo(), pn)
+        except record_model.RegistryError as e:
+            self.pane_state.configure(text=f"{state}\n\nIts record can't be read: {e}")
+            self.pane_view.grid_remove()
+            return
+        self.pane_view.grid()
+        self.pane_view.show(record, history_text.row_revisions(row))
+        if self.pane_view.current_tab() in REFERENCE_TABS:
+            self._load_pane_references(pn)
+
+    def _pane_tab_changed(self, name):
+        if name in REFERENCE_TABS and self.pane_pn is not None:
+            self._load_pane_references(self.pane_pn)
+
+    def _load_pane_references(self, pn):
+        """Read what the part uses and where it is used, in the background, then fill the two tabs."""
+        if getattr(self, "_pane_refs_for", None) == (pn, id(self.rows)):
+            return
+        self._pane_refs_for = (pn, id(self.rows))
+        self.pane_view.show_references(None, None, "Reading...")
+        repo = self.repo()
+
+        def load():
+            try:
+                records = reference_model.load_records(repo)
+                return reference_queries.uses(repo, pn, None, records), reference_queries.where_used(repo, pn, records), ""
+            except LitterboxError as e:
+                return None, None, str(e)
+
+        def show(result):
+            if self.pane_pn != pn:
+                return                                  # another part was clicked meanwhile
+            uses, used, problem = result
+            self.pane_view.show_references(uses, used, f"Couldn't read the references: {problem}" if problem else "")
+
+        self.run_task(load, "", on_success=show, refresh=False, is_refresh=True, label="Reading references")
+
+    def _pane_open(self, rev, drawing):
+        if self.pane_pn is not None:
+            self._open_revision(self.pane_pn, rev, drawing)

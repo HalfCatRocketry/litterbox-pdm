@@ -102,9 +102,9 @@ def shift_held(event):
 
 def tick_text(count):
     if not count:
-        return "Nothing selected."
-    return (f"{count} part{'s' if count != 1 else ''} selected. Check Out, Check In, Save Progress and Undo Checkout "
-            "apply to the selected parts.")
+        return "Nothing ticked."
+    return (f"{count} part{'s' if count != 1 else ''} ticked. Check Out, Check In and the other changes act on "
+            "the ticked parts.")
 
 
 def row_tags(kind, ticked):

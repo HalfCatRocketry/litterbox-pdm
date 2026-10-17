@@ -227,7 +227,7 @@ class Wiring(unittest.TestCase):
         cls.source = gui_source()
 
     def test_the_banner_and_its_buttons_exist(self):
-        for text in ("self.banner_title", 'text="Details..."', 'text="Dismiss"', "class ErrorDetailsWindow",
+        for text in ("self.status_state", 'text="Details..."', 'text="Dismiss"', "class ErrorDetailsWindow",
                      "jobs.READY: theme.GREEN", "jobs.WORKING: theme.BANNER_YELLOW", "jobs.ERROR: theme.RED"):
             self.assertIn(text, self.source)
 

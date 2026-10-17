@@ -5,7 +5,28 @@ theme.py - the window's colours, in one place (row colours of the parts list inc
 
 
 # Colors
+BG = "#242424"                      # the window (CustomTkinter's dark background)
+
+
 BG_PANEL = "#2b2b2b"
+
+
+BG_BAR = "#1b1b1b"                  # the menu bar and the status bar
+
+
+BG_SIDEBAR = "#202020"
+
+
+BG_HEADING = "#1f1f1f"              # table headings
+
+
+BG_HOVER = "#2f2f2f"                # a sidebar entry under the mouse
+
+
+BG_CHOSEN = "#2c3e50"               # the sidebar entry that is showing
+
+
+TEXT = "#e6e6e6"
 
 
 ACCENT = "#1f6aa5"
@@ -58,5 +79,10 @@ ROW_COLORS = {
     "released": "#6cb6ff",
     "cots": "#4fc1c9",        # purchased part
     "void": "#7a7a7a",
+    "pending": "#b39ddb",     # waiting for sign-off
     "error": "#e06c75",
 }
+
+
+# The status icons (gui/logic/status_icons.py): each kind's colour, the tick box, and the badges.
+ICON_COLORS = dict(ROW_COLORS, box="#949a9f", accent=ACCENT, busy=BANNER_YELLOW, cloud="#9ecbff")

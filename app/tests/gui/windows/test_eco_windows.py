@@ -116,16 +116,17 @@ class DetailsTab(Setup):
             on_view_eco=self.viewed.append)
 
     def test_the_latest_revision_is_shown_first_and_another_can_be_picked(self):
-        self.assertEqual(self.window.rev_var.get(), "B")
-        self.assertEqual(dict(self.window.shown)["ECO"], "None")
-        self.window._view_eco()
+        view = self.window.view
+        self.assertEqual(view.rev_var.get(), "B")
+        self.assertEqual(dict(view.shown)["ECO"], "None")
+        view._view_eco()
         self.assertEqual(self.viewed, [])
-        self.window.rev_var.set("A")
-        self.window._show_revision()
-        self.assertTrue(dict(self.window.shown)["ECO"].startswith("ECO-0001"))
-        self.window._view_eco()
+        view.rev_var.set("A")
+        view._show_revision()
+        self.assertTrue(dict(view.shown)["ECO"].startswith("ECO-0001"))
+        view._view_eco()
         self.assertEqual(self.viewed, ["ECO-0001"])
-        self.assertEqual(len(self.window.tree.rows), 1)          # the History tab is still there
+        self.assertEqual(len(view.tree.rows), 1)          # the History tab is still there
 
 
 class EcoWindows(Setup):
@@ -136,7 +137,8 @@ class EcoWindows(Setup):
 
     def test_the_list_searches_and_views(self):
         viewed = []
-        window = self.gui.eco_list_window.EcoListWindow(FakeParent(), self.ecos(), {}, viewed.append)
+        window = self.gui.eco_screen.EcoScreen(FakeParent(), viewed.append)
+        window.show(self.ecos(), {})
         self.assertEqual(list(window.tree.rows), ["ECO-0002", "ECO-0001"])
         window.search_var.set("steel")
         self.assertEqual(list(window.tree.rows), ["ECO-0002"])
@@ -158,14 +160,22 @@ class EcoWindows(Setup):
         app = self.gui.app.App.__new__(self.gui.app.App)
         app.repo = lambda: "C:/vault"
         opened = []
-        replace(self, self.gui.eco_store, "load_all", lambda repo: (self.ecos(), {}))
-        replace(self, self.gui.eco_list_window, "EcoListWindow",
-                lambda parent, ecos, problems, on_view: opened.append(("list", [e.number for e in ecos])))
+        app.show_screen = lambda name: opened.append(("screen", name))
         replace(self, self.gui.eco_view_window, "EcoViewWindow", lambda parent, eco: opened.append(("one", eco.number)))
         app.show_ecos()
         replace(self, self.gui.eco_store, "load", lambda repo, number: self.ecos()[1])
         app.view_eco("ECO-0001")
-        self.assertEqual(opened, [("list", ["ECO-0002", "ECO-0001"]), ("one", "ECO-0001")])
+        self.assertEqual(opened, [("screen", "ecos"), ("one", "ECO-0001")])
+
+    def test_the_ecos_screen_is_filled_from_the_vault(self):
+        app = self.gui.app.App.__new__(self.gui.app.App)
+        app.repo = lambda: "C:/vault"
+        shown = []
+        from types import SimpleNamespace
+        app.screens = {"ecos": SimpleNamespace(show=lambda ecos, problems: shown.append([e.number for e in ecos]))}
+        replace(self, self.gui.eco_store, "load_all", lambda repo: (self.ecos(), {}))
+        app._load_ecos()
+        self.assertEqual(shown, [["ECO-0002", "ECO-0001"]])
 
         def missing(repo, number):
             raise eco_model.EcoError("There is no ECO-0009 in your copy of the vault. Try Get Latest.")

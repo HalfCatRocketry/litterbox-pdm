@@ -171,9 +171,9 @@ class TestTicks(unittest.TestCase):
                          "Bea Jones")
 
     def test_tick_text(self):
-        self.assertEqual(list_view.tick_text(0), "Nothing selected.")
-        self.assertTrue(list_view.tick_text(1).startswith("1 part selected."))
-        self.assertTrue(list_view.tick_text(3).startswith("3 parts selected."))
+        self.assertEqual(list_view.tick_text(0), "Nothing ticked.")
+        self.assertTrue(list_view.tick_text(1).startswith("1 part ticked."))
+        self.assertTrue(list_view.tick_text(3).startswith("3 parts ticked."))
 
     def test_person_unchanged(self):
         from litterbox.team import team_model

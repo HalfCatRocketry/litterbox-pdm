@@ -1,5 +1,5 @@
 """
-team_admin.py - what the Team window's buttons do: who am I, setting up the team, people, roles,
+team_admin.py - what the Team screen's buttons do: who am I, setting up the team, people, roles,
 handing over the Owner role, vault settings, workflows, and saving the draft.
 """
 
@@ -15,7 +15,6 @@ from litterbox.gui.logic import error_text
 from litterbox.gui.logic import team_text
 from litterbox.gui.logic import workflow_editor
 from litterbox.gui.widgets import release_button
-from litterbox.gui.windows import team_window
 from litterbox.team import team_editing
 from litterbox.team import team_identity
 from litterbox.team import team_model
@@ -27,10 +26,12 @@ from litterbox.workflows import workflow_templates
 
 
 class TeamAdmin:
-    """what the Team window's buttons do: who am I, setting up the team, people, roles, (a part of the main window, App)."""
+    """what the Team screen's buttons do: who am I, setting up the team, people, roles, (a part of the main window, App)."""
 
     def _team_windows(self):
-        return [w for w in self.winfo_children() if isinstance(w, team_window.TeamWindow) and w.winfo_exists()]
+        """The Team screen, once it has been opened (a list, so callers can loop over it)."""
+        screen = getattr(self, "screens", {}).get("team")
+        return [screen] if screen is not None else []
 
     def _show_identity(self):
         text, tone = team_text.identity_banner(self.identity)
@@ -38,13 +39,12 @@ class TeamAdmin:
         self._refresh_tasks()
 
     def show_team(self):
-        release_button.click_log("opening the Team window")
-        team_window.TeamWindow(self)
-        release_button.click_log("the Team window is built")
+        release_button.click_log("opening the Team screen")
+        self.show_screen("team")
 
     def who_am_i(self):
         repo = self.repo()
-        parent = self._popup_parent()                   # the Team window if that's where you pressed it
+        parent = self._popup_parent()
 
         def show(who):
             self.identity = who
@@ -69,12 +69,11 @@ class TeamAdmin:
     def _team_changed(self, who):
         self.identity = who
         self._show_identity()
-        for child in self.winfo_children():
-            if isinstance(child, team_window.TeamWindow) and child.winfo_exists():
-                child.reload()
+        for screen in self._team_windows():
+            screen.reload()
 
     def _stage(self, window, label, change, needs_owner=False):
-        """Add a change to the Team window's unsaved changes. Returns "" if it was taken, else why not."""
+        """Add a change to the Team screen's unsaved changes. Returns "" if it was taken, else why not."""
         draft = window.draft
         if draft is None:
             return "The team isn't set up yet."
@@ -203,7 +202,7 @@ class TeamAdmin:
         workflows_dialog.WorkflowsDialog(window, draft.directory.roles, draft.templates, apply=apply).show()
 
     def save_team(self, window):
-        """The Team window's Save: upload every staged change in one go."""
+        """The Team screen's Save: upload every staged change in one go."""
         draft = window.draft
         if draft is None or not draft.dirty:
             return

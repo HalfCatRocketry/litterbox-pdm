@@ -50,6 +50,12 @@ def current_org(data):
     return next(iter(orgs), None)
 
 
+def org_choices(data):
+    """The header's org box: every known org ("No org" when there are none). Adding and setting up orgs is in the
+    File menu."""
+    return list(known_orgs(data)) or ["No org"]
+
+
 def org_menu_values(data):
     """The dropdown entries: every known org, then the two setup actions."""
     return list(known_orgs(data)) + [ADD_ORG, CREATE_VAULT, EDIT_ORG]

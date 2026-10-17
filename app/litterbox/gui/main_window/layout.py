@@ -1,5 +1,15 @@
 """
-layout.py - building the main window: header, banner, buttons, the parts list and the log.
+layout.py - building the main window: the menu bar, the header (org, who you are, My Tasks, Get Latest), the
+sidebar, the parts screen (toolbar, search, list) beside the details pane, the log drawer and the status bar.
+Each area's behaviour lives in its own file (menus.py, sidebar.py, parts_list.py, detail_pane.py, status_bar.py).
+
+    +-----------------------------------------------------------------------+
+    | File  Vault  View  Help                               [logo] Litterbox |
+    | [HCR v]  C:\\Litterbox\\hcr-litterbox      Austin (Admin)  My Tasks  Get Latest |
+    | sidebar |  toolbar / search / parts list           |  details pane     |
+    | (log drawer, when open)                                                |
+    | * Ready  .  what just happened                     SolidWorks  Jobs  Log |
+    +-----------------------------------------------------------------------+
 """
 
 import tkinter as tk
@@ -7,199 +17,233 @@ from tkinter import ttk
 
 import customtkinter as ctk
 
-from litterbox import version
+from litterbox.gui import scaling
 from litterbox.gui import theme
-from litterbox.gui.logic import action_rules
-from litterbox.gui.logic import list_view
+from litterbox.gui.logic import list_columns
 from litterbox.gui.logic import org_menu
+from litterbox.gui.panes import part_details
+from litterbox.gui.widgets import menu_bar
 from litterbox.gui.widgets import release_button
-from litterbox.gui.widgets import table_sorting
+from litterbox.gui.widgets import tooltip
+
+
+# The four everyday buttons along the top of the list. Everything else is in the menus beside them.
+EVERYDAY = (("Check Out", "check_out", theme.ACCENT, "#18527f"),
+            ("Check In", "check_in", theme.GREEN, theme.GREEN_HOVER),
+            ("Save Progress", "save_progress", theme.TEAL, theme.TEAL_HOVER),
+            ("Undo Checkout", "undo_checkout", theme.RED, theme.RED_HOVER))
 
 
 class WindowLayout:
-    """building the main window: header, banner, buttons, the parts list and the log. (a part of the main window, App)."""
-
-    def _button(self, parent, text, command, **options):
-        button = release_button.ReleaseButton(parent, text=text, command=command, **options)
-        self.buttons.append(button)
-        if text in action_rules.BUTTON_ACTIONS:
-            self.action_buttons[text] = button
-        return button
+    """building the main window (a part of the main window, App)."""
 
     def _build_ui(self):
+        self.configure(fg_color=theme.BG)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)
+        scaling.style_tables(scaling.scale_of(self))
+        self.menu_bar = menu_bar.MenuBar(self, self._menus(), logo=self.icons.logo(self._px(18)))
+        self.menu_bar.grid(row=0, column=0, sticky="ew")
+        self._build_header()
+        body = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        body.grid(row=2, column=0, sticky="nsew")
+        body.columnconfigure(1, weight=1)
+        body.rowconfigure(0, weight=1)
+        self._build_sidebar(body)
+        self.content = ctk.CTkFrame(body, fg_color="transparent", corner_radius=0)
+        self.content.grid(row=0, column=1, sticky="nsew")
+        self.content.columnconfigure(0, weight=1)
+        self.content.rowconfigure(0, weight=1)
+        self._build_parts_screen(self.content)
+        self._build_status_bar()
+        self.bind("<Configure>", self._on_window_resized, add="+")
 
-        # Header and vault folder
+    def _px(self, size):
+        """A size at 100%, in pixels for the plain Tk parts (see gui/scaling.py)."""
+        return max(1, round(size * getattr(self, "scale", 1.0)))
+
+    # -- header ------------------------------------------------------------------------------------------------
+    def _build_header(self):
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 6))
-        header.columnconfigure((0, 2), weight=1)
-        title_row = ctk.CTkFrame(header, fg_color="transparent")
-        title_row.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(title_row, text="Litterbox", font=ctk.CTkFont(size=26, weight="bold"),
-                     anchor="w").grid(row=0, column=0, sticky="w")
+        header.grid(row=1, column=0, sticky="ew", padx=12, pady=(8, 6))
+        header.columnconfigure(2, weight=1)
         self.org_var = tk.StringVar(value=self.org or "No org")
         self.org_menu = ctk.CTkOptionMenu(
-            title_row, variable=self.org_var, values=org_menu.org_menu_values(self.settings), width=120,
-            height=32, fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT,
-            command=self.on_org_chosen)
-        self.org_menu.grid(row=0, column=1, sticky="w", padx=(16, 0))
-        self.buttons.append(self.org_menu)
-        who_box = ctk.CTkFrame(header, fg_color="transparent")
-        who_box.grid(row=0, column=2, rowspan=3, sticky="ne")
-        self.identity_label = ctk.CTkLabel(who_box, text="", text_color=theme.MUTED, anchor="e")
-        self.identity_label.grid(row=0, column=0, padx=(0, 10))
-        self.tasks_button = self._button(who_box, "My Tasks", self.show_tasks, width=100, height=30, fg_color=theme.GRAY,
-                                         hover_color=theme.GRAY_HOVER)
-        self.tasks_button.grid(row=0, column=1, padx=(0, 6))
-        team_button = self._button(who_box, "Team...", self.show_team, width=90, height=30, fg_color=theme.GRAY,
-                                   hover_color=theme.GRAY_HOVER)
-        team_button.grid(row=0, column=2)
-        ecos_button = self._button(who_box, "ECOs...", self.show_ecos, width=80, height=30, fg_color=theme.GRAY,
-                                   hover_color=theme.GRAY_HOVER)
-        ecos_button.grid(row=0, column=3, padx=(6, 0))
-        for button in (team_button, self.tasks_button, ecos_button):
-            self.buttons.remove(button)         # opening these windows only reads, so they work while busy
-        self.update_button = ctk.CTkButton(
-            who_box, text=f"Version {version.display()}  -  check for updates", width=0, height=22, fg_color="transparent",
-            hover_color=theme.GRAY_HOVER, text_color=theme.MUTED, font=ctk.CTkFont(size=11), command=self.check_for_updates)
-        self.update_button.grid(row=1, column=0, columnspan=4, sticky="e", pady=(4, 0))
-        ctk.CTkLabel(header, text="Shared vault check-in / check-out", text_color=theme.MUTED,
-                     anchor="w").grid(row=1, column=0, sticky="w")
+            header, variable=self.org_var, values=org_menu.org_choices(self.settings), width=110, height=30,
+            fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT,
+            font=ctk.CTkFont(size=14, weight="bold"), command=self.on_org_chosen)
+        self.org_menu.grid(row=0, column=0, sticky="w")
+        tooltip.Tooltip(self.org_menu, self._org_tooltip)
         self.folder_label = ctk.CTkLabel(header, text=self.repo(), text_color=theme.MUTED, anchor="w")
-        self.folder_label.grid(row=2, column=0, sticky="w", pady=(2, 0))
+        self.folder_label.grid(row=0, column=1, sticky="w", padx=(10, 0))
+        self.identity_label = ctk.CTkLabel(header, text="", text_color=theme.MUTED, anchor="e")
+        self.identity_label.grid(row=0, column=3, sticky="e", padx=(0, 10))
+        self.tasks_button = release_button.ReleaseButton(header, text="My Tasks", width=100, height=30,
+                                                         fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
+                                                         command=lambda: self.show_screen("tasks"))
+        self.tasks_button.grid(row=0, column=4, padx=(0, 6))
+        self.get_latest_button = release_button.ReleaseButton(header, text="Get Latest", width=100, height=30,
+                                                              fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
+                                                              command=self.get_latest)
+        self.get_latest_button.grid(row=0, column=5)
+        tooltip.Tooltip(self.get_latest_button, "Download what others have uploaded since you last looked.")
 
-        # The status banner: green Ready / yellow Working / red Error (see job_queue.py). A compact box in the middle
-        # of the header, between the title and the person's own buttons.
-        self.banner = ctk.CTkFrame(header, corner_radius=10, width=280, height=78, fg_color=theme.GREEN)
-        self.banner.grid(row=0, column=1, rowspan=3, padx=24)
-        self.banner.grid_propagate(False)
-        self.banner.columnconfigure(0, weight=1)
-        self.banner_title = ctk.CTkLabel(self.banner, text="Ready", font=ctk.CTkFont(size=24, weight="bold"),
-                                         text_color="white", anchor="w")
-        self.banner_title.grid(row=0, column=0, padx=(16, 4), pady=(8, 0), sticky="w")
-        self.banner_detail = ctk.CTkLabel(self.banner, text="", text_color="white", anchor="nw", justify="left",
-                                          wraplength=248, font=ctk.CTkFont(size=11))
-        self.banner_detail.grid(row=1, column=0, columnspan=3, padx=16, pady=(0, 6), sticky="nw")
-        self.banner_details_button = ctk.CTkButton(self.banner, text="Details...", width=76, height=26,
-                                                   fg_color="white", text_color=theme.RED, hover_color="#e8e8e8",
-                                                   command=self.show_errors)
-        self.banner_dismiss_button = ctk.CTkButton(self.banner, text="Dismiss", width=66, height=26,
-                                                   fg_color="transparent", border_width=1, border_color="white",
-                                                   text_color="white", hover_color=theme.RED_HOVER,
-                                                   command=self.dismiss_errors)
+    def _org_tooltip(self):
+        name = self._org_name()
+        return f"{name}\n{self.repo()}" if name and name != self.org else self.repo()
 
-        # Search, filters, refresh
-        toolbar = ctk.CTkFrame(self, fg_color="transparent")
-        toolbar.grid(row=1, column=0, sticky="ew", padx=24, pady=(8, 8))
-        toolbar.columnconfigure(0, weight=1)
-        self.search = ctk.CTkEntry(toolbar, placeholder_text="Search part number, name or description...", height=34)
-        self.search.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+    # -- the parts screen ------------------------------------------------------------------------------------------
+    def _build_parts_screen(self, parent):
+        self.parts_screen = ttk.PanedWindow(parent, orient="horizontal")
+        self.parts_screen.grid(row=0, column=0, sticky="nsew")
+        center = ctk.CTkFrame(self.parts_screen, fg_color=theme.BG, corner_radius=0)
+        center.columnconfigure(0, weight=1)
+        center.rowconfigure(2, weight=1)
+        self.parts_screen.add(center, weight=1)
+        self._build_toolbar(center)
+        self._build_search_row(center)
+        self._build_list(center)
+        self.detail_frame = ctk.CTkFrame(self.parts_screen, fg_color=theme.BG, corner_radius=0, width=330)
+        self._build_detail_pane(self.detail_frame)
+        if self.settings.get("details_pane", True) is not False:
+            self.parts_screen.add(self.detail_frame, weight=0)
+        self.screens = {"parts": self.parts_screen}
+
+    def _build_toolbar(self, parent):
+        self.toolbar = ctk.CTkFrame(parent, fg_color="transparent")
+        self.toolbar.grid(row=0, column=0, sticky="ew", padx=(8, 4), pady=(2, 6))
+        self.everyday = ctk.CTkFrame(self.toolbar, fg_color="transparent")
+        self.everyday.grid(row=0, column=0, sticky="w")
+        big = ctk.CTkFont(size=14, weight="bold")
+        for column, (text, method, color, hover) in enumerate(EVERYDAY):
+            button = release_button.ReleaseButton(self.everyday, text=text, command=getattr(self, method), height=36,
+                                                  width=100, font=big, fg_color=color, hover_color=hover)
+            button.grid(row=0, column=column, padx=(0, 6))
+            self.action_buttons[text] = button
+            tooltip.Tooltip(button, lambda text=text: self._why_greyed(text))
+        self.more = ctk.CTkFrame(self.toolbar, fg_color="transparent")
+        self.more.grid(row=0, column=1, sticky="w", padx=(4, 0))
+        for column, (title, fill) in enumerate(self._toolbar_menus()):
+            menu_bar.DropButton(self.more, title, fill, height=36, width=84, fg_color=theme.GRAY,
+                                hover_color=theme.GRAY_HOVER).grid(row=0, column=column, padx=(0, 6))
+        self.toolbar.bind("<Configure>", lambda event: self._arrange_toolbar(event.width), add="+")
+
+    def _arrange_toolbar(self, width):
+        """On a narrow window the menus move under the everyday buttons instead of running off the edge."""
+        try:
+            needed = self.everyday.winfo_reqwidth() + self.more.winfo_reqwidth() + self._px(8)
+        except Exception:
+            return
+        if width < needed:
+            self.more.grid_configure(row=1, column=0, padx=(0, 0), pady=(6, 0))
+        else:
+            self.more.grid_configure(row=0, column=1, padx=(4, 0), pady=(0, 0))
+
+    def _build_search_row(self, parent):
+        self.search_row = outer = ctk.CTkFrame(parent, fg_color="transparent")
+        outer.grid(row=1, column=0, sticky="ew", padx=(8, 4), pady=(0, 6))
+        outer.columnconfigure(0, weight=1)
+        row = ctk.CTkFrame(outer, fg_color="transparent")
+        row.grid(row=0, column=0, sticky="ew")
+        row.columnconfigure(0, weight=1, minsize=self._px(150))
+        self.search = ctk.CTkEntry(row, placeholder_text="Search  (* and ? are wildcards)", height=32)
+        self.search.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self.search.bind("<KeyRelease>", lambda event: self._render())
-        self.view = ctk.CTkSegmentedButton(toolbar, values=list(list_view.VIEWS), command=lambda value: self._render())
-        self.view.set("All")
-        self.view.grid(row=0, column=1, padx=(0, 8))
-        self.void_box = ctk.CTkCheckBox(toolbar, text="Show void", command=self._render, width=90)
-        self.void_box.grid(row=0, column=2, padx=(0, 8))
-        self.deselect_button = ctk.CTkButton(toolbar, text="Deselect All", width=96, height=34, fg_color=theme.GRAY,
+        tooltip.Tooltip(self.search, "Plain text finds it anywhere: bracket finds Motor Bracket.\n"
+                                     "* stands for any characters and ? for one, and then the whole value must "
+                                     "match: Te*rt finds Test Part but not My Test Part. Capitals never matter.")
+        self.search_in = tk.StringVar(value=list_columns.ALL_COLUMNS)
+        self.search_in_menu = ctk.CTkOptionMenu(row, variable=self.search_in, height=32, width=140,
+                                                values=list_columns.search_choices(self.list_keys),
+                                                fg_color=theme.GRAY, button_color=theme.GRAY_HOVER,
+                                                button_hover_color=theme.ACCENT, command=lambda value: self._render())
+        self.search_in_menu.grid(row=0, column=1, padx=(0, 6))
+        tooltip.Tooltip(self.search_in_menu, "Which column the search looks in.")
+        menu_bar.DropButton(row, "Columns", self._fill_columns_menu, height=32, width=96, fg_color=theme.GRAY,
+                            hover_color=theme.GRAY_HOVER).grid(row=0, column=2)
+        self.ticks_box = ctk.CTkFrame(outer, fg_color="transparent")
+        self.ticks_box.grid(row=0, column=1, sticky="e", padx=(10, 0))
+        self.acting_label = ctk.CTkLabel(self.ticks_box, text="", text_color=theme.MUTED, anchor="e")
+        self.acting_label.grid(row=0, column=0, padx=(0, 6))
+        tooltip.Tooltip(self.acting_label, "Check Out, Check In, Release and the other changes act on the parts "
+                                           "whose boxes are ticked. Clicking a row only shows its details.")
+        self.deselect_button = ctk.CTkButton(self.ticks_box, text="Clear", width=60, height=32, fg_color=theme.GRAY,
                                              hover_color=theme.GRAY_HOVER, command=self._deselect_all)
-        self.deselect_button.grid(row=0, column=3, padx=(0, 8))
-        self._button(toolbar, "Refresh", self.refresh, width=84, height=34,
-                     fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=4, padx=(0, 8))
-        self._button(toolbar, "Get Latest", self.get_latest, width=100, height=34,
-                     fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=5, padx=(0, 8))
-        self._button(toolbar, "Download All", self.download_all, width=110, height=34,
-                     fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER).grid(row=0, column=6)
+        self.deselect_button.grid(row=0, column=1)
+        tooltip.Tooltip(self.deselect_button, "Untick every box.")
+        outer.bind("<Configure>", lambda event: self._arrange_search_row(event.width), add="+")
 
-        # The list of parts
-        frame = ctk.CTkFrame(self, fg_color=theme.BG_PANEL, corner_radius=10)
-        frame.grid(row=2, column=0, sticky="nsew", padx=24, pady=(0, 8))
+    def _arrange_search_row(self, width):
+        """On a narrow window the ticks note and Clear move under the search box, which keeps its room."""
+        try:
+            needed = self._px(150) + self.search_in_menu.winfo_reqwidth() + self._px(110) + \
+                self.ticks_box.winfo_reqwidth() + self._px(20)
+        except Exception:
+            return
+        if width < needed:
+            self.ticks_box.grid_configure(row=1, column=0, sticky="w", padx=(0, 0), pady=(6, 0))
+        else:
+            self.ticks_box.grid_configure(row=0, column=1, sticky="e", padx=(10, 0), pady=(0, 0))
+
+    def _build_list(self, parent):
+        frame = ctk.CTkFrame(parent, fg_color=theme.BG_PANEL, corner_radius=8)
+        frame.grid(row=2, column=0, sticky="nsew", padx=(8, 4), pady=(0, 6))
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
-        table_sorting.style_tables()
-        self.tree = ttk.Treeview(frame, columns=("tick", "pn", "name", "description", "cots", "rev", "state", "files"),
-                                 show="headings", selectmode="browse",
-                                 style="Parts.Treeview")
-        main_columns = (("pn", "Part number", 140, False),
-                        ("name", "Name", 240, True),
-                        ("description", "Description", 220, True),
-                        ("cots", "COTS", 60, False),
-                        ("rev", "Rev", 50, False),
-                        ("state", "Status", 230, False),
-                        ("files", "Files", 110, False))
-        for name, title, width, stretch in main_columns:
-            self.tree.column(name, width=width, anchor="w", stretch=stretch)
-        self.sorter = table_sorting.TableSorter(self.tree, [(name, title) for name, title, _w, _s in main_columns])
-        # The tick boxes: tick parts to act on several at once without worrying about the highlight.
-        self.ticked = set()
-        self.tree.column("tick", width=40, minwidth=40, anchor="center", stretch=False)
-        self.tree.heading("tick", text=list_view.TICK_OFF, anchor="center", command=self._toggle_all_ticks)
+        self.tree = ttk.Treeview(frame, columns=[c.key for c in list_columns.COLUMNS], show="tree headings",
+                                 selectmode="browse", style="Parts.Treeview")
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(6, 0), pady=(6, 0))
+        self.sorter = None
+        self._set_up_columns()
         self.tree.bind("<Button-1>", self._on_tree_click, add="+")
+        self.tree.bind("<Button-3>", self._on_right_click, add="+")
         self.tree.bind("<space>", self._tick_highlighted)
-        self.tree.bind("<<TreeviewSelect>>", lambda event: self._update_buttons(), add="+")
+        self.tree.bind("<<TreeviewSelect>>", lambda event: self._selection_changed(), add="+")
+        self.tree.bind("<Double-1>", self.show_history)
+        self.tree.bind("<Configure>", lambda event: self._refit_soon(), add="+")
+        self.tree.bind("<ButtonRelease-1>", lambda event: self._refit_soon(), add="+")    # after a column resize
         for kind, color in theme.ROW_COLORS.items():
             self.tree.tag_configure(kind, foreground=color)
         self.tree.tag_configure("busy", foreground=theme.BANNER_YELLOW)
         self.tree.tag_configure("ticked", background=theme.TICK_BG)       # last, so it wins for the background only
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
-        self.tree.bind("<Double-1>", self.show_history)
-        scroll = ctk.CTkScrollbar(frame, command=self.tree.yview)
-        scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 4))
-        self.tree.configure(yscrollcommand=scroll.set)
+        tooltip.TableTooltip(self.tree, self._cell_tooltip)
+        down = ctk.CTkScrollbar(frame, command=self.tree.yview)
+        down.grid(row=0, column=1, sticky="ns", pady=(6, 0), padx=(0, 2))
+        across = ctk.CTkScrollbar(frame, orientation="horizontal", command=self.tree.xview)
+        across.grid(row=1, column=0, sticky="ew", padx=(6, 0), pady=(0, 2))
+        self.tree.configure(yscrollcommand=down.set, xscrollcommand=across.set)
 
-        # Everyday buttons
-        row1 = ctk.CTkFrame(self, fg_color="transparent")
-        row1.grid(row=3, column=0, sticky="ew", padx=24, pady=(0, 6))
-        row1.columnconfigure((0, 1, 2, 3, 4, 5), weight=1, uniform="a")
-        big = ctk.CTkFont(size=14, weight="bold")
-        for column, (text, command, color, hover) in enumerate((
-            ("Check Out", self.check_out, theme.ACCENT, "#18527f"),
-            ("Check In", self.check_in, theme.GREEN, theme.GREEN_HOVER),
-            ("Save Progress", self.save_progress, theme.TEAL, theme.TEAL_HOVER),
-            ("Undo Checkout", self.undo_checkout, theme.RED, theme.RED_HOVER),
-            ("Open", self.open_part, theme.TEAL, theme.TEAL_HOVER),
-            ("Open Drawing", self.open_drawing, theme.TEAL, theme.TEAL_HOVER),
-        )):
-            self._button(row1, text, command, height=42, font=big, fg_color=color,
-                         hover_color=hover).grid(row=0, column=column, sticky="ew",
-                                                 padx=(0 if column == 0 else 6, 0 if column == 5 else 6))
+    # -- the details pane --------------------------------------------------------------------------------------
+    def _build_detail_pane(self, parent):
+        parent.columnconfigure(0, weight=1)
+        parent.rowconfigure(2, weight=1)
+        top = ctk.CTkFrame(parent, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=(6, 10), pady=(2, 0))
+        top.columnconfigure(1, weight=1)
+        self.pane_icon = tk.Label(top, bg=theme.BG, bd=0)
+        self.pane_icon.grid(row=0, column=0, padx=(0, 8))
+        self.pane_title = ctk.CTkLabel(top, text="", font=ctk.CTkFont(size=16, weight="bold"), anchor="w",
+                                       justify="left", wraplength=220)
+        self.pane_title.grid(row=0, column=1, sticky="ew")
+        pop = ctk.CTkButton(top, text="\u29c9", width=32, height=28, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
+                            command=self.show_history)
+        pop.grid(row=0, column=2, padx=(6, 4))
+        tooltip.Tooltip(pop, "Open these details in a window of their own.")
+        hide = ctk.CTkButton(top, text="\u00bb", width=32, height=28, fg_color=theme.GRAY,
+                             hover_color=theme.GRAY_HOVER, command=lambda: self.set_details_pane(False))
+        hide.grid(row=0, column=3)
+        tooltip.Tooltip(hide, "Hide the details pane (View > Details pane brings it back).")
+        self.pane_state = ctk.CTkLabel(parent, text="Click a part to see its details.", text_color=theme.MUTED,
+                                       anchor="w", justify="left", wraplength=320)
+        self.pane_state.grid(row=1, column=0, sticky="ew", padx=(6, 10), pady=(0, 4))
+        self.pane_view = part_details.PartDetailsView(
+            parent, on_open=self._pane_open, on_view_eco=self.view_eco, references=True,
+            on_tab=lambda name: self._pane_tab_changed(name), on_manage_references=self.show_references)
+        self.pane_view.grid(row=2, column=0, sticky="nsew", padx=(6, 10), pady=(0, 6))
+        parent.bind("<Configure>", lambda event: self._wrap_pane(event.width), add="+")
 
-        # Making parts
-        row2 = ctk.CTkFrame(self, fg_color="transparent")
-        row2.grid(row=4, column=0, sticky="ew", padx=24, pady=(0, 6))
-        row2.columnconfigure((0, 1, 2, 3, 4), weight=1, uniform="b")
-        for column, (text, command, color, hover) in enumerate((
-            ("New Part", self.new_part, theme.ACCENT, "#18527f"),
-            ("Import...", self.import_cad, theme.TEAL, theme.TEAL_HOVER),
-            ("Import COTS...", self.import_cots, theme.TEAL, theme.TEAL_HOVER),
-            ("Edit Details", self.edit_details, theme.ACCENT, "#18527f"),
-            ("References...", self.show_references, theme.TEAL, theme.TEAL_HOVER),
-        )):
-            self._button(row2, text, command, height=34, fg_color=color,
-                         hover_color=hover).grid(row=0, column=column, sticky="ew",
-                                                 padx=(0 if column == 0 else 4, 0 if column == 4 else 4))
-
-        # A part's life: release, revise, and the less common changes
-        row3 = ctk.CTkFrame(self, fg_color="transparent")
-        row3.grid(row=5, column=0, sticky="ew", padx=24, pady=(0, 8))
-        row3.columnconfigure((0, 1, 2, 3, 4, 5, 6), weight=1, uniform="b")
-        for column, (text, command, color, hover) in enumerate((
-            ("Release", self.release, theme.PURPLE, theme.PURPLE_HOVER),
-            ("Revise", self.revise, theme.PURPLE, theme.PURPLE_HOVER),
-            ("Cancel Revision", self.cancel_revision, theme.GRAY, theme.GRAY_HOVER),
-            ("Make COTS", self.make_cots, theme.TEAL, theme.TEAL_HOVER),
-            ("Unrelease", self.reopen, theme.GRAY, theme.GRAY_HOVER),
-            ("Void", self.void, theme.GRAY, theme.GRAY_HOVER),
-            ("Details", self.show_history, theme.GRAY, theme.GRAY_HOVER),
-        )):
-            self._button(row3, text, command, height=34, fg_color=color,
-                         hover_color=hover).grid(row=0, column=column, sticky="ew",
-                                                 padx=(0 if column == 0 else 4, 0 if column == 6 else 4))
-
-        # Status line and log
-        self.status = ctk.CTkLabel(self, text="Ready", text_color=theme.MUTED, anchor="w")
-        self.status.grid(row=6, column=0, sticky="ew", padx=26)
-        self.log_box = ctk.CTkTextbox(self, height=110, fg_color=theme.BG_PANEL, text_color=theme.MUTED,
-                                      font=ctk.CTkFont(family="Consolas", size=12))
-        self.log_box.grid(row=7, column=0, sticky="ew", padx=24, pady=(4, 20))
-        self.log_box.configure(state="disabled")
+    def _wrap_pane(self, width):
+        """Long text in the pane's header wraps to the pane's width (labels want sizes at 100%)."""
+        logical = width / getattr(self, "scale", 1.0)
+        self.pane_state.configure(wraplength=max(logical - 30, 120))
+        self.pane_title.configure(wraplength=max(logical - 130, 100))

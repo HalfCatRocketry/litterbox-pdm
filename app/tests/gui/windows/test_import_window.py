@@ -392,7 +392,7 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
 
     def test_the_main_window_has_an_import_button(self):
         source = gui_source()
-        self.assertIn('("Import...", self.import_cad', source)
+        self.assertIn('("Import...", "import_cad")', source)
 
 
 if __name__ == "__main__":

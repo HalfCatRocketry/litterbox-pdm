@@ -47,13 +47,33 @@ class FakeVar:
         self.watchers.append(callback)
 
 
+class FakeFont:
+    """Stands in for tkinter.font.Font: every character is 7 pixels wide."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def measure(self, text):
+        return 7 * len(text)
+
+
 class FakeTree(Anything):
     def __init__(self, parent=None, columns=(), **kwargs):
         super().__init__()
         self.columns, self.rows, self.chosen = list(columns), {}, ()
+        self.widths = {}
 
-    def insert(self, parent, index, iid=None, tags=(), values=()):
-        self.rows[iid] = {"tags": tags, "values": list(values)}
+    def insert(self, parent, index, iid=None, tags=(), values=(), **options):
+        self.rows[iid] = dict(options, tags=tags, values=list(values))
+
+    def column(self, column, option=None, **changes):
+        if "width" in changes:
+            self.widths[column] = changes["width"]
+        if option == "width":
+            return self.widths.get(column, 200)
+        if option == "id":
+            return column if column in self.columns else self.columns[int(column[1:]) - 1]
+        return None
 
     def get_children(self):
         return tuple(self.rows)
@@ -66,9 +86,12 @@ class FakeTree(Anything):
         return iid in self.rows
 
     def item(self, iid, option=None, **changes):
-        if "tags" in changes:
-            self.rows[iid]["tags"] = changes["tags"]
-        return tuple(self.rows[iid]["tags"]) if option == "tags" else None
+        if "values" in changes:
+            changes["values"] = list(changes["values"])
+        self.rows[iid].update(changes)
+        if option == "tags":
+            return tuple(self.rows[iid]["tags"])
+        return self.rows[iid].get(option) if option else None
 
     def selection(self):
         return self.chosen
@@ -109,6 +132,9 @@ def load_gui_with_fakes(box):
     ttk = types.ModuleType("tkinter.ttk")
     ttk.Treeview = FakeTree
     ttk.Style = Anything
+    font = types.ModuleType("tkinter.font")
+    font.Font = FakeFont
+    tk.font = font
     dialogs = types.ModuleType("tkinter.filedialog")
     dialogs.askdirectory = lambda **k: ""
     dialogs.askopenfilename = lambda **k: ""
@@ -117,7 +143,7 @@ def load_gui_with_fakes(box):
         setattr(mbox, name, getattr(box, name))
     tk.filedialog, tk.messagebox, tk.ttk = dialogs, mbox, ttk
     fakes = {"customtkinter": ctk, "tkinter": tk, "tkinter.ttk": ttk, "tkinter.filedialog": dialogs,
-             "tkinter.messagebox": mbox}
+             "tkinter.messagebox": mbox, "tkinter.font": font}
     with mock.patch.dict(sys.modules, fakes):
         # Every window module is imported afresh, under the fakes (patch.dict puts sys.modules back afterwards).
         for name in [n for n in sys.modules if n.startswith("litterbox.gui.")]:

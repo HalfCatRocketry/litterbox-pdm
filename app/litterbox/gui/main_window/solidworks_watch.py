@@ -23,6 +23,12 @@ class SolidWorksWatch:
         self.sw_watcher = sw_watcher.SolidWorksWatcher(on_change=lambda changes: self.queue.put(("solidworks", changes)))
         self.sw_watcher.start()
         self._log("Watching what SolidWorks has open (solidworks_watch in settings.yaml).")
+        self._note_solidworks()
+
+    def _note_solidworks(self):
+        """Keep the status bar's SolidWorks note up to date (when the window has one)."""
+        if getattr(self, "solidworks_label", None) is not None:
+            self._show_solidworks(self._solidworks_snapshot())
 
     def _stop_solidworks_watcher(self):
         if self.sw_watcher is not None:
@@ -37,6 +43,7 @@ class SolidWorksWatch:
 
     def _solidworks_changed(self, changes):
         """Called on the window's thread with the watcher's changes."""
+        self._note_solidworks()
         busy = self.jobs.pending_parts()
         if not busy:
             return

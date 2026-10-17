@@ -15,33 +15,55 @@ class ListAndFilenameWiring(unittest.TestCase):
                               files=["cad/HCR-00007-001_B.SLDPRT"], revision="B", released_revision="A",
                               revisions={"B": ["cad/HCR-00007-001_B.SLDPRT"]})
 
-    def test_the_list_shows_the_short_part_number_and_the_revision(self):
+    KEYS = ["pn", "name", "description", "rev", "files", "cots", "state", "locked_by", "released", "import_path"]
+
+    def app(self, rows, view="All", search=""):
         app = self.gui.app.App.__new__(self.gui.app.App)
         app.jobs = fake_jobs()
-        app.rows = [self.row]
-        app.search = types.SimpleNamespace(get=lambda: "")
-        app.view = types.SimpleNamespace(get=lambda: "All")
-        app.void_box = types.SimpleNamespace(get=lambda: 0)
+        app.rows = rows
+        app.search = types.SimpleNamespace(get=lambda: search)
+        app.view = types.SimpleNamespace(get=lambda: view)
         app.ticked = set()
-        app.tree = SortableFakeTree(["tick", "pn", "name", "description", "cots", "rev", "state", "files"])
+        app.icons = self.gui.icon_images.IconImages(None)
+        app.tree = SortableFakeTree(self.KEYS)
         app.sorter = self.gui.table_sorting.TableSorter(app.tree, [])
+        return app
+
+    def test_the_list_shows_the_short_part_number_and_the_revision(self):
+        app = self.app([self.row])
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
-                         ["\u2610", "00007-001", "Bracket", "", "", "B", "Available (Rev A released)", "PRT"])
+                         ["00007-001", "Bracket", "", "B", "PRT", "", "Available (Rev A released)", "", "A", ""])
+        self.assertIn("image", app.tree.rows["HCR-00007-001"])          # the tick box and status icon
+
+    def test_long_names_are_cut_to_the_column_width(self):
+        from litterbox.parts.part_status import PartStatus
+        long = PartStatus(self.pn, "A very long name for a small bracket", "in_work", "Available", "ok")
+        app = self.app([long])
+        app.tree.widths["name"] = 14 + 7 * 10                             # room for ten characters (see FakeFont)
+        app._render()
+        self.assertEqual(app.tree.rows["HCR-00007-001"]["values"][1], "A very lo\u2026")      # ten characters
+        self.assertEqual(app._cell_tooltip("HCR-00007-001", "name"), "A very long name for a small bracket")
+        self.assertEqual(app._cell_tooltip("HCR-00007-001", "rev"), "")
+
+    def test_the_status_icon_tooltip_says_what_it_means(self):
+        app = self.app([self.row])
+        app._render()
+        self.assertEqual(app._cell_tooltip("HCR-00007-001", "#0"), "Checked in: Available (Rev A released)")
+
+    def test_search_in_one_column_and_with_wildcards(self):
+        for choice, text, found in (("All columns", "brack", 1), ("Description", "brack", 0), ("Name", "B*t", 1),
+                                    ("Name", "B*", 1), ("Name", "*rack", 0)):
+            app = self.app([self.row], search=text)
+            app.search_in = types.SimpleNamespace(get=lambda choice=choice: choice)
+            self.assertEqual(app._render(), found, (choice, text))
 
     def test_a_voided_part_that_is_hidden_loses_its_tick(self):
         from litterbox.parts.part_status import PartStatus
         voided = PartStatus(self.pn, "Bracket", "void", "Void", "void")
-        for shown, expected in ((0, set()), (1, {"HCR-00007-001"})):
-            app = self.gui.app.App.__new__(self.gui.app.App)
-            app.jobs = fake_jobs()
-            app.rows = [voided]
-            app.search = types.SimpleNamespace(get=lambda: "")
-            app.view = types.SimpleNamespace(get=lambda: "All")
-            app.void_box = types.SimpleNamespace(get=lambda shown=shown: shown)
+        for view, expected in (("All", set()), ("Void", {"HCR-00007-001"})):
+            app = self.app([voided], view=view)
             app.ticked = {"HCR-00007-001"}
-            app.tree = SortableFakeTree(["tick", "pn", "name", "description", "cots", "rev", "state", "files"])
-            app.sorter = self.gui.table_sorting.TableSorter(app.tree, [])
             app._render()
             self.assertEqual(app.ticked, expected)
 

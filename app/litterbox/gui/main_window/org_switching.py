@@ -1,5 +1,6 @@
 """
-org_switching.py - the org box: switching org, Add org..., Org setup... and Create new vault...
+org_switching.py - switching org (the org box in the header, and File > the orgs), Add org..., Org setup... and
+Create new vault...
 """
 
 from pathlib import Path
@@ -20,7 +21,7 @@ from litterbox.vault import create_vault
 
 
 class OrgSwitching:
-    """the org box: switching org, Add org..., Org setup... and Create new vault... (a part of the main window, App)."""
+    """switching org, Add org..., Org setup... and Create new vault... (a part of the main window, App)."""
 
     @staticmethod
     def _detect_org(folder):
@@ -30,12 +31,13 @@ class OrgSwitching:
             return None
 
     def _reload_org_menu(self):
-        self.org_menu.configure(values=org_menu.org_menu_values(self.settings))
+        self.org_menu.configure(values=org_menu.org_choices(self.settings))
         self.org_var.set(self.org or "No org")
         self.folder_label.configure(text=self.repo())
 
     def on_org_chosen(self, choice):
-        """The dropdown changed: switch org (everything reloads) or open the setup pop-up."""
+        """An org was chosen (in the header or the File menu): switch to it (everything reloads). The setup entries
+        are handled too, for older callers."""
         if choice == org_menu.ADD_ORG:
             self.add_org()
         elif choice == org_menu.CREATE_VAULT:
@@ -47,13 +49,21 @@ class OrgSwitching:
         self._reload_org_menu()
 
     def switch_org(self, org):
+        if not all(screen.may_leave() for screen in self._team_windows()):
+            return                                  # unsaved team changes, and the person wants to keep them
         self.org = org
         self.settings["last_org"] = org
         self.settings["repo"] = self.repo()
         settings.save(self.settings)
         self.rows, self.rows_by_pn, self.note = [], {}, ""
         self._render()                              # clear the list straight away
+        self._update_counts()
+        self._selection_changed()
         self.folder_label.configure(text=self.repo())
+        for screen in self._team_windows():
+            screen.reload()
+        if self.screen == "ecos":
+            self._load_ecos()
         if Path(self.repo()).is_dir():
             self.refresh()
         else:

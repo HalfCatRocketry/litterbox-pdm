@@ -11,7 +11,6 @@ from litterbox.gui.dialogs.workflow import request_dialog
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import request_parts
 from litterbox.gui.logic import task_text
-from litterbox.gui.windows import tasks_window
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_responses
@@ -25,10 +24,12 @@ class TaskActions:
     """My Tasks and sign-off workflows: signing, rejecting, completing, withdrawing, (a part of the main window, App)."""
 
     def _task_windows(self):
-        return [w for w in self.winfo_children() if isinstance(w, tasks_window.TasksWindow) and w.winfo_exists()]
+        """The My Tasks screen, once it has been opened (a list, so callers can loop over it)."""
+        screen = getattr(self, "screens", {}).get("tasks")
+        return [screen] if screen is not None else []
 
     def _refresh_tasks(self):
-        """Update the My Tasks button's count and any open My Tasks window."""
+        """Update the My Tasks button's count and the My Tasks screen."""
         button = getattr(self, "tasks_button", None)
         if button is None:
             return
@@ -38,12 +39,7 @@ class TaskActions:
             window.reload()
 
     def show_tasks(self):
-        windows = self._task_windows()
-        if windows:
-            windows[0].reload()
-            windows[0].lift()
-            return
-        tasks_window.TasksWindow(self)
+        self.show_screen("tasks")
 
     def task_sign(self, task):
         comment = self._ask("Comment (optional):", f"Approve: {task.label}")

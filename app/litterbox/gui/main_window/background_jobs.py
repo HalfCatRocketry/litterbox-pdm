@@ -1,6 +1,6 @@
 """
 background_jobs.py - running work in the background so the window never freezes: the job queue,
-its results, the status banner, and the errors it keeps until dismissed.
+its results, and the errors it keeps until dismissed (the status bar that shows them is status_bar.py).
 """
 
 import queue
@@ -8,7 +8,6 @@ import time
 from tkinter import messagebox
 
 from litterbox.errors import NothingToSaveError
-from litterbox.gui import theme
 from litterbox.gui.dialogs import error_details
 from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import error_text
@@ -41,6 +40,7 @@ class BackgroundJobs:
             release_button.click_log(f"busy={busy}")
             self._was_busy = busy
             self.org_menu.configure(state="disabled" if busy else "normal")      # not while jobs run on this vault
+            self.get_latest_button.configure(state="disabled" if busy else "normal")
             for window in self._team_windows():
                 window.set_busy(busy)
         self._update_banner()
@@ -48,20 +48,6 @@ class BackgroundJobs:
             self._render()                                                        # also updates the buttons
         else:
             self._update_buttons()
-
-    def _update_banner(self):
-        state = self.jobs.banner()
-        color = {jobs.READY: theme.GREEN, jobs.WORKING: theme.BANNER_YELLOW, jobs.ERROR: theme.RED}[state.kind]
-        text_color = "#1b1b1b" if state.kind == jobs.WORKING else "white"
-        self.banner.configure(fg_color=color)
-        self.banner_title.configure(text=state.title, text_color=text_color)
-        self.banner_detail.configure(text=state.detail, text_color=text_color)
-        if state.kind == jobs.ERROR:
-            self.banner_details_button.grid(row=0, column=1, padx=(4, 4), pady=(8, 0))
-            self.banner_dismiss_button.grid(row=0, column=2, padx=(0, 10), pady=(8, 0))
-        else:
-            self.banner_details_button.grid_remove()
-            self.banner_dismiss_button.grid_remove()
 
     def show_errors(self):
         notes = self.jobs.errors()
@@ -76,7 +62,7 @@ class BackgroundJobs:
     def run_task(self, work, done_text, on_success=None, refresh=True, is_refresh=False, label="Working",
                  parts=(), kind="task"):
         """Queue work() to run in the background, after anything already queued. Then show done_text, call
-        on_success(result) and refresh the list. `label` is what the banner says while it runs; `parts` are the
+        on_success(result) and refresh the list. `label` is what the status bar says while it runs; `parts` are the
         parts it changes, which are marked busy until it is done."""
         ahead = self.jobs.active()
         job = jobs.Job(label=label, work=work, parts=tuple(str(p) for p in parts), kind=kind,
@@ -143,7 +129,7 @@ class BackgroundJobs:
             self.note = ""
             self._log("ERROR: " + error)
             self.jobs.add_error(job.label, error, error_text.error_advice(error))
-            self._say("Something went wrong. Press Details... on the red banner.", "error")
+            self._say("Something went wrong. Press Details... in the red status bar.", "error")
         else:
             if not is_refresh:
                 self.note = done_text
