@@ -1,5 +1,17 @@
-# What Litterbox needs to run from source (pip install -r requirements.txt). Git and Git LFS are separate installs.
-customtkinter>=5.2.2
-PyYAML>=6.0
-cryptography>=42.0
-pywin32>=306; sys_platform == "win32"
+# Everything Litterbox needs from pip, to run from source, run the tests and build the installer:
+#
+#     pip install -r requirements.txt
+#
+# Not from pip (install separately):
+#   Python 3.12 (what CI uses), with tkinter (part of the Windows installer; on Linux: apt install python3-tk)
+#   Git and Git LFS
+#   Inno Setup 6 (only to build the installer: choco install innosetup)
+
+# --- To run ---
+customtkinter>=6.0.0                 # the window toolkit (brings darkdetect and packaging with it)
+PyYAML>=6.0                                # settings.yaml and the record files
+cryptography>=42.0                         # signed updates
+pywin32>=306; sys_platform == "win32"      # SolidWorks (win32com, pythoncom, pywintypes, win32timezone)
+
+# --- To build Litterbox.exe (packaging/litterbox.spec) ---
+pyinstaller>=6.0

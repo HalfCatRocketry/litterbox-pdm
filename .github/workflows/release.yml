@@ -58,7 +58,7 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Install dependencies
-        run: python -m pip install -r requirements.txt pyinstaller
+        run: python -m pip install -r requirements.txt
 
       - name: The tag matches app/litterbox/version.py
         if: startsWith(github.ref, 'refs/tags/v')
