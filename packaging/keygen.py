@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
-import updater  # noqa: E402
+from litterbox.user import updater  # noqa: E402
 
 if __name__ == "__main__":
     private, public = updater.generate_keypair()

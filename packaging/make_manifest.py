@@ -18,8 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "app"))
-import updater  # noqa: E402
-import version  # noqa: E402
+from litterbox.user import updater  # noqa: E402
+from litterbox import version  # noqa: E402
 
 
 def notes_for(changelog, wanted):
@@ -74,7 +74,7 @@ def main(argv=None):
         print("The LITTERBOX_SIGNING_KEY secret is missing. See docs/RELEASING.md, one-time setup.")
         return 1
     if args.version != version.VERSION:
-        print(f"--version {args.version} does not match app/version.py ({version.VERSION}).")
+        print(f"--version {args.version} does not match app/litterbox/version.py ({version.VERSION}).")
         return 1
     changelog_path = ROOT / "CHANGELOG.md"
     changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.is_file() else ""

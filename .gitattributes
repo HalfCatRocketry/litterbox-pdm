@@ -1,0 +1,7 @@
+# Keep Python and workflow files with Unix line endings, even when checked out on Windows. The test stand-in
+# fake_git_lfs.py starts with "#!/usr/bin/env python3": with Windows line endings Linux can't run it.
+* text=auto
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf

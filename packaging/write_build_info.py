@@ -1,4 +1,4 @@
-"""Used by the release pipeline: writes app/build_info.py so the built program knows which GitHub repository
+"""Used by the release pipeline: writes app/litterbox/build_info.py so the built program knows which GitHub repository
 to ask for updates and which public key to trust.
 
     python packaging/write_build_info.py --repo owner/litterbox-pdm      (the private key comes from the
@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
-import updater  # noqa: E402
+from litterbox.user import updater  # noqa: E402
 
 TEMPLATE = '''"""Written by the release pipeline (packaging/write_build_info.py). Do not edit."""
 
@@ -23,7 +23,7 @@ PUBLIC_KEY = "{key}"
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
-    parser.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "app" / "build_info.py"))
+    parser.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "app" / "litterbox" / "build_info.py"))
     args = parser.parse_args(argv)
     private = os.environ.get("LITTERBOX_SIGNING_KEY", "").strip()
     if not private:

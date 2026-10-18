@@ -1,0 +1,37 @@
+# Runs the full test suite on every push, on any branch. It runs on Linux because the Git LFS tests use a stand-in
+# git-lfs script that needs a Unix-like system (on Windows those tests are skipped). The release workflow runs the
+# same suite again before it builds anything.
+
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Run the tests
+        working-directory: app
+        env:
+          PYTHONPATH: "."
+        run: python -m unittest discover -s tests -t . -p "test_*.py"
+
+      - name: Run the SolidWorks tool tests
+        working-directory: tools/solidworks
+        env:
+          PYTHONPATH: ".:../../app"
+        run: python -m unittest discover -s tests -p "test_*.py"

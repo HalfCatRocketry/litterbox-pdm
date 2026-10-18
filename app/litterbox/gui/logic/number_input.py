@@ -1,0 +1,80 @@
+"""
+number_input.py - reading numbers typed into dialogs (part numbers, digit counts, start number) with
+plain-language problems, and the variant list.
+"""
+
+from litterbox.core import part_number
+from litterbox.records import record_store
+
+
+def import_base_placeholder(repo, org):
+    """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
+    from litterbox.vault import config
+    try:
+        return part_number.format_base(record_store.next_free_base(repo, org, config.get_start_number(repo)))
+    except Exception:
+        return ""
+
+
+def parse_number(text, label, minimum=1, maximum=None):
+    """A whole number typed into a box. Raises ValueError with a message safe to show."""
+    text = str(text or "").strip()
+    if not text:
+        raise ValueError(f"Enter the {label}.")
+    if not (text.isascii() and text.isdigit()):
+        raise ValueError(f"The {label} must be a whole number, like 42.")
+    number = int(text)
+    if number < minimum:
+        raise ValueError(f"The {label} must be {minimum} or higher.")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"The {label} can be at most {maximum}.")
+    return number
+
+
+def parse_typed_number(text, label, digits):
+    """A number typed into the part number or variant box, which must be written exactly.
+
+    An empty box gives None (use the suggested number). Otherwise the text must
+    be exactly `digits` plain digits, so with 5 digits "00002" is accepted but
+    "2" and "000002" are not. Raises ValueError with a message safe to show.
+    """
+    text = str(text or "").strip()
+    if not text:
+        return None
+    example = f"{1:0{digits}d}"
+    if not (text.isascii() and text.isdigit()) or len(text) != digits:
+        raise ValueError(f"The {label} must be exactly {digits} digits, like {example}.")
+    number = int(text)
+    if number < 1:
+        raise ValueError(f"The {label} can't be {text}. The lowest is {example}.")
+    return number
+
+
+def parse_digit_count(text, label, low, high):
+    """The number of digits typed in the org setup. Raises ValueError with a message safe to show."""
+    text = str(text or "").strip()
+    if not (text.isascii() and text.isdigit()) or not (low <= int(text) <= high):
+        raise ValueError(f"The {label} must be a whole number from {low} to {high}.")
+    return int(text)
+
+
+def in_use_text(check):
+    """The line shown under "PN in use:": the name of the part that has the number."""
+    text = check.name or "(no name)"
+    return text + (" (void)" if check.status == "void" else "")
+
+
+def parse_optional_number(text, label, minimum=1, maximum=None):
+    """Like parse_number, but an empty box gives None (meaning: use the suggested number)."""
+    if not str(text or "").strip():
+        return None
+    return parse_number(text, label, minimum, maximum)
+
+
+def variant_lines(records):
+    """One line per existing variant, for the New Variant list."""
+    lines = []
+    for record in records:
+        status = "" if record.status == "in_work" else f"  [{record.status}]"
+        lines.append(f"{record.pn}{status}   {record.name}")
+    return lines
