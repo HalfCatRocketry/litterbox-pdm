@@ -274,6 +274,7 @@ class PartsList:
             self.identity = who
             self._show_identity()
             self._show_behind(behind)
+            self.menu_bar.set_title(self._org_name())         # the vault settings may have renamed the org
             self._show_rows(rows)
 
         self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",

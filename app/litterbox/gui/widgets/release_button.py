@@ -61,7 +61,12 @@ class ReleaseButton(ctk.CTkButton):
 
     The release is noticed two ways, whichever comes first: Tk's own release event, and a quick check (every
     15 ms after the press) of whether Windows says the mouse button is still down. The check is there because
-    Tk's release event was seen going missing, which made some clicks do nothing."""
+    Tk's release event was seen going missing, which made some clicks do nothing.
+
+    The press and release are bound here on every part of the button (its canvas, text and image), replacing
+    CustomTkinter's own release binding. CustomTkinter 6 binds only the release, and adds it to the text and image
+    when it draws them, so _draw binds them again afterwards: otherwise the text in the middle clicked one way and
+    the rest of the button (the canvas) another, and only the middle worked."""
 
     _armed = False
     _pressed_at = 0.0
@@ -70,12 +75,24 @@ class ReleaseButton(ctk.CTkButton):
 
     def _create_bindings(self, sequence=None):
         super()._create_bindings(sequence)
-        if sequence is None or sequence == "<ButtonRelease-1>":
-            for part in (self._canvas, self._text_label, self._image_label):
-                if part is not None:
-                    part.bind("<ButtonRelease-1>", self._released)
+        self._bind_parts(sequence)
 
-    def _clicked(self, event=None):                      # called by CustomTkinter on PRESS: just remember it
+    def _draw(self, *args, **kwargs):
+        result = super()._draw(*args, **kwargs)
+        self._bind_parts()                               # the text and image may have just been made
+        return result
+
+    def _bind_parts(self, sequence=None):
+        for part in (getattr(self, "_canvas", None), getattr(self, "_text_label", None),
+                     getattr(self, "_image_label", None)):
+            if part is None:
+                continue
+            if sequence is None or sequence == "<Button-1>":
+                part.bind("<Button-1>", self._pressed)
+            if sequence is None or sequence == "<ButtonRelease-1>":
+                part.bind("<ButtonRelease-1>", self._released)
+
+    def _pressed(self, event=None):                      # the mouse button went down: just remember it
         if self._state == "disabled":
             click_log(f"press '{self._label()}' ignored: button is greyed out")
             return
@@ -130,6 +147,6 @@ class ReleaseButton(ctk.CTkButton):
             return                                         # the other path already dealt with this press
         if self._over_button(x, y):
             click_log(f"release '{self._label()}' -> running ({how})")
-            super()._clicked(None)
+            self.invoke()
         else:
             click_log(f"release '{self._label()}' ignored: mouse moved off the button")

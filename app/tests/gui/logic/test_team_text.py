@@ -25,6 +25,15 @@ class TestTeamText(unittest.TestCase):
         self.assertEqual(rows[0], ("alex", ("Alex Smith", "a@x.com", "Owner", "Quality", "Yes", "alexs", "")))
         self.assertEqual(rows[1][1][4:], ("No", "", 1))
 
+    def test_person_details(self):
+        text = team_text.person_details(self.d.people[0])
+        self.assertIn("Alex Smith (alex): Owner", text)
+        self.assertIn("Roles: Quality", text)
+        self.assertIn("Host names: alexs", text)
+        self.assertIn("Signing keys: none", text)
+        self.assertIn("switched off", team_text.person_details(self.d.people[1]))
+        self.assertIn("Signing keys: 1", team_text.person_details(self.d.people[1]))
+
     def test_lists_and_ids(self):
         self.assertEqual(team_text.split_list("a, b\nc,, "), ["a", "b", "c"])
         self.assertEqual(team_text.suggest_person_id("Alex Smith", []), "alex-smith")

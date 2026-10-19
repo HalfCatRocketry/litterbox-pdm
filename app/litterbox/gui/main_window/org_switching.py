@@ -34,6 +34,7 @@ class OrgSwitching:
         self.org_menu.configure(values=org_menu.org_choices(self.settings))
         self.org_var.set(self.org or "No org")
         self.folder_label.configure(text=self.repo())
+        self.menu_bar.set_title(self._org_name())
 
     def on_org_chosen(self, choice):
         """An org was chosen (in the header or the File menu): switch to it (everything reloads). The setup entries

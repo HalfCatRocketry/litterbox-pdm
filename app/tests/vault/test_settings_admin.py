@@ -154,7 +154,7 @@ class Wiring(unittest.TestCase):
         self.assertIn("vault_settings.edit(repo, **changes)", source)
         for key in ("commit_style", "release_rule", "require_signatures"):
             self.assertIn(f'("{key}",', source)
-        self.assertEqual(source.count('allows("manage_settings")'), 1)
+        self.assertIn('_why_not("manage_settings"', source)          # the Team screen greys it out for non-Admins
         self.assertIn('may_rename=self.identity.allows("rename_org")[0]', source)
 
 

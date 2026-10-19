@@ -29,6 +29,16 @@ def people_table(directory):
     return rows
 
 
+def person_details(person):
+    """The line under the Team screen's list for the highlighted person: what the table leaves out."""
+    keys = len(person.signing_keys)
+    parts = [f"{person.name} ({person.id}): {person.label}" + ("" if person.active else ", switched off"),
+             "Roles: " + (", ".join(person.roles) or "none"),
+             "Host names: " + (", ".join(person.host_names) or "none"),
+             "Signing keys: " + (str(keys) if keys else "none")]
+    return "     ".join(parts)
+
+
 def split_list(text):
     """'a, b\nc' -> ['a', 'b', 'c'] (commas or new lines)."""
     return [part.strip() for part in str(text or "").replace("\n", ",").split(",") if part.strip()]

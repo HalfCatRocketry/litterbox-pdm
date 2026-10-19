@@ -1,7 +1,7 @@
 """
 sidebar.py - the sidebar on the left of the main window: the parts list's views (All, Mine, Checked out, ...) with
-how many parts each has, then My Tasks, ECOs and Team, which are screens of their own. On a narrow window it shows
-only the icons (View > Sidebar names switches the names back on).
+how many parts each has (under PARTS), then My Tasks and ECOs (under PROCESS) and Team, which are screens of their
+own. On a narrow window it shows only the icons (View > Sidebar names switches the names back on).
 """
 
 import customtkinter as ctk
@@ -50,6 +50,10 @@ class Sidebar:
             self.nav[("parts", view)] = item
             row += 1
         ctk.CTkFrame(bar, width=1, height=1, fg_color="#333333").grid(row=row, column=0, sticky="ew", padx=12, pady=8)
+        row += 1
+        self.process_heading = ctk.CTkLabel(bar, text="PROCESS", text_color=theme.MUTED, anchor="w",
+                                            font=ctk.CTkFont(size=12, weight="bold"))
+        self.process_heading.grid(row=row, column=0, sticky="ew", padx=14, pady=(0, 2))
         row += 1
         for screen, text, shape in SCREENS:
             item = nav_item.NavItem(bar, text, lambda screen=screen: self.show_screen(screen), self._nav_images(shape))
@@ -138,10 +142,11 @@ class Sidebar:
         self.sidebar_collapsed = collapsed
         for item in getattr(self, "nav", {}).values():
             item.set_collapsed(collapsed)
-        if collapsed:
-            self.parts_heading.grid_remove()
-        else:
-            self.parts_heading.grid()
+        for heading in (self.parts_heading, self.process_heading):
+            if collapsed:
+                heading.grid_remove()
+            else:
+                heading.grid()
         self.collapse_button.configure(text="»" if collapsed else "«")
         self.sidebar.columnconfigure(0, minsize=0 if collapsed else self._px(176))
 

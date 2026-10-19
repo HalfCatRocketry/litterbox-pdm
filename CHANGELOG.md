@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Fixed: buttons only worked when clicked near their middle (since the move to CustomTkinter 6). The whole button works again, and it still acts when the mouse button is released over it.
+- The open org's full name is shown in the middle of the menu bar (hidden on a window too narrow for it).
+- When the details pane is hidden, a **«** button at the right end of the toolbar brings it back.
+- The sidebar's My Tasks and ECOs are under a new **PROCESS** heading, as the parts views are under PARTS.
+- **A tidier Team screen.** Who am I? and Signing... sit beside your name; the people buttons (Add Person, Edit, Switch On/Off, and **More** with Transfer Ownership...) sit above the list; Roles, Workflows, Projects and Vault Settings are in an **Organization** panel on the right. Buttons you can't use are greyed out with a tooltip saying why, instead of being left off. Unsaved changes show at the top right with **Save** and a new **Discard**. Double-click a person to edit them; the line under the list shows the highlighted person's roles, host names and signing keys (those columns left the table).
+
 ## 0.4.0
 
 - **Create new org** (was Create new vault): the boxes are in a clearer order (digits before the first number), the first number follows the digits (100001 for 6), and an example part number (123456-001) is shown beside the digits.

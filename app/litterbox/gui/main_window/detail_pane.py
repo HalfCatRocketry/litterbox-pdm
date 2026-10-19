@@ -1,8 +1,8 @@
 """
 detail_pane.py - the details pane beside the parts list: it follows the highlighted part (the blue row), showing
 its status, Details, History, and what it uses and where it is used. The Uses and Where used tabs are read in the
-background, only when one of them is showing. The pane can be hidden (View > Details pane) or popped out into a
-window of its own.
+background, only when one of them is showing. The pane can be hidden (its » button, or View > Details pane; a « at
+the right of the toolbar brings it back) or popped out into a window of its own.
 """
 
 from litterbox.core.part_number import parse as parse_pn
@@ -37,8 +37,20 @@ class DetailPane:
             self._show_details()
         else:
             self.parts_screen.forget(self.detail_frame)
+        self._show_pane_arrow()
         self.settings["details_pane"] = bool(shown)
         settings.save(self.settings)
+
+    def _show_pane_arrow(self):
+        """The « that brings the pane back shows at the right of the toolbar only while the pane is hidden."""
+        button = getattr(self, "show_pane_button", None)
+        if button is None:
+            return
+        if self.details_shown():
+            button.grid_remove()
+        else:
+            button.grid()
+        self._arrange_toolbar(self.toolbar.winfo_width())
 
     def _selection_changed(self):
         """The highlight moved (or the list was redrawn): update the buttons, and the pane a moment later, so

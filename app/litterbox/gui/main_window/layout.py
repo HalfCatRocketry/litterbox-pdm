@@ -4,7 +4,7 @@ sidebar, the parts screen (toolbar, search, list) beside the details pane, the l
 Each area's behaviour lives in its own file (menus.py, sidebar.py, parts_list.py, detail_pane.py, status_bar.py).
 
     +-----------------------------------------------------------------------+
-    | File  Vault  View  Help                               [logo] Litterbox |
+    | File  Vault  View  Help            <org name>           [logo] Litterbox |
     | [HCR v]  C:\\Litterbox\\hcr-litterbox      Austin (Admin)  My Tasks  Get Latest |
     | sidebar |  toolbar / search / parts list           |  details pane     |
     | (log drawer, when open)                                                |
@@ -44,6 +44,7 @@ class WindowLayout:
         scaling.style_tables(scaling.scale_of(self))
         self.menu_bar = menu_bar.MenuBar(self, self._menus(), logo=self.icons.logo(self._px(18)))
         self.menu_bar.grid(row=0, column=0, sticky="ew")
+        self.menu_bar.set_title(self._org_name())
         self._build_header()
         body = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
         body.grid(row=2, column=0, sticky="nsew")
@@ -127,6 +128,7 @@ class WindowLayout:
         self._build_detail_pane(self.detail_frame)
         if self.settings.get("details_pane", True) is not False:
             self.parts_screen.add(self.detail_frame, weight=0)
+        self._show_pane_arrow()
         self.screens = {"parts": self.parts_screen}
 
     def _build_toolbar(self, parent):
@@ -146,12 +148,20 @@ class WindowLayout:
         for column, (title, fill) in enumerate(self._toolbar_menus()):
             menu_bar.DropButton(self.more, title, fill, height=36, width=84, fg_color=theme.GRAY,
                                 hover_color=theme.GRAY_HOVER).grid(row=0, column=column, padx=(0, 6))
+        self.toolbar.columnconfigure(2, weight=1)
+        self.show_pane_button = release_button.ReleaseButton(
+            self.toolbar, text="«", width=32, height=28, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
+            command=lambda: self.set_details_pane(True))
+        self.show_pane_button.grid(row=0, column=2, sticky="ne")
+        tooltip.Tooltip(self.show_pane_button, "Show the details pane.")
         self.toolbar.bind("<Configure>", lambda event: self._arrange_toolbar(event.width), add="+")
 
     def _arrange_toolbar(self, width):
         """On a narrow window the menus move under the everyday buttons instead of running off the edge."""
         try:
             needed = self.everyday.winfo_reqwidth() + self.more.winfo_reqwidth() + self._px(8)
+            if self.show_pane_button.winfo_ismapped():
+                needed += self.show_pane_button.winfo_reqwidth() + self._px(6)
         except Exception:
             return
         if width < needed:
@@ -252,7 +262,7 @@ class WindowLayout:
         hide = ctk.CTkButton(top, text="\u00bb", width=32, height=28, fg_color=theme.GRAY,
                              hover_color=theme.GRAY_HOVER, command=lambda: self.set_details_pane(False))
         hide.grid(row=0, column=3)
-        tooltip.Tooltip(hide, "Hide the details pane (View > Details pane brings it back).")
+        tooltip.Tooltip(hide, "Hide the details pane (the « at the top right of the list brings it back).")
         self.pane_state = ctk.CTkLabel(parent, text="Click a part to see its details.", text_color=theme.MUTED,
                                        anchor="w", justify="left", wraplength=320)
         self.pane_state.grid(row=1, column=0, sticky="ew", padx=(6, 10), pady=(0, 4))
