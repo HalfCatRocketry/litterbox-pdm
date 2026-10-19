@@ -6,7 +6,8 @@ and cloned to your computer) and turns it into a Litterbox vault:
 
     .gitattributes         CAD files go through Git LFS and can be locked (that is what "check out" is)
     .gitignore             keeps temporary and lock files out of the vault
-    .litterbox/config.yaml the vault's shared settings: org code, first part number, digits, format version
+    .litterbox/config.yaml the vault's shared settings: org code, first part number, digits, the variant assemblies
+                           start at, format version
     README.md              a short note for anyone who stumbles on the repository (only if there is none)
 
 ...commits them, pushes them, and (optionally) sets up the team with you as its Owner.
@@ -18,8 +19,12 @@ The folder must be a clone of an empty (or almost empty) repository. Nothing in 
 .gitattributes or .gitignore only gets the lines it is missing. If any step fails, the files this wrote are
 removed again and any commit is undone, so you can simply run it again.
 
+    check_settings(...) checks the org code and numbering alone, before there is a folder to check
     plan(...)   checks everything and returns the problems and warnings, without touching anything
     create(...) does it (calls plan() first and refuses if there are problems)
+
+Create new vault... in the window asks for the empty repository's URL and clones it first (vault/clone.py). Litterbox
+has no way to change the org code, org name or numbering afterwards: they are fixed once the vault exists.
 
 CHOOSING THE NUMBERS (they can't be changed once the first part number exists)
     digits in the part number   5 (default) allows 99,999 parts; 4 allows 9,999; 6 allows 999,999.
@@ -56,16 +61,47 @@ README = "README.md"
 LFS = "filter=lfs diff=lfs merge=lfs -text"
 
 
-ATTRIBUTE_LINES = [
-    f"*.SLDPRT {LFS} lockable",
-    f"*.SLDASM {LFS} lockable",
-    f"*.SLDDRW {LFS} lockable",
-    "PN-logs/*.yaml lockable",
-    f"cancelled-revs/** {LFS}",
-]
+def any_case(extension):
+    """'step' -> '*.[sS][tT][eE][pP]': a pattern that matches the extension in any mix of capitals. Git and Git LFS
+    only ignore case where the computer does (Windows), so the pattern itself has to."""
+    return "*." + "".join(f"[{c.lower()}{c.upper()}]" if c.isalpha() else c for c in extension)
 
 
-ATTRIBUTE_HEADER = "# Litterbox: CAD files are stored with Git LFS and can be locked (checked out)."
+# Files that belong to a part (they live in cad/ under its name and are checked out with it): SolidWorks files,
+# the exports made from them, and other CAD formats.
+LOCKABLE_EXTENSIONS = (
+    "sldprt", "sldasm", "slddrw",                          # SolidWorks
+    "step", "stp", "pdf",                                   # exports: STEP from the model, PDF from the drawing
+    "iges", "igs", "x_t", "x_b", "sat", "stl", "3mf",       # other 3D exports
+    "dxf", "dwg",                                           # 2D exports (flat patterns, laser and waterjet cutting)
+    "eprt", "easm", "edrw",                                 # eDrawings
+)
+
+
+# Other binary files that may end up in a vault (pictures, office documents, archives, video, SolidWorks
+# templates): stored with Git LFS so they don't bloat the history, but not locked.
+LFS_EXTENSIONS = (
+    "png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic",
+    "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx",
+    "zip", "7z", "rar",
+    "mp4", "mov", "avi",
+    "prtdot", "asmdot", "drwdot", "slddrt", "sldlfp", "sldblk",
+)
+
+
+ATTRIBUTE_LINES = (
+    [f"{any_case(ext)} {LFS} lockable" for ext in LOCKABLE_EXTENSIONS]
+    + [f"{any_case(ext)} {LFS}" for ext in LFS_EXTENSIONS]
+    + [
+        f"cad/** {LFS} lockable",                           # anything else in cad/ belongs to a part too
+        "PN-logs/*.yaml lockable",
+        f"cancelled-revs/** {LFS}",
+    ]
+)
+
+
+ATTRIBUTE_HEADER = ("# Litterbox: CAD files, their exports and other binary files are stored with Git LFS; a part's "
+                    "files can be locked (checked out). Patterns match any capitals.")
 
 
 IGNORE_LINES = [
@@ -148,9 +184,10 @@ def _has_commits(repo):
         return False
 
 
-def plan(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
-         variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True):
-    """Check that `folder` can become a vault with these settings. Changes nothing."""
+def check_settings(org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
+                   variant_digits=part_number.DEFAULT_VARIANT_DIGITS, assembly_variant_start=None):
+    """Check the settings alone (no folder needed yet), so they can be checked before anything is cloned.
+    assembly_variant_start None means the default (500 with 3-digit variants)."""
     result = InitPlan()
     try:
         result.org = check_org(str(org).strip()).upper()
@@ -165,9 +202,20 @@ def plan(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGIT
         result.problems.append("The first part number must be a whole number, 1 or higher.")
     elif not result.problems and start_number > 10 ** base_digits - 1:
         result.problems.append(f"The first part number {start_number} doesn't fit in {base_digits} digits.")
+    if not result.problems and assembly_variant_start is not None:
+        try:
+            config.check_assembly_variant(assembly_variant_start, variant_digits)
+        except config.ConfigError as e:
+            result.problems.append(str(e))
     if not result.problems:
         result.warnings.extend(numbering_warnings(start_number, base_digits, variant_digits))
+    return result
 
+
+def plan(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
+         variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True, assembly_variant_start=None):
+    """Check that `folder` can become a vault with these settings. Changes nothing."""
+    result = check_settings(org, start_number, base_digits, variant_digits, assembly_variant_start)
     folder = Path(folder)
     if not folder.is_dir():
         result.problems.append(f"The folder doesn't exist: {folder}")
@@ -284,11 +332,11 @@ class _Writer:
 
 def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
            variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True, set_up_team=True, name=None, email=None,
-           min_version=version.VERSION, org_name=None):
+           min_version=version.VERSION, org_name=None, assembly_variant_start=None):
     """Turn the empty cloned repository in `folder` into a Litterbox vault. Returns an InitResult.
 
     Raises InitError if there are problems (nothing is changed), or if a step fails (everything is undone)."""
-    checked = plan(folder, org, start_number, base_digits, variant_digits, push)
+    checked = plan(folder, org, start_number, base_digits, variant_digits, push, assembly_variant_start)
     if not checked.ok:
         raise InitError("The vault can't be set up yet:\n- " + "\n- ".join(checked.problems))
     org = checked.org
@@ -320,6 +368,8 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
         writer.note(config_rel, None)
         config_write.save(repo, org=org, start_number=start_number, base_digits=base_digits,
                     variant_digits=variant_digits, org_name=org_name)
+        config_write.set_values(repo, assembly_variant_start=(
+            config.default_assembly_variant(variant_digits) if assembly_variant_start is None else assembly_variant_start))
         config_write.stamp(repo, min_version=min_version)
 
         paths = writer.paths

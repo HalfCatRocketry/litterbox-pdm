@@ -4,6 +4,10 @@ import_numbering.py - the part numbers an import proposes.
 It proposes numbers DEFAULT_GAP plus up to DEFAULT_JITTER past the lowest free part number, looping round past the
 highest the digits allow. Items can be put in one family (one base, several variants). Numbers are checked again
 at the end, and any that someone took meanwhile are swapped for the next free ones.
+
+Variants follow New Part and New Assembly (parts/create.py: variant_range): an assembly (.SLDASM) gets the first
+variant of the assembly range (500 unless the org chose another), everything else 001; in a family, assemblies take
+the free variants from 500 up and parts the free ones below. A typed number is never changed.
 """
 
 import random
@@ -11,6 +15,7 @@ from dataclasses import dataclass, field
 
 from litterbox.core import numbering
 from litterbox.core import part_number
+from litterbox.core import projects as project_rules
 from litterbox.core.part_number import PN
 from litterbox.importing import import_errors
 from litterbox.parts import create
@@ -77,41 +82,82 @@ class Proposal:
         return [e.pn for e in self.entries]
 
 
+def kind_of(item):
+    """create.ASSEMBLY for an assembly item (its main file is a .SLDASM), else create.PART."""
+    return create.ASSEMBLY if getattr(item, "kind", "") == "assembly" else create.PART
+
+
+def variant_ranges(repo):
+    """{kind: (lowest, highest)} variant each kind of item takes on its own."""
+    return {kind: create.variant_range(repo, kind) for kind in (create.PART, create.ASSEMBLY)}
+
+
+def with_variant(repo, item, pn, ranges=None):
+    """`pn` with the first variant of the item's range (pick_block's numbers are all variant 001)."""
+    ranges = ranges or variant_ranges(repo)
+    return PN(pn.org, pn.base, ranges[kind_of(item)][0])
+
+
 def used_numbers(repo, org):
     existing = record_store.list_pns(repo, org)
     return set(existing), {pn.base for pn in existing}
 
 
 def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=None):
-    """`count` part numbers (variant 001) to propose: the free ones starting `gap` places (plus a random extra of up
+    """`count` part numbers (variant 001; with_variant gives an assembly its own) to propose: the free ones starting `gap` places (plus a random extra of up
     to `jitter`) past the LOWEST free part number, which is not the same as above the highest one in use. Numbers
     count up from the vault's start number and, past the highest the digits allow, round again from 1."""
     _taken, bases = used_numbers(repo, org)
     start = config.get_start_number(repo)
-    lowest = numbering.free_bases(bases, 1, start)
+    allowed = project_rules.outside_blocks(config.get_projects(repo))      # automatic numbers stay out of project blocks
+    lowest = numbering.free_bases(bases, 1, start, allowed)
     if not lowest:
         raise import_errors.ImportFailed(f"The vault does not have {count} free part numbers left.")
     extra = (rng or random).randrange(jitter) if jitter > 0 and gap > 0 else 0
     first = numbering.base_after(lowest[0], max(gap, 0) + extra, start)
-    free = numbering.free_bases(bases, count, first)
+    free = numbering.free_bases(bases, count, first, allowed)
     if len(free) < count:
         raise import_errors.ImportFailed(f"The vault does not have {count} free part numbers left.")
     return [PN(org, b, 1) for b in free]
 
 
-def family_free_variants(repo, proposal, skip=()):
-    """The variant numbers of the family base that nothing is using: not in the vault, and not typed into a row."""
+def family_free_variants(repo, proposal, skip=(), kind=None):
+    """The variant numbers of the family base that nothing is using: not in the vault, and not typed into a row.
+    With `kind`, only those in its range (parts below the assembly start, assemblies from it)."""
     base, org = proposal.family, proposal.org
     used = {pn.variant for pn in record_store.list_pns(repo, org) if pn.base == base}
     used |= {e.pn.variant for i, e in enumerate(proposal.entries)
              if e.manual and e.pn.base == base and i not in skip}
-    return [v for v in range(part_number.MIN_VARIANT, part_number.MAX_VARIANT + 1) if v not in used]
+    low, high = variant_ranges(repo)[kind] if kind else (part_number.MIN_VARIANT, part_number.MAX_VARIANT)
+    return [v for v in range(low, high + 1) if v not in used]
 
 
-def family_shortage(base, wanted, free):
-    return (f"Part number {part_number.format_base(base)} only has {free} unused variant number(s) "
-            f"(the most a part number can have is {part_number.MAX_VARIANT}), but {wanted} part(s) are being imported "
-            f"to it. Choose another number, or import fewer parts at a time.")
+def family_shortage(base, wanted, free, kind=None, ranges=None):
+    if kind is None:
+        return (f"Part number {part_number.format_base(base)} only has {free} unused variant number(s) "
+                f"(the most a part number can have is {part_number.MAX_VARIANT}), but {wanted} part(s) are being "
+                f"imported to it. Choose another number, or import fewer parts at a time.")
+    low, high = ranges[kind]
+    plural = {create.PART: "parts", create.ASSEMBLY: "assemblies"}[kind]
+    return (f"Part number {part_number.format_base(base)} only has {free} unused variant number(s) for {plural} "
+            f"({part_number.format_variant(low)} to {part_number.format_variant(high)}), but {wanted} {plural} are "
+            "being imported to it. Choose another number, or import fewer at a time.")
+
+
+def _family_variants(repo, proposal, entries, skip=(), keep=()):
+    """{entry index in `entries`: variant} giving each entry a free variant of the family base in its own range.
+    Raises FamilyFull (changing nothing) if a range runs short. `keep` are variants that stay as they are."""
+    ranges = variant_ranges(repo)
+    chosen = {}
+    for kind in (create.PART, create.ASSEMBLY):
+        wanted = [n for n, e in enumerate(entries) if kind_of(e.item) == kind]
+        if not wanted:
+            continue
+        free = [v for v in family_free_variants(repo, proposal, skip, kind) if v not in keep]
+        if len(free) < len(wanted):
+            raise import_errors.FamilyFull(family_shortage(proposal.family, len(wanted), len(free), kind, ranges))
+        chosen.update(zip(wanted, free))
+    return chosen
 
 
 def set_family(repo, proposal, base, sync=True):
@@ -130,8 +176,9 @@ def set_family(repo, proposal, base, sync=True):
                 raise import_errors.ImportFailed(str(e)) from None
         proposal.family = None
         if count:
+            ranges = variant_ranges(repo)
             for entry, pn in zip((e for e in proposal.entries if not e.manual), pick_block(repo, count, proposal.org)):
-                entry.pn = pn
+                entry.pn = with_variant(repo, entry.item, pn, ranges)
         return
     try:
         base = part_number.check_new_base(base)
@@ -145,23 +192,29 @@ def set_family(repo, proposal, base, sync=True):
     previous = proposal.family
     proposal.family = base
     automatic = [e for e in proposal.entries if not e.manual]
-    free = family_free_variants(repo, proposal)
-    if len(free) < len(automatic):
+    try:
+        chosen = _family_variants(repo, proposal, automatic)
+    except import_errors.FamilyFull:
         proposal.family = previous
-        raise import_errors.FamilyFull(family_shortage(base, len(automatic), len(free)))
-    for entry, variant in zip(automatic, free):
-        entry.pn = PN(proposal.org, base, variant)
+        raise
+    for n, entry in enumerate(automatic):
+        entry.pn = PN(proposal.org, base, chosen[n])
 
 
 def check_proposal(repo, proposal):
-    """Conflicts in the table right now (reads the local copy; call sync first for the latest)."""
+    """Conflicts in the table right now (reads the local copy; call sync first for the latest).
+
+    An automatic row with separate numbers needs a part number nobody else has, whatever its variant: an assembly's
+    HCR-00003-500 must not land on the base of someone's HCR-00003-001. Typed rows and a family only need their
+    own variant."""
     org = proposal.org
-    taken, _bases = used_numbers(repo, org)
-    claimed, conflicts = {}, []
+    taken, bases = used_numbers(repo, org)
+    claimed, claimed_bases, conflicts = {}, {}, []
     order = [i for i, e in enumerate(proposal.entries) if e.manual] + \
             [i for i, e in enumerate(proposal.entries) if not e.manual]
     for index in order:
         entry = proposal.entries[index]
+        separate = not entry.manual and proposal.family is None
         if entry.pn.org != org:
             reason = f"{entry.pn} is for a different organization (this vault uses {org})."
         elif entry.pn in taken:
@@ -172,8 +225,14 @@ def check_proposal(repo, proposal):
                 reason = f"{entry.pn} is already used."
         elif entry.pn in claimed:
             reason = f"{entry.pn} is used twice in this import (rows {claimed[entry.pn] + 1} and {index + 1})."
+        elif separate and entry.pn.base in bases:
+            reason = f"Part number {part_number.format_base(entry.pn.base)} is already used in the vault."
+        elif separate and entry.pn.base in claimed_bases:
+            reason = (f"Part number {part_number.format_base(entry.pn.base)} is already used in this import "
+                      f"(row {claimed_bases[entry.pn.base] + 1}).")
         else:
             claimed[entry.pn] = index
+            claimed_bases.setdefault(entry.pn.base, index)
             continue
         conflicts.append(Conflict(index, entry.pn, reason, entry.manual))
     return sorted(conflicts, key=lambda c: c.index)
@@ -189,29 +248,28 @@ def _renumber_automatic(repo, proposal, conflicts):
     bad = [c for c in conflicts if not c.manual]
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
     near = min(automatic, default=config.get_start_number(repo))          # stay near the proposed block
-    free = numbering.free_bases(bases | in_use, len(bad), near)
+    free = numbering.free_bases(bases | in_use, len(bad), near, project_rules.outside_blocks(config.get_projects(repo)))
     if len(free) < len(bad):
         raise import_errors.ImportFailed("The vault has run out of part numbers for this import.")
-    changes = []
+    changes, ranges = [], variant_ranges(repo)
     for conflict, candidate in zip(bad, free):
         entry = proposal.entries[conflict.index]
-        changes.append((conflict.index, entry.pn, PN(proposal.org, candidate, 1)))
-        entry.pn = PN(proposal.org, candidate, 1)
+        new = with_variant(repo, entry.item, PN(proposal.org, candidate, 1), ranges)
+        changes.append((conflict.index, entry.pn, new))
+        entry.pn = new
     return changes
 
 
 def _renumber_family(repo, proposal, conflicts):
     """Family mode: an automatic row whose variant was taken gets the next unused variant of the base."""
-    bad = {c.index for c in conflicts if not c.manual}
+    bad = sorted({c.index for c in conflicts if not c.manual})
     keep = {e.pn.variant for i, e in enumerate(proposal.entries)
             if i not in bad and e.pn.base == proposal.family}
-    free = [v for v in family_free_variants(repo, proposal, skip=bad) if v not in keep]
-    if len(free) < len(bad):
-        raise import_errors.FamilyFull(family_shortage(proposal.family, len(proposal.entries), len(free) + len(keep)))
+    chosen = _family_variants(repo, proposal, [proposal.entries[i] for i in bad], skip=set(bad), keep=keep)
     changes = []
-    for index, variant in zip(sorted(bad), free):
+    for n, index in enumerate(bad):
         entry = proposal.entries[index]
-        new = PN(proposal.org, proposal.family, variant)
+        new = PN(proposal.org, proposal.family, chosen[n])
         changes.append((index, entry.pn, new))
         entry.pn = new
     return changes

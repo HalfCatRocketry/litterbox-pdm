@@ -342,8 +342,8 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual(pn_of(), PN("HCR", 700, 2))
         self.assertEqual(edit("00700", ""), "")                       # empty variant: 001 without a repo...
         self.assertEqual(pn_of(), PN("HCR", 700, 1))
-        self.assertEqual(edit("00001", "", repo=self.a), "")           # ...or the lowest free one (001 is taken)
-        self.assertEqual(pn_of(), PN("HCR", 1, 2))
+        self.assertEqual(edit("00001", "", repo=self.a), "")           # ...or the lowest free one in its range
+        self.assertEqual(pn_of(), PN("HCR", 1, 500))                   # (top is an assembly: from 500)
         self.assertEqual(edit("", "005"), "")                          # empty base keeps the base
         self.assertEqual(pn_of(), PN("HCR", 1, 5))
         self.assertIn("exactly 5 digits", edit("7", "001"))

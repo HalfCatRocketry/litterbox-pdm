@@ -19,6 +19,7 @@ EVENT_LABELS = {
     "references_updated": "Parts used updated",
     "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
     "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",
+    "checkout_broken": "Checkout broken",
 }
 
 
@@ -43,6 +44,8 @@ def format_history(record, local=True):
         parts = []
         if event.get("eco"):
             parts.append(str(event["eco"]))
+        if event.get("event") == "checkout_broken" and event.get("of"):
+            parts.append(f"was checked out by {event['of']}")
         if event.get("reason"):
             parts.append(str(event["reason"]))
         if event.get("comment"):

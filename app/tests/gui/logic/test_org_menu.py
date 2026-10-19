@@ -112,6 +112,19 @@ class AddOrgWiring(unittest.TestCase):
         self.assertNotIn("self._org_setup(None)", source)
         self.assertIn("part_number.NEW_VAULT_BASE_DIGITS", source)
 
+    def test_there_is_no_way_to_change_an_orgs_settings(self):
+        source = gui_source()
+        for gone in ("Org setup", "_org_setup", "config_write"):
+            self.assertNotIn(gone, source)
+        self.assertFalse(hasattr(org_menu, "EDIT_ORG"))
+
+    def test_the_last_question_says_the_settings_are_fixed(self):
+        text = org_menu.fixed_settings_text("HCR", "Hidden Creek Robotics", 10001, 6, 3, ["Think twice."])
+        for wanted in ("can't change them", "HCR", "Hidden Creek Robotics", "6 digits and a 3-digit variant",
+                       "HCR-010001-001", "Think twice.", "Create the vault?"):
+            self.assertIn(wanted, text)
+        self.assertIn("(none)", org_menu.fixed_settings_text("HCR", "", 1, 5, 3))
+
     def test_new_vaults_suggest_six_digits_but_existing_vaults_keep_their_default(self):
         from litterbox.core import part_number
         self.assertEqual(part_number.NEW_VAULT_BASE_DIGITS, 6)

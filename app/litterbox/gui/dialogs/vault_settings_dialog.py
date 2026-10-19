@@ -1,20 +1,24 @@
 """
-vault_settings_dialog.py - Vault Settings (Admin and Owner): commit style, release rule, signed commits.
+vault_settings_dialog.py - Vault Settings (Admin and Owner): commit style, release rule, signed commits, and the
+variant assemblies start at.
 """
 
 import tkinter as tk
+from tkinter import messagebox
 
 import customtkinter as ctk
 
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.widgets import modal_dialog
+from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import release_button
+from litterbox.vault import config
 
 
 class VaultSettingsDialog(modal_dialog.ModalDialog):
-    """The vault's shared settings, as one dict: commit_style, release_rule, require_signatures (see config.py).
-    show() gives the chosen values (all three) or None."""
+    """The vault's shared settings, as one dict: commit_style, release_rule, require_signatures and
+    assembly_variant_start (see config.py). show() gives the chosen values (all four) or None."""
 
     COMMITS = {"One commit per part (default)": "per_part", "One commit for the whole batch (faster)": "per_batch"}
     RULES = {"Warn, and let me go ahead (default)": "warn", "Block the release": "block", "Say nothing": "off"}
@@ -25,7 +29,7 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         window_chrome.set_window_icon(self)
         current = current or {}
         self.result = None
-        width, height = 560, 520
+        width, height = 560, 620
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Vault settings")
@@ -58,6 +62,15 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
             ctk.CTkLabel(self, text=note, anchor="w", justify="left", wraplength=510, text_color=theme.MUTED).grid(
                 row=row + 2, column=0, sticky="ew", padx=20, pady=(4, 0))
             row += 3
+        ctk.CTkLabel(self, text="New Assembly starts at variant:", anchor="w").grid(
+            row=row, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.assembly_var = tk.StringVar(value=str(current.get("assembly_variant_start", "")))
+        ctk.CTkEntry(self, textvariable=self.assembly_var, width=90, height=32).grid(
+            row=row + 1, column=0, padx=20, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(self, text="New Part uses the variants below it. Parts already made keep their numbers.",
+                     anchor="w", justify="left", wraplength=510, text_color=theme.MUTED).grid(
+            row=row + 2, column=0, sticky="ew", padx=20, pady=(4, 0))
+        row += 3
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=row, column=0, sticky="ew", padx=20, pady=(14, 16))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
@@ -69,5 +82,12 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         self.after(150, self._grab)
 
     def _ok(self):
-        self.result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
+        result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
+        try:
+            start = number_input.parse_number(self.assembly_var.get(), "assembly variant")
+            result["assembly_variant_start"] = config.check_assembly_variant(start)
+        except (ValueError, config.ConfigError) as e:
+            messagebox.showwarning("Vault settings", str(e), parent=self)
+            return
+        self.result = result
         self.destroy()

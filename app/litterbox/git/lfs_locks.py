@@ -155,6 +155,16 @@ def unlock_mine(repo, paths):
     return [(path, str(error)) for path, (_value, error) in zip(mine, results) if error is not None]
 
 
+def force_unlock(repo, paths):
+    """Release these locks, whoever holds them (Break Checkout). Raises LitterboxError naming any that failed."""
+    paths = list(paths)
+    results = _parallel(lambda path: run_lfs(["git", "lfs", "unlock", "--force", path], repo), paths)
+    failed = [(path, error) for path, (_value, error) in zip(paths, results) if error is not None]
+    if failed:
+        raise LitterboxError("Could not release these locks:\n" + "\n".join(
+            f"  {path}: {str(error).splitlines()[-1] if str(error) else ''}" for path, error in failed))
+
+
 def force_unlock_quietly(repo, paths):
     """Used when rolling back after an error: release locks, never raise."""
     paths = list(paths)

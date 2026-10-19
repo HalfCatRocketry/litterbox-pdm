@@ -26,14 +26,19 @@ LIFECYCLE_MENU = (("Edit Details", "edit_details"), None, ("Release", "release")
                   ("Unrelease", "reopen"), ("Void", "void"))
 
 
-CREATE_MENU = (("New Part", "new_part"), ("Import...", "import_cad"), ("Import COTS...", "import_cots"))
+CREATE_MENU = (("New Part", "new_part"), ("New Assembly", "new_assembly"), ("Import...", "import_cad"),
+               ("Import COTS...", "import_cots"))
 
 
 EVERYDAY_MENU = (("Check Out", "check_out"), ("Check In", "check_in"), ("Save Progress", "save_progress"),
                  ("Undo Checkout", "undo_checkout"))
 
 
-ENTRY_TEXT = {"Details": "Details and History..."}          # where an entry reads differently from its button name
+ADMIN_LIFECYCLE_MENU = (None, ("Break Checkout", "break_checkout"))      # only for those who may (Admin, Owner)
+
+
+ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout..."}   # where an entry reads
+                                                                                          # differently from its button
 
 
 class Menus:
@@ -52,8 +57,12 @@ class Menus:
 
     def _toolbar_menus(self):
         return [("Open", lambda menu: self._fill_actions(menu, OPEN_MENU)),
-                ("Lifecycle", lambda menu: self._fill_actions(menu, LIFECYCLE_MENU)),
+                ("Lifecycle", lambda menu: self._fill_actions(menu, self._lifecycle_entries())),
                 ("Create", lambda menu: self._fill_actions(menu, CREATE_MENU))]
+
+    def _lifecycle_entries(self):
+        """The Lifecycle menu, with Break Checkout for an Admin or the Owner."""
+        return LIFECYCLE_MENU + (ADMIN_LIFECYCLE_MENU if self.identity.allows("break_checkout")[0] else ())
 
     def _fill_actions(self, menu, entries):
         """Add part actions to a menu, greyed out when the ticked or highlighted parts don't allow them."""
@@ -95,8 +104,6 @@ class Menus:
             menu.add_separator()
         menu.add_command(label="Add org...", command=self.add_org, state="disabled" if busy else "normal")
         menu.add_command(label="Create new vault...", command=self.create_vault, state="disabled" if busy else "normal")
-        menu.add_command(label="Org setup...", command=lambda: self._org_setup(self.org),
-                         state="disabled" if busy or not self.org else "normal")
         menu.add_separator()
         menu.add_command(label="Exit", command=self._on_close)
 
@@ -111,6 +118,7 @@ class Menus:
         menu.add_command(label="Download All...", command=self.download_all)
         menu.add_separator()
         menu.add_command(label="New Part...", command=self.new_part)
+        menu.add_command(label="New Assembly...", command=self.new_assembly)
         menu.add_command(label="Import...", command=self.import_cad)
         menu.add_command(label="Import COTS...", command=self.import_cots)
 
@@ -171,7 +179,7 @@ class Menus:
         count = len(self._ticked_pns())
         menu.add_command(label=f"Acting on {count} ticked part{'s' if count != 1 else ''}", state="disabled")
         menu.add_separator()
-        self._fill_actions(menu, EVERYDAY_MENU + (None,) + OPEN_MENU + (None,) + LIFECYCLE_MENU)
+        self._fill_actions(menu, EVERYDAY_MENU + (None,) + OPEN_MENU + (None,) + self._lifecycle_entries())
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:

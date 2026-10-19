@@ -11,6 +11,11 @@ team uses the same ones):
     format_version: 1     the layout of the vault's files (see version.py), default 1
     min_litterbox_version: 0.1.0   the oldest Litterbox allowed in this vault, default none
     commit_style, release_rule, require_signatures   see their get_ functions below
+    assembly_variant_start: 500   New Assembly's variants start here, New Part's stay below it (default 5 followed
+                          by zeros: 500 with 3-digit variants). An Admin can change it at any time
+    projects:             blocks of part numbers set aside for projects (core/projects.py), each a name and the
+    - name: Rover         digits its part numbers start with. Only added to, never changed (settings_admin.py)
+      prefix: '12'
 
 If the file doesn't exist yet, the org code is worked out from the part numbers already in the vault (as long as
 they all use the same one). vault/create_vault.py writes the file for new vaults.
@@ -26,6 +31,7 @@ import yaml
 
 from litterbox import layout
 from litterbox.core import part_number
+from litterbox.core import projects as project_rules
 from litterbox.core.part_number import PNError, check_org
 from litterbox.records import record_store
 from litterbox.vault import compatibility
@@ -188,6 +194,42 @@ def get_commit_style(repo):
         raise ConfigError(f"commit_style in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be one of "
                           f"{', '.join(COMMIT_STYLES)}, not {value!r}.")
     return value
+
+
+def get_projects(repo):
+    """The org's projects (core/projects.py Project), in the order they were added. [] if there are none."""
+    base_digits, _variant_digits = get_digits(repo)
+    try:
+        return project_rules.from_data(load(repo).get("projects"), base_digits)
+    except project_rules.ProjectError as e:
+        raise ConfigError(f"projects in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
+
+
+def default_assembly_variant(variant_digits=None):
+    """The variant assemblies start at unless the org chose another: 500 with 3-digit variants, 50 with 2."""
+    return 5 * 10 ** ((variant_digits or part_number.VARIANT_DIGITS) - 1)
+
+
+def check_assembly_variant(value, variant_digits=None):
+    """The variant assemblies start at, checked: there must be room for part variants below it (from 1) and for
+    assembly variants from it. Raises ConfigError."""
+    highest = 10 ** (variant_digits or part_number.VARIANT_DIGITS) - 1
+    if isinstance(value, bool) or not isinstance(value, int) or not (2 <= value <= highest):
+        raise ConfigError(f"The variant assemblies start at must be a whole number from 2 to {highest} (parts use "
+                          "the variants below it).")
+    return value
+
+
+def get_assembly_variant_start(repo):
+    """The first variant New Assembly uses (New Part uses the ones below it)."""
+    _base_digits, variant_digits = get_digits(repo)
+    value = load(repo).get("assembly_variant_start")
+    if value in (None, ""):
+        return default_assembly_variant(variant_digits)
+    try:
+        return check_assembly_variant(value, variant_digits)
+    except ConfigError as e:
+        raise ConfigError(f"assembly_variant_start in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
 
 
 def get_require_signatures(repo):

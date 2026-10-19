@@ -24,7 +24,7 @@ class BatchRecordEdits(BatchFixture, unittest.TestCase):
             (done, failed), commands = self.commands(lifecycle.void_many, self.a, self.pns, "Not needed")
             self.assertEqual((len(done), failed), (COUNT, []))
             self.assertEqual(self.count(commands, "git push"), 1)
-            self.assertEqual(self.count(commands, "git pull"), 2)           # once to start, once inside the upload
+            self.assertEqual(self.count(commands, "git fetch"), 2)           # once to start, once inside the upload
             self.assertEqual(self.count(commands, "git commit"), 1)               # one commit for all of them
             self.assertEqual(self.locks(self.a), {})
         message = git(self.a, "log", "-1", "--format=%B")
@@ -77,7 +77,7 @@ class BatchRecordEdits(BatchFixture, unittest.TestCase):
             (done, failed), commands = self.commands(lifecycle.release_many, self.a, self.pns)
             self.assertEqual((len(done), failed), (COUNT, []))
             self.assertEqual(self.count(commands, "git push"), 1)
-            self.assertEqual(self.count(commands, "git fetch"), 1)                    # the vault was looked at once
+            self.assertEqual(self.count(commands, "git fetch"), 3)     # once to plan, and the upload's two syncs
             (done, failed), commands = self.commands(lifecycle.reopen_many, self.a, self.pns, "Oops")
             self.assertEqual((len(done), failed), (COUNT, []))
             self.assertEqual(self.count(commands, "git push"), 1)

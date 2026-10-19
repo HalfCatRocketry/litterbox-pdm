@@ -54,10 +54,17 @@ class Planning(unittest.TestCase):
         self.assertEqual((target, problem), (Path("/root/Litterbox/hcr-litterbox"), ""))
 
     def test_a_vault_that_is_already_added_is_not_cloned_again(self):
-        target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox",
-                                             {"HCR": "/root/Litterbox/hcr-litterbox"})
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "hcr-litterbox").mkdir()
+            target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", root,
+                                                 {"HCR": str(Path(root) / "hcr-litterbox")})
         self.assertIsNone(target)
         self.assertIn("HCR is already added", problem)
+
+    def test_an_added_vault_whose_folder_is_gone_is_cloned_again(self):
+        target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox",
+                                             {"HCR": "/root/Litterbox/hcr-litterbox"})
+        self.assertEqual((target, problem), (Path("/root/Litterbox/hcr-litterbox"), ""))
 
     def test_a_bad_url_gives_its_reason(self):
         target, problem = org_menu.plan_add_org("nonsense", "/root/Litterbox", {})
@@ -90,6 +97,23 @@ class Cloning(unittest.TestCase):
         self.assertEqual(vault_clone.clone(self.url, target, on_demand=False), target)
         self.assertEqual(org_menu.inspect_vault_folder(target), ("HCR", ""))
         self.assertTrue(any("git clone" in line for line in self.lines))
+
+    def test_create_new_vault_uses_an_earlier_tries_copy_but_nothing_else(self):
+        target = self.root / "Litterbox" / "remote"
+        vault_clone.clone_or_reuse(self.url, target, on_demand=False)
+        (target / "left from the first try").write_text("x")
+        self.assertEqual(vault_clone.clone_or_reuse(self.url, target, on_demand=False), target)    # not cloned again
+        self.assertTrue((target / "left from the first try").exists())
+        other = self.root / "Litterbox" / "other"
+        other.mkdir()
+        (other / "notes.txt").write_text("mine")
+        with self.assertRaises(LitterboxError) as caught:
+            vault_clone.clone_or_reuse(self.url, other, on_demand=False)
+        self.assertIn("isn't a copy of", str(caught.exception))
+        empty = self.root / "Litterbox" / "empty"
+        empty.mkdir()
+        self.assertEqual(vault_clone.clone_or_reuse(self.url, empty, on_demand=False), empty)    # an empty folder is fine
+        self.assertTrue((empty / ".git").exists())
 
     def test_a_failed_clone_says_why(self):
         with self.assertRaises(LitterboxError) as caught:

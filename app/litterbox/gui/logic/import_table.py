@@ -10,6 +10,7 @@ from litterbox.core import part_number
 from litterbox.errors import LitterboxError
 from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import number_input
+from litterbox.importing import import_numbering
 
 
 IMPORT_KIND_LABELS = {"part": "Part", "assembly": "Assembly", "drawing": "Drawing only"}
@@ -155,7 +156,8 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
     """Apply a part number typed into the two boxes [base]-[variant]. Returns '' if it worked, else a message.
 
     Both boxes empty gives the row back to Litterbox. Only one box filled in: an empty variant means the
-    lowest free variant of that part number (as in New Part), an empty base keeps the row's current base.
+    lowest free variant of that part number in the item's range (as in New Part, or New Assembly for an assembly),
+    an empty base keeps the row's current base.
     Typing the numbers the row already has changes nothing (the row stays automatic).
     """
     from litterbox.records import record_store
@@ -179,7 +181,8 @@ def edit_import_pn(prepared, item_id, base_text, variant_text, repo=None):
         base = entry.pn.base
     if variant is None:
         try:
-            variant = record_store.next_free_variant(repo, base, org) if repo else 1
+            low, high = import_numbering.variant_ranges(repo)[import_numbering.kind_of(item)] if repo else (1, None)
+            variant = record_store.next_free_variant(repo, base, org, low, high) if repo else 1
         except Exception:
             variant = 1
     chosen = part_number.PN(org, base, variant)

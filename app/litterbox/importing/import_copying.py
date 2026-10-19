@@ -1,13 +1,21 @@
 """
 import_copying.py - copying the files into the vault under their new names (SolidWorks Pack and Go,
-so references follow), and checking afterwards that every copy points at the new names.
+so references follow), and checking afterwards that every copy points at the new names. Other files (exports
+such as .STEP and .PDF) are copied as they are.
 """
 
 import os
+import shutil
+
+from litterbox.cad import file_types
 
 from litterbox.importing import import_errors
 from litterbox.importing import import_paths
 from litterbox.records import record_store
+
+
+def is_solidworks(path):
+    return import_paths.ext_of(path) in file_types.SOLIDWORKS_EXTENSIONS
 
 
 def check_cancel(cancel):
@@ -22,7 +30,11 @@ def copy_everything(repo, plan, backend, cancel, progress, log):
         new_path = plan.copies[path]
         if progress:
             progress(number, total, f"Copying {os.path.basename(path)} as {os.path.basename(new_path)}")
-        backend.copy(path, new_path)
+        if is_solidworks(path):
+            backend.copy(path, new_path)
+        else:
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            shutil.copyfile(path, new_path)
         if not os.path.exists(new_path) or os.path.getsize(new_path) == 0:
             raise import_errors.ImportFailed(f"The copy {new_path} was not created properly.")
         for stored, target in plan.repoints[import_paths.path_key(path)]:
@@ -38,6 +50,8 @@ def verify(repo, plan, backend, before, log):
         new_path = plan.copies[path]
         if not os.path.exists(new_path):
             raise import_errors.ImportFailed(f"Missing after copying: {new_path}")
+        if not is_solidworks(path):
+            continue
         for stored, _found in backend.references(new_path):
             if import_paths.is_inside(stored, cad) or import_paths.path_key(stored) in plan.kept[import_paths.path_key(path)]:
                 continue

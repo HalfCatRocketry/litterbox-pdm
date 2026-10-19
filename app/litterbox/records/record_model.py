@@ -69,6 +69,9 @@ EVENT_RELEASE_WITHDRAWN = "release_withdrawn"
 EVENT_REASSIGNED = "workflow_reassigned"
 
 
+EVENT_CHECKOUT_BROKEN = "checkout_broken"       # an Admin took a part back from whoever had it checked out
+
+
 class RegistryError(Exception):
     """Something is wrong with a record. The message is safe to show to a user."""
 
@@ -108,7 +111,7 @@ def _clean_event(event):
 
 
 _KNOWN_FIELDS = {
-    "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "status", "cots",
+    "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_at", "approvals", "pending", "references", "references_outdated", "history",
 }
 
@@ -128,6 +131,7 @@ class Record:
     created_by: str
     created_at: str
     description: str = ""       # optional extra context, tags, notes
+    project: str = ""           # the project whose block of part numbers it is in (core/projects.py); "" for none
     revision: str = FIRST_REVISION   # the working (latest) revision
     released_revision: str = ""      # the latest released revision; empty until the first release
     status: str = STATUS_IN_WORK    # the status of the working revision
@@ -149,10 +153,14 @@ class Record:
             "released_revision": self.released_revision,
             "name": self.name,
             "description": self.description,
+        }
+        if self.project:
+            data["project"] = self.project
+        data.update({
             "status": self.status,
             "cots": self.cots,
             "imported": self.imported,
-        }
+        })
         if self.import_path:
             data["import_path"] = self.import_path
         data.update({
@@ -256,6 +264,7 @@ class Record:
             pn=pn,
             name=name,
             description=description,
+            project=" ".join(_as_text(data.get("project")).split()),
             created_by=_as_text(data.get("created_by")),
             created_at=_as_text(data.get("created_at")),
             revision=revision,

@@ -142,8 +142,8 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
     def test_same_base_number_box_gives_every_row_a_variant_of_it(self):
         self.scan()
         self.use_family("500")
-        self.assertEqual([r["values"][1] for r in self.rows()],
-                         [f"HCR-00500-00{n}" for n in (1, 2, 3, 4)])
+        self.assertEqual([r["values"][1] for r in self.rows()],              # sub and top are assemblies
+                         ["HCR-00500-500", "HCR-00500-501", "HCR-00500-001", "HCR-00500-002"])
         self.assertEqual(self.window.family_applied, "500")
 
     def test_leaving_the_box_empty_uses_the_suggested_number(self):

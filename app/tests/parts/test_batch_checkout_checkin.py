@@ -21,7 +21,7 @@ class BatchCheckoutCheckin(BatchFixture, unittest.TestCase):
         with self.user("Alex"):
             (done, failed), commands = self.commands(checkout.checkout_many, self.a, self.pns)
         self.assertEqual((len(done), failed), (COUNT, []))
-        self.assertEqual(self.count(commands, "git pull"), 1)
+        self.assertEqual(self.count(commands, "git fetch"), 1)
         with self.user("Alex"):
             self.assertEqual(len(self.locks(self.a)), COUNT * 3)                   # record + two files each
         for pn, result in done:
@@ -67,7 +67,7 @@ class BatchCheckoutCheckin(BatchFixture, unittest.TestCase):
             self.assertEqual((len(done), failed), (COUNT, []))
             self.assertTrue(all(r.uploaded for _pn, r in done))
             self.assertEqual(self.count(commands, "git push"), 1)
-            self.assertEqual(self.count(commands, "git pull"), 1)
+            self.assertEqual(self.count(commands, "git fetch"), 1)
             self.assertEqual(self.count(commands, "git commit"), COUNT)
             self.assertEqual(self.locks(self.a), {})
         log = self.remote_log()

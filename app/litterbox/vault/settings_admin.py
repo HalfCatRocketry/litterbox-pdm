@@ -8,9 +8,9 @@ The settings here:
                         are out of date or not released
     require_signatures  True or False (default): refuse uploads of commits not signed by a key on the team list
 Only an Admin or the Owner may change them (the permission is "manage_settings"); everyone then gets the new
-values the next time they get the latest.
+values the next time they get the latest. Projects are changed through the same file, in project_admin.py.
 
-    vault_settings.edit(repo, commit_style="per_batch", release_rule="block")
+    vault_settings.edit(repo, commit_style="per_batch", release_rule="block", assembly_variant_start=600)
 """
 
 from pathlib import Path
@@ -35,6 +35,15 @@ CONFIG_REL = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
 def edit(repo, **values):
     """Change the settings given (see config_write.set_values), commit and upload the change. If anything fails the file
     is put back. Returns True if something changed, False if the vault already had those values."""
+    def change():
+        config_write.set_values(repo, **values)
+        return "Vault settings: " + ", ".join(f"{key} = {value}" for key, value in values.items())
+    return change_file(repo, change)
+
+
+def change_file(repo, change):
+    """Lock the settings file, get the latest, make the change (change() edits the file and returns the commit
+    message), commit and upload. If anything fails the file is put back. True if the file changed."""
     repository.validate_repo(repo)
     team_permissions.require(repo, "manage_settings")
     path = Path(repo) / CONFIG_REL
@@ -47,7 +56,7 @@ def edit(repo, **values):
         remote.pull(repo)
         before = path.read_bytes() if path.is_file() else None
         try:
-            config_write.set_values(repo, **values)
+            message = change()
         except config.ConfigError as e:
             raise LitterboxError(str(e)) from None
         after = path.read_bytes() if path.is_file() else None
@@ -55,9 +64,8 @@ def edit(repo, **values):
             changed = False
         else:
             changed = True
-            names = ", ".join(f"{key} = {value}" for key, value in values.items())
             runner.run(["git", "add", "--", CONFIG_REL], repo)
-            runner.run(["git", "commit", "-m", f"Vault settings: {names}", "--", CONFIG_REL], repo)
+            runner.run(["git", "commit", "-m", message, "--", CONFIG_REL], repo)
             committed = True
             guarded_push.push(repo)
     except BaseException:

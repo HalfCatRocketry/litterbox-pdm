@@ -75,6 +75,31 @@ class TestFinding(ScanTestCase):
         drawing = next(i for i in result.items if i.kind == "drawing")
         self.assertTrue(any("More than one model" in w for w in drawing.warnings))
 
+    def test_step_and_pdf_exports_join_the_item_they_were_made_from(self):
+        self.put("valves/valve_body.SLDPRT", "body")
+        self.put("valves/valve_body.SLDDRW", "drawing")
+        self.put("valves/valve_body.STEP", "step")
+        self.put("valves/valve_body.pdf", "pdf")
+        self.put("valves/lone_drawing.SLDDRW", "drawing")
+        self.put("valves/lone_drawing.stp", "step")
+        result = self.run_scan()
+        items = self.by_name(result)
+        self.assertEqual([f.type for f in items["valve body"].files], ["SLDPRT", "SLDDRW", "STEP", "PDF"])
+        self.assertEqual(items["valve body"].kind, "part")                         # an export is never the main file
+        self.assertEqual([f.type for f in items["lone drawing"].files], ["SLDDRW", "STP"])
+        self.assertEqual(result.stats["files_to_import"], 6)
+        self.assertEqual(result.stats["other_files"], {})
+
+    def test_an_export_is_left_out_when_it_cant_tell_whose_it_is(self):
+        self.put("x/thing.SLDPRT")
+        self.put("x/thing.SLDASM")
+        self.put("x/thing.STEP")
+        self.put("y/alone.PDF")
+        result = self.run_scan()
+        self.assertEqual(sorted((i.kind, len(i.files)) for i in result.items), [("assembly", 1), ("part", 1)])
+        self.assertTrue(all(any("thing.STEP was left out" in w for w in i.warnings) for i in result.items))
+        self.assertEqual(result.stats["other_files"], {".pdf": 1})
+
     def test_same_names_in_different_folders_are_different_items(self):
         self.put("a/bracket.SLDPRT", "one")
         self.put("b/bracket.SLDPRT", "two")

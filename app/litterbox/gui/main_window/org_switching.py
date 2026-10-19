@@ -1,6 +1,6 @@
 """
-org_switching.py - switching org (the org box in the header, and File > the orgs), Add org..., Org setup... and
-Create new vault...
+org_switching.py - switching org (the org box in the header, and File > the orgs), Add org... and
+Create new vault... (an org's settings are fixed when its vault is created, so there is no way to edit them)
 """
 
 from pathlib import Path
@@ -16,12 +16,11 @@ from litterbox.gui.logic import org_menu
 from litterbox.user import settings
 from litterbox.vault import clone as vault_clone
 from litterbox.vault import config
-from litterbox.vault import config_write
 from litterbox.vault import create_vault
 
 
 class OrgSwitching:
-    """switching org, Add org..., Org setup... and Create new vault... (a part of the main window, App)."""
+    """switching org, Add org... and Create new vault... (a part of the main window, App)."""
 
     @staticmethod
     def _detect_org(folder):
@@ -42,8 +41,6 @@ class OrgSwitching:
             self.add_org()
         elif choice == org_menu.CREATE_VAULT:
             self.create_vault()
-        elif choice == org_menu.EDIT_ORG:
-            self._org_setup(self.org)
         elif choice != self.org:
             self.switch_org(choice)
         self._reload_org_menu()
@@ -68,7 +65,7 @@ class OrgSwitching:
         if Path(self.repo()).is_dir():
             self.refresh()
         else:
-            self._say(f"The vault folder for {org} wasn't found: {self.repo()}. Use Org setup to fix it.", "warn")
+            self._say(f"The vault folder for {org} wasn't found: {self.repo()}. Use File > Add org... to copy it to this computer again.", "warn")
 
     def add_org(self):
         """Add org...: paste the URL of a vault on your Git host. Litterbox clones it into its own folder (see
@@ -113,61 +110,39 @@ class OrgSwitching:
         self.run_task(work, "Vault copied to this computer", on_success=cloned, refresh=False,
                       label="Cloning the vault (this can take a while)")
 
-    def _org_setup(self, org):
-        """Edit an org: its code, full name, vault folder and starting part number."""
-        folder = org_menu.known_orgs(self.settings).get(org, "") if org else ""
-        start, base_digits, variant_digits = 1, part_number.DEFAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS
-        org_name = ""
-        if folder and Path(folder).is_dir():
-            try:
-                start = config.get_start_number(folder)
-                base_digits, variant_digits = config.get_digits(folder)
-                org_name = config.check_org_name(config.load(folder).get("org_name"))
-            except config.ConfigError:
-                pass
-        result = org_dialog.OrgDialog(self, org or "", folder, start, base_digits, variant_digits,
-                           title=f"Org setup - {org}" if org else "Org setup", org_name=org_name).show()
-        if not result:
-            return
-        new_org, new_folder, new_start, new_base_digits, new_variant_digits, new_name = result
-        try:
-            config_write.save(new_folder, org=new_org, start_number=new_start,
-                        base_digits=new_base_digits, variant_digits=new_variant_digits, org_name=new_name)
-        except (config.ConfigError, OSError) as e:
-            messagebox.showerror("Org setup", f"Could not save the settings in the vault:\n\n{e}", parent=self)
-            return
-        if org and org != new_org:
-            orgs = org_menu.known_orgs(self.settings)
-            orgs.pop(org, None)
-            self.settings["orgs"] = orgs
-        org_menu.remember_org(self.settings, new_org, new_folder)
-        settings.save(self.settings)
-        self.note = ("Saved. Commit and push .litterbox/config.yaml so your team gets the same org setup")
-        self.switch_org(new_org)
-
     def create_vault(self):
-        """Create new vault...: turn an empty cloned repository into a vault (see init_vault.py)."""
+        """Create new vault...: paste the URL of an empty repository on your Git host. After a last check of the
+        settings (they can't be changed later), Litterbox clones it into its own folder, like Add org..., and turns
+        it into a vault (see create_vault.py)."""
         if not messagebox.askyesno("Create new vault", org_menu.CREATE_VAULT_INTRO, parent=self):
             return
-        result = org_dialog.OrgDialog(self, "", "", 1, part_number.NEW_VAULT_BASE_DIGITS, part_number.DEFAULT_VARIANT_DIGITS,
-                           title="Create new vault", save_text="Create").show()
+        result = org_dialog.OrgDialog(self, settings.ROOT, 1, part_number.NEW_VAULT_BASE_DIGITS,
+                                      part_number.DEFAULT_VARIANT_DIGITS).show()
         if not result:
             return
-        org, folder, start, base_digits, variant_digits, org_name = result
-        checked = create_vault.plan(folder, org, start, base_digits, variant_digits)
-        if not checked.ok:
-            messagebox.showerror("Create new vault", "\n\n".join(checked.problems), parent=self)
+        url, org, start, base_digits, variant_digits, org_name, assembly = result
+        target, problem = org_menu.plan_add_org(url, settings.ROOT, org_menu.known_orgs(self.settings))
+        checked = create_vault.check_settings(org, start, base_digits, variant_digits, assembly)
+        problems = ([problem] if problem else []) + checked.problems
+        if problems:
+            messagebox.showerror("Create new vault", "\n\n".join(problems), parent=self)
             return
-        if checked.warnings and not messagebox.askyesno(
-                "Create new vault", "\n\n".join(checked.warnings) + "\n\nCreate the vault anyway?", parent=self):
+        if not messagebox.askyesno("Create new vault", org_menu.fixed_settings_text(
+                checked.org, org_name, start, base_digits, variant_digits, checked.warnings, assembly), parent=self):
             return
 
-        def made(created):
-            org_menu.remember_org(self.settings, created.org, folder)
+        def work():
+            folder = vault_clone.clone_or_reuse(url, target, settings.downloads_on_demand(self.settings))
+            return folder, create_vault.create(folder, org, start, base_digits, variant_digits, org_name=org_name,
+                                               assembly_variant_start=assembly)
+
+        def made(done):
+            folder, created = done
+            org_menu.remember_org(self.settings, created.org, str(folder))
             settings.save(self.settings)
             self._reload_org_menu()
             self.switch_org(created.org)
             messagebox.showinfo("Create new vault", org_menu.vault_created_text(created), parent=self)
 
-        self.run_task(lambda: create_vault.create(folder, org, start, base_digits, variant_digits, org_name=org_name),
-                      f"Created the {checked.org} vault", on_success=made, refresh=False)
+        self.run_task(work, f"Created the {checked.org} vault", on_success=made, refresh=False,
+                      label="Copying the empty repository and setting up the vault")

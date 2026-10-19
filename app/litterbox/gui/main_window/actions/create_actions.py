@@ -14,22 +14,27 @@ from litterbox.references import reference_rescan
 
 
 class CreateActions:
-    """New Part, Import and Import COTS. (a part of the main window, App)."""
+    """New Part, New Assembly, Import and Import COTS. (a part of the main window, App)."""
 
-    def new_part(self):
-        """Open the New Part pop-up, then create the number in the background."""
+    def new_assembly(self):
+        """New Assembly: New Part, with the variants set aside for assemblies (from 500, or the org's choice)."""
+        self.new_part(kind=create.ASSEMBLY)
+
+    def new_part(self, kind=create.PART):
+        """Open the New Part (or New Assembly) pop-up, then create the number in the background."""
         if not self._may("create"):
             return
         if not self.org or not Path(self.repo()).is_dir():
             self._say("Choose an org with a vault folder first (the org box at the top, or File > Add org...).", "warn")
             return
         repo, org = self.repo(), self.org
-        request = new_part_dialog.NewPartDialog(self, repo, org).show()
+        request = new_part_dialog.NewPartDialog(self, repo, org, kind).show()
         if not request:
             return
         def work():
             pn = create.new_part(repo, request["name"], request["description"],
-                                 base=request["base"], variant=request["variant"], org=org)
+                                 base=request["base"], variant=request["variant"], org=org,
+                                 project=request.get("project"), kind=request.get("kind", create.PART))
             try:
                 checkout.checkout(repo, pn)            # a new part starts out checked out to its creator
             except LitterboxError as e:

@@ -1,0 +1,185 @@
+"""
+project_admin.py - adding, changing and deleting projects (Admin and Owner: the permission is "manage_settings").
+
+A project is a block of part numbers (core/projects.py), and each part's record says its project. Changing a
+project's name or digits, or deleting it, therefore also changes the records of the parts that join it, leave it or
+are renamed, in the same upload as the settings file. Every one of those records is locked first, so the change is
+refused, naming the parts, if any of them is checked out. After a change, a part is in the project exactly when its
+number is in the project's block.
+
+    project_admin.add_project(repo, "Rover", "12")
+    project_admin.plan_change(repo, "Rover", "Rover", "123")    # what would change (shown before asking)
+    project_admin.edit_project(repo, "Rover", "Rover", "123")
+    project_admin.delete_project(repo, "Rover")
+"""
+
+from dataclasses import dataclass, field
+
+from litterbox import diagnostics
+from litterbox.core import projects as project_rules
+from litterbox.errors import LitterboxError
+from litterbox.git import lfs_locks
+from litterbox.git import remote
+from litterbox.git import repository
+from litterbox.parts import batch_core
+from litterbox.records import record_lifecycle
+from litterbox.records import record_model
+from litterbox.records import record_store
+from litterbox.records.error_conversion import converts_errors
+from litterbox.team import team_permissions
+from litterbox.vault import config
+from litterbox.vault import config_write
+from litterbox.vault import settings_admin
+
+
+@dataclass
+class ProjectChange:
+    """What changing (or deleting, `new` None) a project does."""
+    old: project_rules.Project
+    new: project_rules.Project = None
+    projects: list = field(default_factory=list)     # every project afterwards
+    updates: dict = field(default_factory=dict)      # PN -> its project afterwards ("" for none), for each record that changes
+    joining: list = field(default_factory=list)      # parts that come into the project
+    leaving: list = field(default_factory=list)      # parts that leave it (no project afterwards)
+    renamed: list = field(default_factory=list)      # parts that stay in it under its new name
+    checked_out: dict = field(default_factory=dict)  # PN -> who has it checked out, among the parts that change
+
+    @property
+    def deleting(self):
+        return self.new is None
+
+
+@converts_errors
+def add_project(repo, name, prefix):
+    """Add a project, commit and upload it. It is checked again against the newest projects (someone may have just
+    added one), and raises LitterboxError if the name is taken or its block overlaps another. Returns the Project.
+    Parts already in its block keep no project (the Projects window says how many first)."""
+    added = []
+
+    def change():
+        current = config.get_projects(repo)
+        try:
+            project = project_rules.new_project(name, prefix, current)
+        except project_rules.ProjectError as e:
+            raise LitterboxError(str(e)) from None
+        config_write.set_values(repo, projects=current + [project])
+        added.append(project)
+        return f"Projects: added {project.describe()}"
+    settings_admin.change_file(repo, change)
+    return added[0]
+
+
+@converts_errors
+def parts_in_block(repo, prefix):
+    """The part numbers already in the block these starting digits give (the Projects window warns about them).
+    Reads your local copy only."""
+    config.apply(repo)                                  # the block's size depends on the vault's digits
+    low, high = project_rules.block(project_rules.check_prefix(prefix))
+    return [pn for pn in record_store.list_pns(repo, config.get_org(repo)) if low <= pn.base <= high]
+
+
+@converts_errors
+def plan_change(repo, name, new_name=None, new_prefix=None, delete=False, locks=None):
+    """What editing the project `name` (to `new_name` starting `new_prefix`), or deleting it, would change, from
+    your local copy. Raises LitterboxError if the new name or digits can't be used. `locks` defaults to the server's
+    lock list (so checked_out is filled in); pass {} to leave it out."""
+    config.apply(repo)
+    try:
+        current = config.get_projects(repo)
+        old = project_rules.find(name, current)
+        others = [p for p in current if p is not old]
+        new = None if delete else project_rules.new_project(new_name, new_prefix, others)
+    except (project_rules.ProjectError, config.ConfigError) as e:
+        raise LitterboxError(str(e)) from None
+    change = ProjectChange(old, new, others if delete else [new if p is old else p for p in current])
+    for pn in record_store.list_pns(repo, config.get_org(repo)):
+        try:
+            record = record_store.load(repo, pn)
+        except record_model.RegistryError as e:
+            diagnostics.LOG(f"WARNING: {pn} was left out of the project change: {e}")
+            continue
+        was_member = record.project == old.name
+        in_block = new is not None and new.contains(pn.base)
+        wanted = new.name if in_block else ("" if was_member else record.project)
+        if wanted == record.project:
+            continue
+        change.updates[pn] = wanted
+        (change.renamed if in_block and was_member else change.joining if in_block else change.leaving).append(pn)
+    if change.updates:
+        locks = lfs_locks.get_locks(repo, strict=True) if locks is None else locks
+        for pn in change.updates:
+            lock = locks.get(record_store.record_relpath(pn).lower())
+            if lock:
+                change.checked_out[pn] = "you" if lock[0] == "you" else lock[1]
+    return change
+
+
+@converts_errors
+def edit_project(repo, name, new_name, new_prefix):
+    """Change a project's name and/or starting digits, and the records of the parts that join, leave or are renamed,
+    in one upload. Returns the ProjectChange done."""
+    return _apply(repo, name, new_name, new_prefix, delete=False)
+
+
+@converts_errors
+def delete_project(repo, name):
+    """Delete a project: its parts have no project afterwards, and its block is free again (so New Part with no
+    project may use those numbers). Returns the ProjectChange done."""
+    return _apply(repo, name, delete=True)
+
+
+def checked_out_text(change):
+    names = "\n".join(f"  {pn} ({who})" for pn, who in sorted(change.checked_out.items())[:10])
+    more = "\n  ..." if len(change.checked_out) > 10 else ""
+    return (f"These parts would change project but are checked out, so nothing was changed:\n{names}{more}\n\n"
+            "Ask for them to be checked in (or undone) first.")
+
+
+def _message(pn, change):
+    if change.deleting:
+        return f"{pn}: Project {change.old.name} deleted"
+    return f"{pn}: Project {change.old.name} changed to {change.new.describe()}"
+
+
+def _apply(repo, name, new_name=None, new_prefix=None, delete=False):
+    repository.validate_repo(repo)
+    team_permissions.require(repo, "manage_settings")
+    remote.pull(repo)                                           # work out the change from the newest records
+    change = plan_change(repo, name, new_name, new_prefix, delete)
+    if change.checked_out:
+        raise LitterboxError(checked_out_text(change))
+    what = (f"Projects: deleted {change.old.describe()}" if delete
+            else f"Projects: {change.old.describe()} changed to {change.new.describe()}")
+
+    def same_again():
+        """The change worked out again after the latest pull: refused if someone changed the parts meanwhile."""
+        again = plan_change(repo, name, new_name, new_prefix, delete, locks={})
+        if set(again.updates) != set(change.updates):
+            raise LitterboxError("Parts were added to the vault while the projects were being changed. Try again.")
+        try:
+            config_write.set_values(repo, projects=again.projects)
+        except config.ConfigError as e:
+            raise LitterboxError(str(e)) from None
+
+    if not change.updates:                                     # no records change: the settings file alone
+        settings_admin.change_file(repo, lambda: same_again() or what)
+        return change
+
+    path = settings_admin.CONFIG_REL
+    tracked = repository.in_index(repo, path)
+    if tracked:
+        lfs_locks.lock(repo, path, "the vault settings")
+    try:
+        items = [(pn, "manage_settings",
+                  lambda record, by, value=value: record_lifecycle.change_project(record, by, value),
+                  _message(pn, change)) for pn, value in change.updates.items()]
+        batch = batch_core.edit_records(repo, items, atomic=True,
+                                        prepare=lambda user: same_again() or [path])
+    except BaseException:
+        if tracked:
+            lfs_locks.force_unlock_quietly(repo, [path])
+        raise
+    failed = lfs_locks.unlock_mine(repo, [path]) if tracked else []
+    if batch.notice or failed:
+        raise LitterboxError(batch.notice or lfs_locks.unlock_failure_message(failed))
+    return change

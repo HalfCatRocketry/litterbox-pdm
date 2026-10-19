@@ -12,6 +12,8 @@ What it does
     skipping obvious junk such as ~$ lock files and .bak files.
   * Pairs each drawing with the model that has the same name in the same folder,
     because they will share one part number.
+  * Brings along the exports made from them: a .STEP/.STP or .PDF with the same name in
+    the same folder joins that item (and is copied as a plain file, never through SolidWorks).
   * Proposes a name for each item from its file name (the old file name goes in
     the description). It never guesses which parts are purchased: everything comes in
     as cots: false, and purchased parts are brought in separately with Import COTS.
@@ -42,6 +44,9 @@ FORMATS = {
     ".sldprt": ("part", "SLDPRT"),
     ".sldasm": ("assembly", "SLDASM"),
     ".slddrw": ("drawing", "SLDDRW"),
+    ".step": ("export", "STEP"),
+    ".stp": ("export", "STP"),
+    ".pdf": ("export", "PDF"),
 }
 
 
@@ -167,7 +172,7 @@ def scan(sources, repo=None, hash_files=True, progress=None):
 
     stats = {"files_seen": 0, "skipped_junk": 0, "other_files": {}}
     errors = []
-    groups = defaultdict(lambda: {"models": [], "drawings": []})       # (folder, stem) -> files
+    groups = defaultdict(lambda: {"models": [], "drawings": [], "exports": []})       # (folder, stem) -> files
     seen_paths = set()                  # folders listed twice, or one inside another, must not count files twice
     for folder, filename in _walk(resolved, skip, stats, errors):
         full = _norm(os.path.join(folder, filename))
@@ -188,23 +193,35 @@ def scan(sources, repo=None, hash_files=True, progress=None):
         entry = {"path": os.path.normpath(os.path.join(folder, filename)), "kind": kind, "type": type_name,
                  "stem": stem, "folder": folder}
         key = (_norm(folder), stem.lower())
-        groups[key]["drawings" if kind == "drawing" else "models"].append(entry)
+        groups[key][{"drawing": "drawings", "export": "exports"}.get(kind, "models")].append(entry)
 
-    # Pair each drawing with its model; a drawing with no single matching model stands alone.
+    # Pair each drawing with its model; a drawing with no single matching model stands alone. Exports join the
+    # item made from their name, if there is exactly one; otherwise there is no telling whose they are.
     raw_items = []
     for key in sorted(groups):
         group = groups[key]
-        models, drawings = group["models"], group["drawings"]
+        models, drawings, exports = group["models"], group["drawings"], group["exports"]
         if len(models) == 1:
-            raw_items.append((models[0], [models[0]] + drawings, []))
+            made = [(models[0], [models[0]] + drawings, [])]
         else:
-            for model in models:
-                raw_items.append((model, [model], []))
+            made = [(model, [model], []) for model in models]
             for drawing in drawings:
                 note = ("More than one model has this name, so the drawing was not paired with any of them."
                         if models else "No model with the same name was found beside this drawing; the model it "
                         "shows may be elsewhere (SolidWorks is needed to find out).")
-                raw_items.append((drawing, [drawing], [note]))
+                made.append((drawing, [drawing], [note]))
+        if len(made) == 1:
+            made[0][1].extend(exports)
+        elif exports:
+            names = ", ".join(os.path.basename(e["path"]) for e in exports)
+            for _main, _files, notes in made:
+                notes.append(f"{names} was left out: more than one item has this name, so it can't tell which one it "
+                             "was made from.")
+        if not made:
+            for export in exports:                      # an export with nothing beside it to belong to
+                ext = os.path.splitext(export["path"])[1].lower()
+                stats["other_files"][ext] = stats["other_files"].get(ext, 0) + 1
+        raw_items += made
 
     # Hash, then build the items.
     all_files = [f for _, files, _ in raw_items for f in files]

@@ -9,6 +9,7 @@ import yaml
 
 from litterbox import version
 from litterbox.core import part_number
+from litterbox.core import projects as project_rules
 from litterbox.core.part_number import check_org
 from litterbox.records import record_store
 from litterbox.vault import config
@@ -41,6 +42,18 @@ def set_values(repo, **values):
                 data[key] = True
             else:
                 data.pop(key, None)
+        elif key == "assembly_variant_start":
+            data[key] = config.check_assembly_variant(value, config.get_digits(repo)[1])
+        elif key == "projects":
+            try:
+                project_rules.from_data(project_rules.to_data(value), config.get_digits(repo)[0])   # never overlapping
+            except project_rules.ProjectError as e:
+                raise config.ConfigError(str(e)) from None
+            if value:
+                data[key] = project_rules.to_data(value)
+                _require_at_least(data, version.VERSION)     # older Litterbox would hand out numbers in the blocks
+            else:
+                data.pop(key, None)
         else:
             raise config.ConfigError(f"'{key}' is not a setting that can be changed here.")
     path = config.config_path(repo)
@@ -49,9 +62,15 @@ def set_values(repo, **values):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(".tmp-config.yaml")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        yaml.safe_dump(data, f, sort_keys=False)
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
     tmp.replace(path)
     return data
+
+
+def _require_at_least(data, min_version):
+    current = data.get("min_litterbox_version")
+    if current in (None, "") or version.parse(min_version) > version.parse(current):
+        data["min_litterbox_version"] = str(min_version).lstrip("vV")
 
 
 def stamp(repo, min_version=None):

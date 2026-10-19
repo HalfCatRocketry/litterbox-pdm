@@ -1,17 +1,19 @@
 """
 team_admin.py - what the Team screen's buttons do: who am I, setting up the team, people, roles,
-handing over the Owner role, vault settings, workflows, and saving the draft.
+handing over the Owner role, vault settings, projects, workflows, and saving the draft.
 """
 
 from tkinter import messagebox
 
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
+from litterbox.gui.dialogs import projects_dialog
 from litterbox.gui.dialogs import vault_settings_dialog
 from litterbox.gui.dialogs.team import person_dialog
 from litterbox.gui.dialogs.team import roles_dialog
 from litterbox.gui.dialogs.workflow import workflows_dialog
 from litterbox.gui.logic import error_text
+from litterbox.gui.logic import project_text
 from litterbox.gui.logic import team_text
 from litterbox.gui.logic import workflow_editor
 from litterbox.gui.widgets import release_button
@@ -20,6 +22,7 @@ from litterbox.team import team_identity
 from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.vault import config
+from litterbox.vault import project_admin
 from litterbox.vault import settings_admin as vault_settings
 from litterbox.workflows import workflow_editing
 from litterbox.workflows import workflow_templates
@@ -150,8 +153,10 @@ class TeamAdmin:
             return
         repo = self.repo()
         try:
+            config.apply(repo)
             current = {"commit_style": config.get_commit_style(repo), "release_rule": config.get_release_rule(repo),
-                       "require_signatures": config.get_require_signatures(repo)}
+                       "require_signatures": config.get_require_signatures(repo),
+                       "assembly_variant_start": config.get_assembly_variant_start(repo)}
         except config.ConfigError as e:
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
@@ -166,6 +171,46 @@ class TeamAdmin:
                 "\n\nTurn this on?", parent=window):
             return
         self.run_task(lambda: vault_settings.edit(repo, **changes), "Vault settings saved")
+
+    def manage_projects(self, window):
+        """Projects...: see the org's projects and add one (Admin and Owner, like the vault settings)."""
+        if not self._may("manage_settings"):
+            return
+        repo = self.repo()
+        try:
+            config.apply(repo)
+            current = config.get_projects(repo)
+        except config.ConfigError as e:
+            messagebox.showwarning("Projects", f"The settings file has a problem:\n\n{e}", parent=window)
+            return
+        chosen = projects_dialog.ProjectsDialog(window, repo, current).show()
+        if not chosen:
+            return
+        if chosen[0] == "add":
+            _what, name, prefix = chosen
+            self.run_task(lambda: project_admin.add_project(repo, name, prefix), f"Project {name} added")
+            return
+        if chosen[0] == "edit":
+            _what, name, new_name, new_prefix = chosen
+            plan = lambda: project_admin.plan_change(repo, name, new_name, new_prefix)
+            work = lambda: project_admin.edit_project(repo, name, new_name, new_prefix)
+            done = f"Project {name} changed"
+        else:
+            _what, name = chosen
+            plan = lambda: project_admin.plan_change(repo, name, delete=True)
+            work = lambda: project_admin.delete_project(repo, name)
+            done = f"Project {name} deleted"
+
+        def ask(change):
+            """Say what the change does to the parts (and refuse if any of them are checked out), then do it."""
+            if change.checked_out:
+                messagebox.showwarning("Projects", project_admin.checked_out_text(change), parent=window)
+                return
+            if messagebox.askyesno("Projects", project_text.change_text(change), parent=window,
+                                   icon="warning"):
+                self.run_task(work, done)
+
+        self.run_task(plan, "", on_success=ask, refresh=False, label="Working out which parts change")
 
     def edit_workflow(self, window):
         if not self._may("manage_workflows") or window.draft is None:

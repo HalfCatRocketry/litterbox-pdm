@@ -135,6 +135,7 @@ class TeamScreen(ctk.CTkFrame):
                              theme.PURPLE_HOVER, 150)
         if identity.allows("manage_settings")[0]:
             self._button("Vault Settings...", lambda: self.app.edit_vault_settings(self), theme.PURPLE, theme.PURPLE_HOVER, 140)
+            self._button("Projects...", lambda: self.app.manage_projects(self), theme.PURPLE, theme.PURPLE_HOVER, 110)
         self._button("Who am I?", self.app.who_am_i)
         self._button("Signing...", lambda: signing_dialog.SigningDialog(self.app, self.app.repo()))
         if self.draft is not None and (identity.allows("manage_people")[0] or identity.allows("manage_workflows")[0]):

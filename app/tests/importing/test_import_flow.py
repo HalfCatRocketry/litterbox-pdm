@@ -28,6 +28,8 @@ class ImportFlow(ImportFlowFixture, unittest.TestCase):
             self.assertEqual(len([n for n in names if n.endswith(".SLDDRW")]), 2)     # the old drawing + the imported one
             by_name = {record_store.load(self.a, pn).name: pn for pn in result.pns}
             self.assertEqual(sorted(by_name), ["p1", "p3", "sub", "top"])
+            self.assertEqual({name: pn.variant for name, pn in by_name.items()},
+                             {"p1": 1, "p3": 1, "sub": 500, "top": 500})          # assemblies: as New Assembly
             top = by_name["top"]
             top_text = (cad / f"{top}_A.SLDASM").read_text()
             self.assertIn(f"ref: {cad / (str(by_name['sub']) + '_A.SLDASM')}", top_text)       # the stale folder is repointed
@@ -55,6 +57,19 @@ class ImportFlow(ImportFlowFixture, unittest.TestCase):
         with self.user("Bea"):
             get_latest.get_latest(self.b)
             self.assertTrue((self.b / "cad" / f"{top}_A.SLDASM").exists())
+
+    def test_step_and_pdf_exports_come_along_as_plain_copies(self):
+        (self.src / "parts" / "p1.STEP").write_bytes(b"\xff\xfe a STEP file, not a SolidWorks document")
+        (self.src / "top.pdf").write_bytes(b"%PDF-1.7 \xff\xfe")
+        self.make_manifest()
+        with self.user("Alex"):
+            result = self.run_import()
+            by_name = {record_store.load(self.a, pn).name: pn for pn in result.pns}
+            cad = self.a / "cad"
+            self.assertEqual((cad / f"{by_name['p1']}_A.STEP").read_bytes(), b"\xff\xfe a STEP file, not a SolidWorks document")
+            self.assertEqual((cad / f"{by_name['top']}_A.PDF").read_bytes(), b"%PDF-1.7 \xff\xfe")
+            self.assertFalse(any(path.endswith((".STEP", ".PDF")) for path in self.fake.copied))   # not via SolidWorks
+            self.assert_clean(self.a)
 
     def test_running_it_again_has_nothing_to_do(self):
         self.make_manifest()
@@ -95,7 +110,7 @@ class ImportFlow(ImportFlowFixture, unittest.TestCase):
             # a second attempt starts from scratch and gets the very same numbers
             self.fake.copied.clear()
             result = self.run_import()
-            self.assertEqual(sorted(result.pns), [PN("HCR", n, 1) for n in range(2, 6)])
+            self.assertEqual(sorted(result.pns), [PN("HCR", 2, 500), PN("HCR", 3, 500), PN("HCR", 4, 1), PN("HCR", 5, 1)])
             self.assert_clean(self.a)
 
     def test_cancel_after_everything_was_copied_but_before_the_commit(self):

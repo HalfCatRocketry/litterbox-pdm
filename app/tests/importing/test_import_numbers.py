@@ -25,7 +25,7 @@ class ImportNumbers(ImportFlowFixture, unittest.TestCase):
         self.make_manifest()
         with self.user("Alex"):
             prepared = self.prepare()
-            self.assertEqual(prepared.proposal.pns(), [PN("HCR", n, 1) for n in range(2, 6)])    # 1 is in use
+            self.assertEqual(prepared.proposal.pns(), [PN("HCR", 2, 500), PN("HCR", 3, 500), PN("HCR", 4, 1), PN("HCR", 5, 1)])    # 1 is in use; assemblies from 500
             self.assert_nothing_left()                            # proposing writes nothing
 
     def test_proposed_numbers_fill_gaps_below_the_highest(self):
@@ -61,7 +61,7 @@ class ImportNumbers(ImportFlowFixture, unittest.TestCase):
             create.new_part(self.b, "Bea's new part")             # HCR-00002-001, pushed
         with self.user("Alex"):
             prepared = self.prepare()
-            self.assertEqual(prepared.proposal.entries[0].pn, PN("HCR", 3, 1))
+            self.assertEqual(prepared.proposal.entries[0].pn, PN("HCR", 3, 500))
             self.assertTrue((self.a / "PN-logs" / "HCR-00002-001.yaml").exists())
 
     def test_the_import_and_normal_new_parts_use_the_next_free_numbers_in_turn(self):
@@ -130,7 +130,7 @@ class ImportNumbers(ImportFlowFixture, unittest.TestCase):
         self.make_manifest()
         with self.user("Alex"):
             prepared = self.prepare()
-            self.assertEqual(prepared.proposal.entries[0].pn, PN("HCR", 2, 1))
+            self.assertEqual(prepared.proposal.entries[0].pn, PN("HCR", 2, 500))       # an assembly
         with self.user("Bea"):
             create.new_part(self.b, "Bea one")                    # takes 2
             create.new_part(self.b, "Bea two")                    # takes 3

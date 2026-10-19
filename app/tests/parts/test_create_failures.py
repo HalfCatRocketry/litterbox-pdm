@@ -39,7 +39,7 @@ class CreateFailures(CreateFixture, unittest.TestCase):
         real_run = runner.run
 
         def offline(command, repo, quiet=False):
-            if command[:2] == ["git", "pull"]:
+            if command[:2] == ["git", "fetch"]:
                 raise LitterboxError("simulated: could not resolve host")
             return real_run(command, repo, quiet)
 
@@ -53,12 +53,12 @@ class CreateFailures(CreateFixture, unittest.TestCase):
 
     def test_connection_lost_after_a_failed_push_changes_nothing(self):
         real_run = runner.run
-        pulls = {"count": 0}
+        fetches = {"count": 0}
 
         def flaky(command, repo, quiet=False):
-            if command[:2] == ["git", "pull"]:
-                pulls["count"] += 1
-                if pulls["count"] > 1:                      # the first pull works, then the network drops
+            if command[:2] == ["git", "fetch"]:
+                fetches["count"] += 1
+                if fetches["count"] > 1:                      # the first pull works, then the network drops
                     raise LitterboxError("simulated: could not resolve host")
             if command[:2] == ["git", "push"]:
                 raise LitterboxError("simulated: connection reset")

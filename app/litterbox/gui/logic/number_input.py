@@ -4,14 +4,13 @@ plain-language problems, and the variant list.
 """
 
 from litterbox.core import part_number
-from litterbox.records import record_store
 
 
 def import_base_placeholder(repo, org):
     """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
-    from litterbox.vault import config
+    from litterbox.parts import number_suggestions
     try:
-        return part_number.format_base(record_store.next_free_base(repo, org, config.get_start_number(repo)))
+        return part_number.format_base(number_suggestions.suggest_part_number(repo, org))   # outside project blocks
     except Exception:
         return ""
 
@@ -56,6 +55,24 @@ def parse_digit_count(text, label, low, high):
     if not (text.isascii() and text.isdigit()) or not (low <= int(text) <= high):
         raise ValueError(f"The {label} must be a whole number from {low} to {high}.")
     return int(text)
+
+
+
+def parse_project_number(text, project):
+    """The digits typed after a project's prefix in the New Part box, as the whole part number ('0034' with prefix
+    12 gives 120034), or None for an empty box. Raises ValueError with a message safe to show."""
+    text = str(text or "").strip()
+    if not text:
+        return None
+    digits = project.remaining_digits()
+    if not (text.isascii() and text.isdigit()) or len(text) != digits:
+        raise ValueError(f"After {project.prefix}, the part number needs exactly {digits} more digits, "
+                         f"like {1:0{digits}d}.")
+    number = project.full_base(int(text))
+    if number < part_number.MIN_BASE:
+        raise ValueError(f"The part number can't be {project.prefix}{text}. The lowest is "
+                         f"{part_number.format_base(project.block()[0])}.")
+    return number
 
 
 def in_use_text(check):

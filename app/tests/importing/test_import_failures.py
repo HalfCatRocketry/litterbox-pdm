@@ -39,7 +39,7 @@ class ImportFailures(ImportFlowFixture, unittest.TestCase):
         real_run = runner.run
 
         def offline(command, repo, quiet=False):
-            if command[:2] == ["git", "pull"]:
+            if command[:2] == ["git", "fetch"]:
                 raise LitterboxError("simulated: no connection")
             return real_run(command, repo, quiet)
 
@@ -65,9 +65,10 @@ class ImportFailures(ImportFlowFixture, unittest.TestCase):
         with self.user("Alex"):
             with mock.patch.object(runner, "run", run):
                 result = self.run_import()
-            self.assertEqual(sorted(result.pns), [PN("HCR", n, 1) for n in range(3, 7)])
+            self.assertEqual(sorted(p.base for p in result.pns), [3, 4, 5, 6])  # Bea's 2 is skipped, whole
+            self.assertEqual(sorted(p.variant for p in result.pns), [1, 1, 500, 500])
             names = self.cad_names()
-            self.assertNotIn("HCR-00002-001_A.SLDASM", names)                # nothing under the lost numbers
+            self.assertNotIn("HCR-00002-500_A.SLDASM", names)                # nothing under the lost numbers
             self.assertFalse(any(n.startswith("HCR-00002") for n in names))
             self.assertEqual(len(self.fake.copied), 10)                    # copied twice
             self.assertEqual(record_store.load(self.a, PN("HCR", 2, 1)).created_by, "Bea")   # her record was left alone
@@ -87,7 +88,7 @@ class ImportFailures(ImportFlowFixture, unittest.TestCase):
         import_journal.write_journal(self.a, "copying", "tok1", leftovers, ["PN-logs/HCR-00002-001.yaml"])
         with self.user("Alex"):
             result = self.run_import()
-            self.assertEqual(sorted(result.pns), [PN("HCR", n, 1) for n in range(2, 6)])
+            self.assertEqual(sorted(result.pns), [PN("HCR", 2, 500), PN("HCR", 3, 500), PN("HCR", 4, 1), PN("HCR", 5, 1)])
             self.assertFalse(any("half copied" in (self.a / "cad" / n).read_text() for n in self.cad_names()
                                  if n.startswith("HCR-0000") and n not in ("HCR-00001-001_A.SLDPRT", "HCR-00001-001_A.SLDDRW")))
             self.assert_clean(self.a)
@@ -125,12 +126,12 @@ class ImportFailures(ImportFlowFixture, unittest.TestCase):
 
     def test_existing_cad_files_are_never_overwritten(self):
         self.make_manifest()
-        (self.a / "cad" / "HCR-00002-001_A.SLDASM").write_text("a stray file someone dropped here")
+        (self.a / "cad" / "HCR-00002-500_A.SLDASM").write_text("a stray file someone dropped here")   # sub's copy
         with self.user("Alex"):
             with self.assertRaises(import_errors.ImportFailed) as ctx:
                 self.run_import()
             self.assertIn("will not overwrite", str(ctx.exception))
-            self.assertEqual((self.a / "cad" / "HCR-00002-001_A.SLDASM").read_text(), "a stray file someone dropped here")
+            self.assertEqual((self.a / "cad" / "HCR-00002-500_A.SLDASM").read_text(), "a stray file someone dropped here")
 
     def test_references_to_files_outside_the_import_are_refused_unless_allowed(self):
         self.make_manifest()

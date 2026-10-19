@@ -51,13 +51,17 @@ def item_files(item):
 
 
 def read_references(items, backend, progress=None, cancel=None):
-    """{key: (path, [(stored, found)])} for every file in the import."""
+    """{key: (path, [(stored, found)])} for every file in the import. Files SolidWorks didn't make (exports such as
+    .STEP and .PDF) reference nothing, so SolidWorks is not asked about them."""
     paths = [p for item in items for p in item_files(item)]
     refs = {}
     for number, path in enumerate(paths, start=1):
         import_copying.check_cancel(cancel)
         if progress:
             progress(number, len(paths), f"Reading references: {os.path.basename(path)}")
+        if not import_copying.is_solidworks(path):
+            refs[import_paths.path_key(path)] = (path, [])
+            continue
         try:
             refs[import_paths.path_key(path)] = (path, backend.references(path))
         except (import_errors.ImportFailed, sw_errors.SolidWorksError):     # already says what went wrong

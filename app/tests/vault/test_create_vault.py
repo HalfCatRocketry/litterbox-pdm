@@ -1,5 +1,6 @@
 """Tests for init_vault.py: turning an empty cloned repository into a vault."""
 
+import fnmatch
 import os
 import shutil
 import subprocess
@@ -92,6 +93,21 @@ class CreatingAVault(EmptyRepo):
             self.assertIn(line, text.splitlines())
         self.assertNotIn("\r", text)
         self.assertIn(".tmp-*", (self.vault / ".gitignore").read_text().splitlines())
+
+    def test_gitattributes_patterns_match_any_capitals(self):
+        lfs, lockable = {}, {}
+        for line in create_vault.ATTRIBUTE_LINES:
+            pattern, *attributes = line.split()
+            lfs[pattern], lockable[pattern] = "filter=lfs" in attributes, "lockable" in attributes
+
+        def matches(name, attributes):
+            return any(attributes[p] for p in attributes if fnmatch.fnmatchcase(name, p))
+
+        for name in ("HCR-00042-001_A.STEP", "x.step", "x.Stp", "x.PDF", "x.pdf", "x.SldPrt", "x.x_t", "x.X_T"):
+            self.assertTrue(matches(name, lfs) and matches(name, lockable), name)
+        for name in ("photo.JPG", "photo.jpg", "list.XLSX"):
+            self.assertTrue(matches(name, lfs) and not matches(name, lockable), name)
+        self.assertFalse(matches("README.md", lfs))
 
     def test_the_new_vault_works_for_real_part_creation(self):
         self.make(start_number=100)
@@ -254,6 +270,13 @@ class NumberingWarnings(unittest.TestCase):
 
     def test_one_digit_wording(self):
         self.assertIn("1 digit in the part number", create_vault.numbering_warnings(1, 1, 3)[0])
+
+    def test_the_settings_can_be_checked_before_there_is_a_folder(self):
+        checked = create_vault.check_settings("hcr", 1, 3, 3)
+        self.assertEqual((checked.ok, checked.org), (True, "HCR"))
+        self.assertTrue(any("only 999" in w for w in checked.warnings))
+        self.assertFalse(create_vault.check_settings("H").ok)
+        self.assertTrue(any("doesn't fit" in p for p in create_vault.check_settings("HCR", 100000, 5, 3).problems))
 
 
 class CommandLine(EmptyRepo):

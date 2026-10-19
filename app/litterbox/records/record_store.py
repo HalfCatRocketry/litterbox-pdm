@@ -66,7 +66,8 @@ def exists(repo, pn):
     return record_path(repo, pn).is_file()
 
 
-def create_record(repo, pn, name, created_by, description="", cots=False, imported=False, import_path=""):
+def create_record(repo, pn, name, created_by, description="", cots=False, imported=False, import_path="",
+                  project=""):
     """Create the record file for a brand-new PN and return the Record.
 
     The name is required. The description is optional. import_path is only kept
@@ -84,7 +85,7 @@ def create_record(repo, pn, name, created_by, description="", cots=False, import
 
     record = record_model.Record(pn=pn, name=name, description=description, created_by=created_by, created_at=record_model.now_utc(),
                     cots=bool(cots), imported=bool(imported),
-                    import_path=(str(import_path).strip() if imported else ""))
+                    import_path=(str(import_path).strip() if imported else ""), project=(project or "").strip())
     record_lifecycle.add_event(record, record_model.EVENT_CREATED, created_by)
     record.history[-1]["at"] = record.created_at    # created event and created_at match exactly
 
@@ -156,14 +157,14 @@ def used_variants(repo, base, org=None):
     return {pn.variant for pn in list_pns(repo, org) if pn.base == base}
 
 
-def next_free_base(repo, org=None, start=1):
-    """The lowest base number nobody has used yet, at or above `start`."""
-    return next_base(used_bases(repo, org), start)
+def next_free_base(repo, org=None, start=1, allowed=None):
+    """The next base number nobody has used yet, from `start` (see core/numbering.py; `allowed` leaves numbers out)."""
+    return next_base(used_bases(repo, org), start, allowed)
 
 
-def next_free_variant(repo, base, org=None):
-    """The lowest unused variant number for a base (1 if the base is brand new)."""
-    return next_variant(used_variants(repo, base, org))
+def next_free_variant(repo, base, org=None, low=None, high=None):
+    """The lowest unused variant number for a base, from `low` to `high` (`low` itself if the base is brand new)."""
+    return next_variant(used_variants(repo, base, org), low, high)
 
 
 def load_variants(repo, base, org=None):

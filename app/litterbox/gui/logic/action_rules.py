@@ -24,6 +24,7 @@ ALLOWED_KINDS = {
     "reopen": {"released", "cots", "pending"},
     "void": {"ok", "cots", "pending"},
     "references": {"ok", "mine", "theirs", "unclaimed", "stray", "released", "cots", "void", "missing", "pending"},
+    "break_checkout": {"theirs"},           # Admin and Owner: someone else has it checked out
 }
 
 
@@ -34,12 +35,14 @@ MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "ma
 NAME = {            # "...cannot <name> ..."
     "checkout": "check out", "checkin": "check in", "save": "save progress on",
     "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
+    "break_checkout": "break the checkout of",
 }
 
 
 PAST = {            # "<past> 2 parts"
     "checkout": "Checked out", "checkin": "Checked in", "save": "Saved progress on",
     "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
+    "break_checkout": "Broke the checkout of",
 }
 
 
@@ -102,7 +105,7 @@ BUTTON_ACTIONS = {
     "Check Out": "checkout", "Check In": "checkin", "Save Progress": "save", "Undo Checkout": "undo",
     "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
-    "Unrelease": "reopen", "Void": "void", "Details": "history",
+    "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
 }
 
 

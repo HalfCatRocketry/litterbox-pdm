@@ -43,6 +43,8 @@ def revision_details(record, rev, revisions, local=True):
     fields = [("Part", str(record.pn)), ("Name", record.name)]
     if record.description:
         fields.append(("Description", record.description))
+    if record.project:
+        fields.append(("Project", record.project))
     fields.append(("Revision", f"Rev {rev}" + (" (working)" if rev == record.revision else "")))
     fields.append(("State", state))
     released = [e for e in record.history if e.get("event") == "released" and e.get("revision") == rev]

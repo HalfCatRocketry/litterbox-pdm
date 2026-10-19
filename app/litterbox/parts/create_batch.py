@@ -12,6 +12,7 @@ from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.core import part_number
+from litterbox.core import projects as project_rules
 from litterbox.core.part_number import PN, PNError, check_new_base, check_variant, format_base
 from litterbox.errors import LitterboxError
 from litterbox.git import committing
@@ -46,12 +47,13 @@ def _plan_batch(repo, specs, org):
 
     Specs that ask for a base are placed first (in order); the rest then take
     the lowest unused part numbers from the org's start number, skipping anything
-    used in the vault or asked for elsewhere in this batch.
+    used in the vault or asked for elsewhere in this batch, and every project's block.
     """
     existing = record_store.list_pns(repo, org)
     taken = {(pn.base, pn.variant) for pn in existing}
     bases_used = {pn.base for pn in existing}
     start = config.get_start_number(repo)
+    allowed = project_rules.outside_blocks(config.get_projects(repo))
     planned = [None] * len(specs)
 
     def label(index):
@@ -81,7 +83,7 @@ def _plan_batch(repo, specs, org):
     for index, spec in enumerate(specs):
         if spec.base is not None:
             continue
-        while candidate in bases_used:
+        while candidate in bases_used or not allowed(candidate):
             candidate += 1
         try:
             base = check_new_base(candidate)
@@ -165,13 +167,15 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
     record_paths = [record_store.record_relpath(pn) for pn in planned]
     extras = list(extra_paths)
     pathspec = committing.write_pathspec(record_paths + extras)
+    projects = config.get_projects(repo)                 # each record is in its number's project
     written, committed = [], False
     try:
         try:
             for pn, spec in zip(planned, specs):
                 try:
                     record_store.create_record(repo, pn, spec.name, user, description=spec.description,
-                                           cots=spec.cots, imported=spec.imported, import_path=spec.import_path)
+                                           cots=spec.cots, imported=spec.imported, import_path=spec.import_path,
+                                           project=create.project_name(projects, pn.base))
                 except record_model.PNExistsError:
                     raise NumbersTaken(f"{pn} already exists in your copy of the vault.") from None
                 written.append(record_store.record_relpath(pn))
@@ -236,12 +240,14 @@ def create_many(repo, specs, org=None, message=None):
         planned = _plan_batch(repo, cleaned, org)
         record_paths = [record_store.record_relpath(pn) for pn in planned]
         pathspec = committing.write_pathspec(record_paths)
+        projects = config.get_projects(repo)                 # each record is in its number's project
         written, committed = [], False
         try:
             for pn, spec in zip(planned, cleaned):
                 try:
                     record_store.create_record(repo, pn, spec.name, user, description=spec.description,
-                                           cots=spec.cots, imported=spec.imported, import_path=spec.import_path)
+                                           cots=spec.cots, imported=spec.imported, import_path=spec.import_path,
+                                           project=create.project_name(projects, pn.base))
                 except record_model.PNExistsError:
                     raise create.CreateError(f"{pn} already exists in your copy of the vault.") from None
                 written.append(record_store.record_relpath(pn))

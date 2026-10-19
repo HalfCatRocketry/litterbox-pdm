@@ -8,8 +8,10 @@ import time
 from tkinter import messagebox
 
 from litterbox.errors import NothingToSaveError
+from litterbox.git import remote
 from litterbox.gui.dialogs import error_details
 from litterbox.gui.logic import action_rules
+from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import job_text
 from litterbox.gui.widgets import release_button
@@ -118,6 +120,13 @@ class BackgroundJobs:
         finally:
             self.jobs.finished(job)
             self._sync_busy()
+            self._tell_recovered()
+
+    def _tell_recovered(self):
+        """If a sync just saved your copies of a broken checkout's files, say where they are."""
+        for folder, files in remote.take_recovered():
+            messagebox.showwarning("Your checkout was broken", checkin_text.recovered_text(folder, files),
+                                   parent=self._popup_parent())
 
     def _show_outcome(self, job, result, error, done_text, on_success, refresh, is_refresh):
         if isinstance(error, NothingToSaveError):

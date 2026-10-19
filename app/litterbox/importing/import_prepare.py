@@ -47,13 +47,16 @@ class Prepared:
             self.backend.close()
 
 
-def free_pn(repo, proposal):
-    """An unused part number for a row added to the table: just after the automatic ones already there."""
+def free_pn(repo, proposal, item=None):
+    """An unused part number for a row added to the table (for `item`): just after the automatic ones already there,
+    with the first variant of the item's range (an assembly's start from 500)."""
+    kind = import_numbering.kind_of(item)
     if proposal.family is not None:
         used = {e.pn.variant for e in proposal.entries if e.pn.base == proposal.family}
-        free = [v for v in import_numbering.family_free_variants(repo, proposal) if v not in used]
+        free = [v for v in import_numbering.family_free_variants(repo, proposal, kind=kind) if v not in used]
         if not free:
-            raise import_errors.FamilyFull(import_numbering.family_shortage(proposal.family, len(proposal.entries) + 1, len(proposal.entries)))
+            raise import_errors.FamilyFull(import_numbering.family_shortage(
+                proposal.family, 1, 0, kind, import_numbering.variant_ranges(repo)))
         return PN(proposal.org, proposal.family, free[0])
     _taken, bases = import_numbering.used_numbers(repo, proposal.org)
     here = {e.pn.base for e in proposal.entries}
@@ -64,7 +67,7 @@ def free_pn(repo, proposal):
         free = [import_numbering.pick_block(repo, 1, proposal.org)[0].base]
     if not free:
         raise import_errors.ImportFailed("The vault has run out of part numbers for this import.")
-    return PN(proposal.org, free[0], 1)
+    return import_numbering.with_variant(repo, item, PN(proposal.org, free[0], 1))
 
 
 def set_included(repo, prepared, item_id, include):
@@ -88,7 +91,7 @@ def set_included(repo, prepared, item_id, include):
         raise import_errors.ImportFailed(f"Can't include '{item.name}': its references were not read.")
     position = prepared.candidates.index(item)
     before = sum(1 for e in entries if prepared.candidates.index(e.item) < position)
-    entries.insert(before, import_numbering.Entry(item, free_pn(repo, prepared.proposal), item.name, item.description))
+    entries.insert(before, import_numbering.Entry(item, free_pn(repo, prepared.proposal, item), item.name, item.description))
     item.include = True
 
 
@@ -135,9 +138,12 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
             create_batch.sync_latest(repo)                               # the newest list of part numbers
             org = create.resolve_org(repo, org)
             block = import_numbering.pick_block(repo, len(items), org, gap, jitter, rng)
+            ranges = import_numbering.variant_ranges(repo)
         except (create.CreateError, config.ConfigError, record_model.RegistryError) as e:
             raise import_errors.ImportFailed(str(e)) from None
-        proposal = import_numbering.Proposal([import_numbering.Entry(item, pn, item.name, item.description) for item, pn in zip(items, block)], org)
+        proposal = import_numbering.Proposal([import_numbering.Entry(item, import_numbering.with_variant(repo, item, pn, ranges),
+                                                                     item.name, item.description)
+                                              for item, pn in zip(items, block)], org)
         _taken, bases = import_numbering.used_numbers(repo, org)
         proposal.note = (f"Proposed part numbers start at {part_number.format_base(block[0].base)}. This vault's start number is "
                          f"{part_number.format_base(config.get_start_number(repo))}; the highest part number in use is "

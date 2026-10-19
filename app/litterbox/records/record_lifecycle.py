@@ -119,6 +119,18 @@ def edit_details(record, by, name, description):
     return add_event(record, record_model.EVENT_EDITED, by, changes=changes)
 
 
+def change_project(record, by, project):
+    """Move a part to another project ("" for none), because a project was changed or deleted. Returns the history
+    entry, or None if it was already there. The caller must hold the record's lock."""
+    project = " ".join((project or "").split())
+    if project == record.project:
+        return None
+    entry = add_event(record, record_model.EVENT_EDITED, by,
+                      changes=[f"project: '{record.project}' -> '{project}'"])
+    record.project = project
+    return entry
+
+
 def mark_cots(record, by, files):
     """Turn an in-work part into a COTS (purchased) part. `files` is the list of files it covers."""
     require_status(record, record_model.STATUS_IN_WORK, "make COTS")

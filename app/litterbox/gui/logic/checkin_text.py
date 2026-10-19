@@ -6,6 +6,23 @@ changed, and the caution while an upload is still running.
 from pathlib import PurePosixPath
 
 
+def recovered_text(folder, files):
+    """What to say when a sync saved your copies of files whose checkout was broken (git/remote.py)."""
+    names = "\n".join("  " + str(f).rsplit("/", 1)[-1] for f in files[:10]) + ("\n  ..." if len(files) > 10 else "")
+    return (f"An Admin broke your checkout, and the vault has newer versions of these files:\n{names}\n\n"
+            f"Your versions are saved in:\n  {folder}\n\nYour copy of the vault now has the newer ones. To carry on "
+            "with yours, check the part out again and copy them back into the cad folder.")
+
+
+def break_checkout_prompt(pn, who):
+    """The question before Break Checkout."""
+    return (f"Break {who}'s checkout of {pn}?\n\n"
+            f"Their locks are released and anyone can check {pn} out. Changes {who} hasn't checked in are not "
+            "uploaded; they stay on their computer. When they next sync, Litterbox puts the part back as it is in "
+            "the vault and saves their versions of its CAD files beside the vault, so nothing is lost.\n\n"
+            "The part's history will say you did this, and why.")
+
+
 def undo_prompt(targets):
     """The question asked before Undo Checkout."""
     return ("This will discard changes and release the lock on these parts:\n\n"

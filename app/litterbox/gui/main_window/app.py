@@ -129,7 +129,7 @@ class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateC
             else:
                 self.refresh()
         elif self.org:
-            self._say(f"The vault folder for {self.org} wasn't found: {self.repo()}. Use Org setup to fix it.", "warn")
+            self._say(f"The vault folder for {self.org} wasn't found: {self.repo()}. Use File > Add org... to copy it to this computer again.", "warn")
         else:
             self._say("Choose File > Add org... to get started.", "warn")
 

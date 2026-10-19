@@ -1,5 +1,6 @@
 """
-clone.py - Add org...: copy a vault that already exists on the Git host onto this computer.
+clone.py - Add org... and Create new vault...: copy a repository on the Git host onto this computer (a vault that
+already exists, or the empty repository a new vault starts as).
 
 The user pastes the repository's URL (the one the host's Clone button gives, like
 https://dev.azure.com/team/project/_git/hcr-litterbox). It is cloned into a folder named after the repository, inside
@@ -7,6 +8,7 @@ Litterbox's own folder (C:\\Litterbox\\hcr-litterbox), and Litterbox then reads 
 
     name, problem = vault_clone.parse_url(url)
     vault_clone.clone(url, target)
+    vault_clone.clone_or_reuse(url, target)      (Create new vault: an earlier try's copy is used again)
 """
 
 import os
@@ -71,3 +73,28 @@ def clone(url, target, on_demand=True):
     if on_demand:
         lfs_download.set_on_demand(target, True)
     return target
+
+
+def origin_url(folder):
+    """The URL `folder` was cloned from, or "" if it isn't a clone."""
+    try:
+        result = subprocess.run(["git", "-C", str(folder), "remote", "get-url", "origin"], capture_output=True,
+                                text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
+                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except FileNotFoundError:
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def clone_or_reuse(url, target, on_demand=True):
+    """Create new vault...: clone `url` into `target`, or use the copy an earlier try already cloned there (one that
+    stopped part-way, for example because Git didn't know your email yet). Raises LitterboxError if `target` holds
+    something else."""
+    target = Path(target)
+    if target.exists() and any(target.iterdir()):
+        if origin_url(target).rstrip("/") == url.strip().rstrip("/"):
+            diagnostics.LOG(f"Using the copy cloned earlier: {target}")
+            return target
+        raise LitterboxError(f"{target} already exists and isn't a copy of {url.strip()}. Rename or remove it, "
+                             "then try again.")
+    return clone(url.strip(), target, on_demand)

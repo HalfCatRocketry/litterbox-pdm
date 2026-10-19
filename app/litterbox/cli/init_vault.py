@@ -19,6 +19,8 @@ def main(argv=None, prog=None):
     parser.add_argument("--start", type=int, default=1, help="first part number to hand out (default 1)")
     parser.add_argument("--base-digits", type=int, default=part_number.NEW_VAULT_BASE_DIGITS)
     parser.add_argument("--variant-digits", type=int, default=part_number.DEFAULT_VARIANT_DIGITS)
+    parser.add_argument("--assembly-variant", type=int,
+                        help="the variant New Assembly starts at (default 500 with 3-digit variants)")
     parser.add_argument("--no-push", action="store_true", help="commit locally only")
     parser.add_argument("--no-team", action="store_true", help="don't set up the team (do it later in Team)")
     parser.add_argument("--name", help="your name for the team list (default: git's user.name)")
@@ -27,7 +29,8 @@ def main(argv=None, prog=None):
     args = parser.parse_args(argv)
     diagnostics.LOG = print
 
-    checked = create_vault.plan(args.folder, args.org, args.start, args.base_digits, args.variant_digits, not args.no_push)
+    checked = create_vault.plan(args.folder, args.org, args.start, args.base_digits, args.variant_digits, not args.no_push,
+                                assembly_variant_start=args.assembly_variant)
     if not checked.ok:
         print("The vault can't be set up yet:")
         for problem in checked.problems:
@@ -42,7 +45,7 @@ def main(argv=None, prog=None):
     try:
         result = create_vault.create(args.folder, args.org, args.start, args.base_digits, args.variant_digits,
                         push=not args.no_push, set_up_team=not args.no_team, name=args.name, email=args.email,
-                        org_name=args.org_name)
+                        org_name=args.org_name, assembly_variant_start=args.assembly_variant)
     except LitterboxError as e:
         print(f"Failed. Nothing was left behind.\n{e}")
         return 1

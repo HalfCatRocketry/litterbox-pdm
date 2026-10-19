@@ -38,6 +38,7 @@ class PartStatus:
     refs_outdated: bool = False         # an assembly whose list of parts used is missing or out of date
     pending: dict = field(default_factory=dict)     # a release request waiting for sign-offs (see workflow.py)
     not_downloaded: bool = False        # the working revision's files are pointers (see git/lfs_download.py)
+    project: str = ""                   # the project it belongs to (core/projects.py), "" for none
 
 
 def get_status(repo):
@@ -106,5 +107,5 @@ def get_status(repo):
         rows.append(PartStatus(pn, record.name, record.status, state, kind, owner, files,
                                record.description, record.cots, record.import_path,
                                record.revision, record.released_revision, revisions, outdated, record.pending,
-                               not_downloaded))
+                               not_downloaded, project=record.project))
     return rows
