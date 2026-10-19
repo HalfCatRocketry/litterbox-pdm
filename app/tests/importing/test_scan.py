@@ -245,6 +245,20 @@ class TestAlreadyImported(ScanTestCase):
         self.assertEqual(self.run_scan(repo=self.repo).stats["already_imported"], 1)
         self.assertTrue(self.by_name(self.run_scan())["valve"].include)       # without --repo nothing is known
 
+    def test_left_out_files_can_be_ticked_again(self):
+        old = self.put("a/valve.SLDPRT", "v")
+        self.put("a/new.SLDPRT", "n")
+        record_store.create_record(self.repo, PN("HCR", 5, 1), "valve", "Alex", imported=True, import_path=str(old))
+        found = self.run_scan(repo=self.repo)
+        again = scan.include_already_imported(found)
+        self.assertEqual([i.name for i in again], ["valve"])
+        valve = self.by_name(found)["valve"]
+        self.assertTrue(valve.include)
+        self.assertEqual(valve.already_imported_as, "HCR-00005-001")
+        self.assertFalse(any("left out" in w for w in valve.warnings))
+        self.assertTrue(any("imported again as a new part" in w for w in valve.warnings))
+        self.assertEqual(scan.include_already_imported(found), [])          # nothing left to tick
+
     def test_a_vault_inside_the_scanned_folder_is_not_scanned(self):
         inner = self.src / "vault"
         (inner / "cad").mkdir(parents=True)

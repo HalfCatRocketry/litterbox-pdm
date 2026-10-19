@@ -4,7 +4,8 @@
 
 - Fixed: buttons only worked when clicked near their middle (since the move to CustomTkinter 6). The whole button works again, and it still acts when the mouse button is released over it.
 - The open org's full name is shown in the middle of the menu bar (hidden on a window too narrow for it).
-- When the details pane is hidden, a **«** button at the right end of the toolbar brings it back.
+- When the details pane is hidden, a **«** button at the right end of the toolbar brings it back. The pane is always open when Litterbox starts; hiding it lasts until you close Litterbox.
+- **Importing files imported before.** When a scan finds files the vault remembers importing, the Import window now warns, lists them with the part numbers they were imported as, and lets you go on (they are imported again as new parts, ticked in the table, so you can still untick any) or cancel. Before, they were quietly left out, and if that was everything the import stopped with "nothing left to import". The command line still leaves them out unless the manifest says `include: true`.
 - The sidebar's My Tasks and ECOs are under a new **PROCESS** heading, as the parts views are under PARTS.
 - **A tidier Team screen.** Who am I? and Signing... sit beside your name; the people buttons (Add Person, Edit, Switch On/Off, and **More** with Transfer Ownership...) sit above the list; Roles, Workflows, Projects and Vault Settings are in an **Organization** panel on the right. Buttons you can't use are greyed out with a tooltip saying why, instead of being left off. Unsaved changes show at the top right with **Save** and a new **Discard**. Double-click a person to edit them; the line under the list shows the highlighted person's roles, host names and signing keys (those columns left the table).
 

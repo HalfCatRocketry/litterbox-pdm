@@ -298,8 +298,23 @@ def _mark_already_imported(items, repo):
         if found:
             item.already_imported_as = found
             item.include = False
-            item.warnings.append(f"This file was already imported as {found}, so it is left out. "
+            item.warnings.append(f"{LEFT_OUT_PREFIX} {found}, so it is left out. "
                                  "Set include: true to import it again as a new part.")
+
+
+LEFT_OUT_PREFIX = "This file was already imported as"
+
+
+def include_already_imported(manifest):
+    """Tick the items the scan left out because they were imported before, so they are imported again as new
+    parts (the Import window asks first). Returns those items."""
+    again = [item for item in manifest.items if item.already_imported_as and not item.include]
+    for item in again:
+        item.include = True
+        item.warnings = [w for w in item.warnings if not w.startswith(LEFT_OUT_PREFIX)]
+        item.warnings.append(f"{LEFT_OUT_PREFIX} {item.already_imported_as}; it is being imported again as a "
+                             "new part.")
+    return again
 
 
 def _stats(items, seen, errors, hashed):

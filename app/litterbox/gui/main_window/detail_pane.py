@@ -14,7 +14,6 @@ from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.references import reference_model
 from litterbox.references import reference_queries
-from litterbox.user import settings
 
 REFERENCE_TABS = ("Uses", "Where used")
 
@@ -28,7 +27,7 @@ class DetailPane:
         return str(self.detail_frame) in [str(p) for p in self.parts_screen.panes()]
 
     def set_details_pane(self, shown):
-        """Show or hide the details pane (remembered in settings.yaml as details_pane)."""
+        """Show or hide the details pane, until Litterbox is closed: it always opens with the pane showing."""
         if shown == self.details_shown():
             return
         if shown:
@@ -38,8 +37,6 @@ class DetailPane:
         else:
             self.parts_screen.forget(self.detail_frame)
         self._show_pane_arrow()
-        self.settings["details_pane"] = bool(shown)
-        settings.save(self.settings)
 
     def _show_pane_arrow(self):
         """The « that brings the pane back shows at the right of the toolbar only while the pane is hidden."""

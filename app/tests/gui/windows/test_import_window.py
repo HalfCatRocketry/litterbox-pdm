@@ -73,6 +73,34 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
         self.assertEqual(self.window.primary.options["text"], "Finish & Import")
         self.assertIn("4 of 4", self.window.summary.options["text"])
 
+    def _imported_before(self, name):
+        """Make the vault remember importing this file of the old CAD folder."""
+        path = next(self.src.rglob(name))
+        record_store.create_record(str(self.a), part_number.PN("HCR", 900, 1), "old", "Alex", imported=True,
+                                   import_path=str(path))
+
+    def test_files_imported_before_ask_and_ok_imports_them_again(self):
+        self._imported_before("p1.SLDPRT")
+        self.scan()
+        asked = [c for c in self.box.calls if c[0] == "askokcancel"]
+        self.assertEqual(len(asked), 1)
+        self.assertIn("p1.SLDPRT  (imported as HCR-00900-001)", asked[0][1][1])
+        self.assertEqual(self.window.mode, "table")
+        self.assertEqual(len(self.rows()), 4)                       # p1 is in the table, ticked
+        self.assertTrue(all(r["values"][0] == "☑" for r in self.rows()))
+
+    def test_files_imported_before_and_cancel_stops_with_nothing_changed(self):
+        self._imported_before("p1.SLDPRT")
+        self.box.answer = False
+        self.scan()
+        self.assertEqual(self.window.mode, "pick")
+        self.assertIn("Import cancelled", self.window.status.options["text"])
+        self.assertFalse((self.tmp / "litterbox-settings" / "imports").exists())
+
+    def test_a_scan_with_nothing_imported_before_does_not_ask(self):
+        self.scan()
+        self.assertFalse(any(c[0] == "askokcancel" for c in self.box.calls))
+
     def test_scanning_with_no_folder_says_so(self):
         self.window._scan()
         self.assertIn("Add at least one folder", self.window.status.options["text"])

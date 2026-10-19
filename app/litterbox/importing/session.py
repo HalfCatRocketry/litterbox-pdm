@@ -9,6 +9,8 @@ stay on the thread that made them.
     session = ImportSession(repo, post)       post(fn) runs fn on the window's thread
     session.start(on_done, on_progress, folders=[...])        scan the folders, then prepare
     session.start(on_done, on_progress, manifest_path="...")  or prepare an existing manifest
+    session.scan(on_done, on_progress, folders=[...])         only scan (the window can ask about what it found),
+    session.start(on_done, on_progress, scanned=manifest)     then save that scan and prepare it
     session.include(item_id, True, on_done)    tick / untick a row
     session.set_family(base, on_done)          import all as variants of one base number (None: undo)
     session.refresh(on_done)                   check the numbers against the newest records
@@ -102,25 +104,38 @@ class ImportSession:
         return self._cancel.is_set()
 
     # -- what the window can ask for ---------------------------------------
+    def _scan_progress(self, progress):
+        def scan_progress(done, total, name):
+            if self._cancel_requested():
+                raise import_errors.ImportCancelled("Cancelled. Nothing was changed.")
+            if progress:
+                progress(done, total, f"Scanning: {Path(name).name}")
+        return scan_progress
+
+    def scan(self, on_done, on_progress=None, folders=None):
+        """Only scan `folders`: on_done(manifest, error), with nothing saved yet. Pass the manifest to
+        start(scanned=...) to go on."""
+        if not folders:
+            raise import_errors.ImportFailed("Choose at least one folder to scan, or open a manifest.")
+        scan_progress = self._scan_progress(self._progress(on_progress))
+        self._submit(lambda: scan.scan(folders, repo=self.repo, progress=scan_progress), on_done)
+
     def start(self, on_done, on_progress=None, folders=None, manifest_path=None, manifest_root=None,
-              allow_external=False, cots=False):
-        """Scan `folders` (writing a manifest) or open `manifest_path`, then propose part numbers.
+              allow_external=False, cots=False, scanned=None):
+        """Scan `folders` (writing a manifest), take a scan made by scan() (`scanned`, written the same way) or
+        open `manifest_path`, then propose part numbers.
 
         on_done(proposal, error): the Proposal to show as the table.
         """
-        if not folders and not manifest_path:
+        if not folders and not manifest_path and scanned is None:
             raise import_errors.ImportFailed("Choose at least one folder to scan, or open a manifest.")
         progress = self._progress(on_progress)
 
         def work():
             path = manifest_path
-            if folders:
-                def scan_progress(done, total, name):
-                    if self._cancel_requested():
-                        raise import_errors.ImportCancelled("Cancelled. Nothing was changed.")
-                    if progress:
-                        progress(done, total, f"Scanning: {Path(name).name}")
-                found = scan.scan(folders, repo=self.repo, progress=scan_progress)
+            if folders or scanned is not None:
+                found = scanned if scanned is not None else scan.scan(folders, repo=self.repo,
+                                                                        progress=self._scan_progress(progress))
                 path = str(default_manifest_path(manifest_root)) if manifest_root else str(manifest_path)
                 manifest_module.save(found, path)
                 self.log(f"Scan saved to {path}")

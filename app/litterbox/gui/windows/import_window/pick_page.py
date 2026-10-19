@@ -7,11 +7,14 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
+from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui.logic import error_text
+from litterbox.gui.logic import import_table
 from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import release_button
 from litterbox.importing import import_errors
+from litterbox.importing import scan
 from litterbox.user import settings
 
 
@@ -69,7 +72,28 @@ class PickPage:
         if not self.folders:
             self._say("Add at least one folder first.", "warn")
             return
-        self._start_job(dict(folders=list(self.folders)), "Scanning...")
+        try:
+            self.session.scan(self._after(self._scanned), self._progress, folders=list(self.folders))
+        except LitterboxError as e:
+            self._say(str(e), "warn")
+            return
+        self._begin("Scanning...")
+
+    def _scanned(self, found, error):
+        """The scan is done: if the vault remembers importing some of these files before, warn and let the person
+        go on (importing them again as new parts) or stop. Then prepare the table."""
+        if error is not None:
+            self._prepared(None, error)
+            return
+        again = [item for item in found.items if item.already_imported_as]
+        if again:
+            if not messagebox.askokcancel("Import CAD", import_table.already_imported_question(again, len(found.items)),
+                                          icon="warning", parent=self):
+                self._show("pick")
+                self._say("Import cancelled. Nothing was changed.", "warn")
+                return
+            scan.include_already_imported(found)
+        self._start_job(dict(scanned=found), "Reading the files...")
 
     def _open_manifest(self):
         path = filedialog.askopenfilename(parent=self, title="Open a saved scan",

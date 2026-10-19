@@ -224,3 +224,18 @@ def import_cots_confirm_text(count, duplicates, names):
             lines.append(f"  ...and {len(duplicates) - 8} more")
     lines += ["", "Import them as COTS?"]
     return "\n".join(lines)
+
+
+def already_imported_question(items, total):
+    """The warning after a scan finds files the vault remembers importing before (items with
+    already_imported_as), out of `total` items: import them again, or cancel."""
+    count = len(items)
+    some = "All" if count == total else f"{count} of the {total}"
+    lines = [f"{some} parts found may already have been imported into this vault:", ""]
+    for item in items[:8]:
+        lines.append(f"  {Path(item.main_path).name}  (imported as {item.already_imported_as})")
+    if count > 8:
+        lines.append(f"  ...and {count - 8} more")
+    lines += ["", "If you go on, they are imported again as new parts with new part numbers. You can still untick "
+                  "any of them in the table.", "", "Press OK to go on, or Cancel to stop without importing anything."]
+    return "\n".join(lines)

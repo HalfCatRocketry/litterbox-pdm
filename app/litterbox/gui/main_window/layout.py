@@ -126,8 +126,7 @@ class WindowLayout:
         self._build_list(center)
         self.detail_frame = ctk.CTkFrame(self.parts_screen, fg_color=theme.BG, corner_radius=0, width=330)
         self._build_detail_pane(self.detail_frame)
-        if self.settings.get("details_pane", True) is not False:
-            self.parts_screen.add(self.detail_frame, weight=0)
+        self.parts_screen.add(self.detail_frame, weight=0)          # always open at start (hiding lasts a session)
         self._show_pane_arrow()
         self.screens = {"parts": self.parts_screen}
 

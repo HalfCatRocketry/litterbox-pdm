@@ -71,6 +71,19 @@ class SessionFlow(ImportFixture, unittest.TestCase):
         self.assertEqual(Path(self.session.manifest_path).parent, self.tmp / "settings" / "imports")
         self.assert_nothing_left()
 
+    def test_scanning_alone_then_starting_from_that_scan(self):
+        with self.user("Alex"):
+            found, error, progress = self.wait(lambda done, prog: self.session.scan(
+                done, lambda *a: prog(a), folders=[self.src]))
+        self.assertIsNone(error)
+        self.assertEqual(len(found.items), 4)
+        self.assertTrue(any("Scanning" in p[2] for p in progress))
+        self.assertFalse((self.tmp / "settings" / "imports").exists())          # nothing saved until start()
+        proposal, error, _ = self.go(scanned=found)
+        self.assertIsNone(error)
+        self.assertEqual(len(proposal.entries), 4)
+        self.assertEqual(Path(self.session.manifest_path).parent, self.tmp / "settings" / "imports")
+
     def test_an_existing_manifest_can_be_opened(self):
         self.make_manifest()
         proposal, error, _ = self.go(manifest_path=str(self.manifest_path))
