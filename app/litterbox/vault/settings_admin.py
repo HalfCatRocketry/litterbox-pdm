@@ -7,6 +7,7 @@ The settings here:
     release_rule        "warn" (default), "block" or "off": what a release does when the assembly uses parts that
                         are out of date or not released
     require_signatures  True or False (default): refuse uploads of commits not signed by a key on the team list
+    org_name            the org's full name; only the Owner may change it (the permission is "rename_org")
 Only an Admin or the Owner may change them (the permission is "manage_settings"); everyone then gets the new
 values the next time they get the latest. Projects are changed through the same file, in project_admin.py.
 
@@ -35,6 +36,9 @@ CONFIG_REL = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
 def edit(repo, **values):
     """Change the settings given (see config_write.set_values), commit and upload the change. If anything fails the file
     is put back. Returns True if something changed, False if the vault already had those values."""
+    if "org_name" in values:
+        team_permissions.require(repo, "rename_org")
+
     def change():
         config_write.set_values(repo, **values)
         return "Vault settings: " + ", ".join(f"{key} = {value}" for key, value in values.items())

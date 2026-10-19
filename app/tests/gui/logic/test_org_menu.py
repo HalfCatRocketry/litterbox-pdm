@@ -1,4 +1,4 @@
-"""Tests for gui/logic/org_menu.py: the org box, Add org and Create new vault."""
+"""Tests for gui/logic/org_menu.py: the org box, Add org and Create new org."""
 
 import unittest
 from pathlib import Path
@@ -96,7 +96,7 @@ class InspectVaultFolder(unittest.TestCase):
         self.vault()
         org, problem = org_menu.inspect_vault_folder(self.folder)
         self.assertEqual(org, "")
-        self.assertIn("Create new vault", problem)
+        self.assertIn("Create new org", problem)
 
     def test_a_bad_config_is_reported(self):
         self.vault("org: TOOLONGCODE\n")
@@ -120,10 +120,21 @@ class AddOrgWiring(unittest.TestCase):
 
     def test_the_last_question_says_the_settings_are_fixed(self):
         text = org_menu.fixed_settings_text("HCR", "Hidden Creek Robotics", 10001, 6, 3, ["Think twice."])
-        for wanted in ("can't change them", "HCR", "Hidden Creek Robotics", "6 digits and a 3-digit variant",
-                       "HCR-010001-001", "Think twice.", "Create the vault?"):
+        for wanted in ("can't change them", "HCR", "Hidden Creek Robotics", "the Owner can change this later",
+                       "6 digits and a 3-digit variant", "HCR-010001-001", "Think twice.", "Create the organization?"):
             self.assertIn(wanted, text)
         self.assertIn("(none)", org_menu.fixed_settings_text("HCR", "", 1, 5, 3))
+
+    def test_the_suggested_start_is_one_then_zeros_then_one(self):
+        self.assertEqual(org_menu.default_start(6), 100001)
+        self.assertEqual(org_menu.default_start(5), 10001)
+        self.assertEqual(org_menu.default_start(2), 11)
+        self.assertEqual(org_menu.default_start(1), 1)
+
+    def test_the_example_number_follows_the_digits(self):
+        self.assertEqual(org_menu.example_number(6, 3), "123456-001")
+        self.assertEqual(org_menu.example_number(4, 2), "1234-01")
+        self.assertEqual(org_menu.example_number(9, 4), "123456789-0001")
 
     def test_new_vaults_suggest_six_digits_but_existing_vaults_keep_their_default(self):
         from litterbox.core import part_number

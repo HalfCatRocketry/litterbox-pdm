@@ -58,6 +58,17 @@ class ConfigValues(unittest.TestCase):
         with self.assertRaises(config.ConfigError):
             config_write.set_values(self.repo, require_signatures="yes")
 
+    def test_the_org_name_can_be_set_and_cleared(self):
+        (self.repo / ".litterbox").mkdir()
+        (self.repo / ".litterbox" / "config.yaml").write_text("org: HCR\n")
+        config_write.set_values(self.repo, org_name="  Hidden   Creek Robotics ")
+        self.assertEqual(config.get_org_name(self.repo), "Hidden Creek Robotics")
+        config_write.set_values(self.repo, org_name="")
+        self.assertNotIn("org_name", config.load(self.repo))
+        self.assertEqual(config.get_org_name(self.repo), "HCR")
+        with self.assertRaises(config.ConfigError):
+            config_write.set_values(self.repo, org_name="x" * (config.ORG_NAME_MAX + 1))
+
     def test_bad_values_are_refused(self):
         with self.assertRaises(config.ConfigError):
             config_write.set_values(self.repo, commit_style="sometimes")
@@ -114,6 +125,16 @@ class EditingTheSetting(Fixture, unittest.TestCase):
     def test_manage_settings_is_an_admin_action(self):
         self.assertIn("manage_settings", team_model.ADMIN_ACTIONS)
 
+    def test_only_the_owner_may_rename_the_org(self):
+        self.assertIn("rename_org", team_model.OWNER_ACTIONS)
+        with self.user("Bea"):
+            with self.assertRaises(LitterboxError):
+                vault_settings.edit(self.b, org_name="Someone Else's Robotics")
+        with self.user("Alex"):
+            self.assertTrue(vault_settings.edit(self.a, org_name="Hidden Creek Robotics"))
+        self.get_latest("Bea")
+        self.assertEqual(config.get_org_name(self.b), "Hidden Creek Robotics")
+
 
 class DialogLogic(unittest.TestCase):
     def test_only_what_changed_is_saved(self):
@@ -134,6 +155,7 @@ class Wiring(unittest.TestCase):
         for key in ("commit_style", "release_rule", "require_signatures"):
             self.assertIn(f'("{key}",', source)
         self.assertEqual(source.count('allows("manage_settings")'), 1)
+        self.assertIn('may_rename=self.identity.allows("rename_org")[0]', source)
 
 
 if __name__ == "__main__":

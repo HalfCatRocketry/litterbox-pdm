@@ -103,7 +103,7 @@ class Menus:
         if orgs:
             menu.add_separator()
         menu.add_command(label="Add org...", command=self.add_org, state="disabled" if busy else "normal")
-        menu.add_command(label="Create new vault...", command=self.create_vault, state="disabled" if busy else "normal")
+        menu.add_command(label="Create new org...", command=self.create_vault, state="disabled" if busy else "normal")
         menu.add_separator()
         menu.add_command(label="Exit", command=self._on_close)
 

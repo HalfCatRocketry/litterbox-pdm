@@ -154,13 +154,15 @@ class TeamAdmin:
         repo = self.repo()
         try:
             config.apply(repo)
-            current = {"commit_style": config.get_commit_style(repo), "release_rule": config.get_release_rule(repo),
+            current = {"org_name": config.check_org_name(config.load(repo).get("org_name")),
+                       "commit_style": config.get_commit_style(repo), "release_rule": config.get_release_rule(repo),
                        "require_signatures": config.get_require_signatures(repo),
                        "assembly_variant_start": config.get_assembly_variant_start(repo)}
         except config.ConfigError as e:
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
-        chosen = vault_settings_dialog.VaultSettingsDialog(window, current).show()
+        chosen = vault_settings_dialog.VaultSettingsDialog(
+            window, current, may_rename=self.identity.allows("rename_org")[0]).show()
         changes = team_text.changed_settings(current, chosen)
         if not changes:
             return

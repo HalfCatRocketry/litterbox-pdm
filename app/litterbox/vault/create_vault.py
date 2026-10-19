@@ -1,5 +1,5 @@
 """
-create_vault.py - set up a brand-new vault (Create new vault...).
+create_vault.py - set up a brand-new vault (Create new org...).
 
 A vault is a Git repository that Litterbox manages. This file takes an EMPTY repository (made on your Git host
 and cloned to your computer) and turns it into a Litterbox vault:
@@ -23,7 +23,7 @@ removed again and any commit is undone, so you can simply run it again.
     plan(...)   checks everything and returns the problems and warnings, without touching anything
     create(...) does it (calls plan() first and refuses if there are problems)
 
-Create new vault... in the window asks for the empty repository's URL and clones it first (vault/clone.py). Litterbox
+Create new org... in the window asks for the empty repository's URL and clones it first (vault/clone.py). Litterbox
 has no way to change the org code, org name or numbering afterwards: they are fixed once the vault exists.
 
 CHOOSING THE NUMBERS (they can't be changed once the first part number exists)

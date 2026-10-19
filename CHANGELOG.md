@@ -2,8 +2,11 @@
 
 ## 0.4.0
 
+- **Create new org** (was Create new vault): the boxes are in a clearer order (digits before the first number), the first number follows the digits (100001 for 6), and an example part number (123456-001) is shown beside the digits.
+- **The org name can be changed** by the Owner, in Team > Vault Settings... The org code and part number scheme still can't.
+
 - **A new main window.** Everything is still there, laid out the way other PDM programs do it:
-  - A **menu bar** (File, Vault, View, Help; Alt+F, Alt+A, Alt+V, Alt+H) with the Litterbox logo on the right. Adding an org and Create new vault moved from the org box to the File menu; the org box in the header now lists only your orgs. Check for updates and the version are under Help.
+  - A **menu bar** (File, Vault, View, Help; Alt+F, Alt+A, Alt+V, Alt+H) with the Litterbox logo on the right. Adding an org and Create new org (was Create new vault) moved from the org box to the File menu; the org box in the header now lists only your orgs. Check for updates and the version are under Help.
   - A **sidebar** on the left: the parts list's views (All, Mine, Checked out, Released, Not downloaded, Void) with how many parts each has, then **My Tasks**, **ECOs** and **Team**, which are now screens in the main window instead of separate windows (Ctrl+1 to Ctrl+4). The Show void box became the Void view. On a narrow window the sidebar shows only its icons; View > Sidebar names switches the names on or off.
   - Above the list, the four everyday buttons (Check Out, Check In, Save Progress, Undo Checkout), then **Open**, **Lifecycle** and **Create** menus for everything else. A greyed-out button says why when you rest the mouse on it; a greyed-out menu entry says why in the status bar. **Right-click** a part for the same actions.
   - The list's first column has each part's **tick box and a status icon** (a different shape for each status, so colour is never the only clue; Help > Status icons explains them). Resting the mouse on an icon shows the full status. The Status column is gone by default; long names and descriptions are cut with "..." and shown in full on hover. **Columns** chooses which columns are shown (Status, Checked out by, Released rev, Imported from and COTS are there to add).

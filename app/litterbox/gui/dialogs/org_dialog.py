@@ -1,7 +1,7 @@
 """
-org_dialog.py - Create new vault...: the empty repository's URL, and the new org's code, full name, first part number
-and digits (none of which can be changed once the vault exists), and the variant assemblies start at (which an Admin
-can change later).
+org_dialog.py - Create new org...: the empty repository's URL, and the new org's code, digits and first part number
+(none of which can be changed once the vault exists), its full name (which the Owner can change later), and the
+variant assemblies start at (which an Admin can change later).
 """
 
 import tkinter as tk
@@ -14,22 +14,23 @@ from litterbox.core.part_number import PNError, check_org
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import number_input
+from litterbox.gui.logic import org_menu
 from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.vault import clone as vault_clone
 from litterbox.vault import config
 
-TITLE = "Create new vault"
+TITLE = "Create new org"
 
 
 class OrgDialog(modal_dialog.ModalDialog):
-    """Create new vault...: where the empty repository is, and the new org's settings.
+    """Create new org...: where the empty repository is, and the new org's settings.
 
-        result = OrgDialog(parent, root=r"C:\\Litterbox", start=1, base_digits=6, variant_digits=3).show()
+        result = OrgDialog(parent, root=r"C:\\Litterbox", base_digits=6, variant_digits=3).show()
         # None if cancelled, else (url, org, start, base_digits, variant_digits, org_name, assembly_variant_start)
     """
 
-    def __init__(self, parent, root, start=1, base_digits=6, variant_digits=3):
+    def __init__(self, parent, root, start=None, base_digits=6, variant_digits=3):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result, self.root = None, root
@@ -45,11 +46,12 @@ class OrgDialog(modal_dialog.ModalDialog):
         self.url_var = tk.StringVar()
         self.org_var = tk.StringVar()
         self.name_var = tk.StringVar()
-        self.start_var = tk.StringVar(value=str(start))
         self.base_digits_var = tk.StringVar(value=str(base_digits))
         self.variant_digits_var = tk.StringVar(value=str(variant_digits))
         self.assembly_var = tk.StringVar(value=str(config.default_assembly_variant(variant_digits)))
         self.variant_digits_var.trace_add("write", lambda *_: self._follow_variant_digits())
+        self.base_digits_var.trace_add("write", lambda *_: self._follow_base_digits())
+        self.variant_digits_var.trace_add("write", lambda *_: self._show_example())
 
         ctk.CTkLabel(self, text="Empty repository URL (press Clone on your Git host and copy the https address)",
                      anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 2))
@@ -60,33 +62,39 @@ class OrgDialog(modal_dialog.ModalDialog):
         self.where.grid(row=2, column=0, sticky="ew", padx=20, pady=(4, 0))
         self.url_var.trace_add("write", lambda *_: self._preview())
 
-        ctk.CTkLabel(self, text="Org code (2 to 4 letters, for example HCR)", anchor="w").grid(
+        ctk.CTkLabel(self, text="Organization code (2 to 4 letters)", anchor="w").grid(
             row=3, column=0, sticky="ew", padx=20, pady=(12, 2))
         ctk.CTkEntry(self, textvariable=self.org_var, height=34).grid(row=4, column=0, sticky="ew", padx=20)
 
-        ctk.CTkLabel(self, text="Org name (optional, for example Hidden Creek Robotics)", anchor="w").grid(
+        ctk.CTkLabel(self, text="Organization name", anchor="w").grid(
             row=5, column=0, sticky="ew", padx=20, pady=(12, 2))
         ctk.CTkEntry(self, textvariable=self.name_var, height=34).grid(row=6, column=0, sticky="ew", padx=20)
 
-        ctk.CTkLabel(self, text="First part number to hand out (for example 10001)", anchor="w").grid(
+        ctk.CTkLabel(self, text="Digits in the part number base and variant", anchor="w").grid(
             row=7, column=0, sticky="ew", padx=20, pady=(12, 2))
-        ctk.CTkEntry(self, textvariable=self.start_var, height=34, width=140).grid(
-            row=8, column=0, sticky="w", padx=20)
-
-        ctk.CTkLabel(self, text="Digits in the part number and in the variant (for example 6 and 3)", anchor="w").grid(
-            row=9, column=0, sticky="ew", padx=20, pady=(12, 2))
         digits = ctk.CTkFrame(self, fg_color="transparent")
-        digits.grid(row=10, column=0, sticky="w", padx=20)
+        digits.grid(row=8, column=0, sticky="w", padx=20)
         ctk.CTkEntry(digits, textvariable=self.base_digits_var, height=34, width=70).grid(row=0, column=0)
         ctk.CTkLabel(digits, text="-", width=18).grid(row=0, column=1)
         ctk.CTkEntry(digits, textvariable=self.variant_digits_var, height=34, width=70).grid(row=0, column=2)
+        self.example = ctk.CTkLabel(digits, text="", text_color=theme.MUTED, anchor="w")
+        self.example.grid(row=0, column=3, padx=(14, 0))
 
-        ctk.CTkLabel(self, text="New Assembly starts at variant (New Part uses the ones below; an Admin can change "
-                                "this later)", anchor="w", justify="left", wraplength=520).grid(
+        ctk.CTkLabel(self, text="Part number to start with", anchor="w").grid(
+            row=9, column=0, sticky="ew", padx=20, pady=(12, 2))
+        # No textvariable: CTkEntry only shows its placeholder without one.
+        self.start_entry = ctk.CTkEntry(self, height=34, width=140,
+                                        placeholder_text=str(org_menu.default_start(part_number.NEW_VAULT_BASE_DIGITS)))
+        self.start_entry.grid(row=10, column=0, sticky="w", padx=20)
+        self.start_entry.insert(0, str(start if start is not None else org_menu.default_start(base_digits)))
+        self._show_example()
+
+        ctk.CTkLabel(self, text="Assembly variant number start", anchor="w").grid(
             row=11, column=0, sticky="ew", padx=20, pady=(12, 2))
         ctk.CTkEntry(self, textvariable=self.assembly_var, height=34, width=90).grid(row=12, column=0, sticky="w", padx=20)
 
-        ctk.CTkLabel(self, text="The org code, org name and part numbers can't be changed once the vault is created.",
+        ctk.CTkLabel(self, text="The org code and part number scheme can't be changed once the organization is "
+                                "created.",
                      text_color=theme.WARN, anchor="w", justify="left", wraplength=520).grid(
             row=13, column=0, sticky="ew", padx=20, pady=(16, 0))
 
@@ -113,6 +121,36 @@ class OrgDialog(modal_dialog.ModalDialog):
         if low <= digits <= high and self.assembly_var.get().strip() in defaults:
             self.assembly_var.set(str(config.default_assembly_variant(digits)))
 
+    def _digits(self):
+        """(base digits, variant digits) as typed, or None while either isn't a count Litterbox allows."""
+        try:
+            base, variant = int(self.base_digits_var.get()), int(self.variant_digits_var.get())
+        except ValueError:
+            return None
+        (base_low, base_high), (variant_low, variant_high) = part_number.BASE_DIGITS_RANGE, part_number.VARIANT_DIGITS_RANGE
+        if base_low <= base <= base_high and variant_low <= variant <= variant_high:
+            return base, variant
+        return None
+
+    def _follow_base_digits(self):
+        """Keep the start number at the default for the digits typed (100001 for 6), unless it was changed by hand."""
+        self._show_example()
+        low, high = part_number.BASE_DIGITS_RANGE
+        try:
+            digits = int(self.base_digits_var.get())
+        except ValueError:
+            return
+        defaults = {str(org_menu.default_start(n)) for n in range(low, high + 1)}
+        typed = self.start_entry.get().strip()
+        if low <= digits <= high and (typed in defaults or not typed):
+            self.start_entry.delete(0, "end")
+            self.start_entry.insert(0, str(org_menu.default_start(digits)))
+
+    def _show_example(self):
+        if hasattr(self, "example"):
+            digits = self._digits()
+            self.example.configure(text=org_menu.example_number(*digits) if digits else "")
+
     def _preview(self):
         name, problem = vault_clone.parse_url(self.url_var.get())
         if self.url_var.get().strip() and not problem:
@@ -135,7 +173,7 @@ class OrgDialog(modal_dialog.ModalDialog):
         except config.ConfigError as e:
             messagebox.showwarning(TITLE, str(e), parent=self)
             return
-        text = self.start_var.get().strip()
+        text = self.start_entry.get().strip()
         if not text.isdigit() or int(text) < 1:
             messagebox.showwarning(TITLE, "The first part number must be a whole number, 1 or higher.", parent=self)
             return

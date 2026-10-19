@@ -13,7 +13,7 @@ from dataclasses import dataclass
 DEFAULT_BASE_DIGITS = 5          # what a vault with no setting uses (so existing vaults never change)
 
 
-NEW_VAULT_BASE_DIGITS = 6        # what the Create new vault dialog suggests for a new one
+NEW_VAULT_BASE_DIGITS = 6        # what the Create new org dialog suggests for a new one
 
 
 DEFAULT_VARIANT_DIGITS = 3

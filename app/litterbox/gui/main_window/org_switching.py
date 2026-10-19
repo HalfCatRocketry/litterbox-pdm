@@ -1,6 +1,7 @@
 """
 org_switching.py - switching org (the org box in the header, and File > the orgs), Add org... and
-Create new vault... (an org's settings are fixed when its vault is created, so there is no way to edit them)
+Create new org... (an org's code and numbering are fixed when its vault is created, so there is no way to edit
+them; the Owner can change its name in Vault Settings)
 """
 
 from pathlib import Path
@@ -20,7 +21,7 @@ from litterbox.vault import create_vault
 
 
 class OrgSwitching:
-    """switching org, Add org... and Create new vault... (a part of the main window, App)."""
+    """switching org, Add org... and Create new org... (a part of the main window, App)."""
 
     @staticmethod
     def _detect_org(folder):
@@ -70,7 +71,7 @@ class OrgSwitching:
     def add_org(self):
         """Add org...: paste the URL of a vault on your Git host. Litterbox clones it into its own folder (see
         vault_clone.py), reads the org code and numbering from it, and opens it. A brand-new vault is made with
-        Create new vault... instead."""
+        Create new org... instead."""
         known = org_menu.known_orgs(self.settings)
         url = clone_dialog.CloneDialog(self, settings.ROOT).show()
         if not url:
@@ -111,13 +112,13 @@ class OrgSwitching:
                       label="Cloning the vault (this can take a while)")
 
     def create_vault(self):
-        """Create new vault...: paste the URL of an empty repository on your Git host. After a last check of the
+        """Create new org...: paste the URL of an empty repository on your Git host. After a last check of the
         settings (they can't be changed later), Litterbox clones it into its own folder, like Add org..., and turns
         it into a vault (see create_vault.py)."""
-        if not messagebox.askyesno("Create new vault", org_menu.CREATE_VAULT_INTRO, parent=self):
+        if not messagebox.askyesno("Create new org", org_menu.CREATE_VAULT_INTRO, parent=self):
             return
-        result = org_dialog.OrgDialog(self, settings.ROOT, 1, part_number.NEW_VAULT_BASE_DIGITS,
-                                      part_number.DEFAULT_VARIANT_DIGITS).show()
+        result = org_dialog.OrgDialog(self, settings.ROOT, base_digits=part_number.NEW_VAULT_BASE_DIGITS,
+                                      variant_digits=part_number.DEFAULT_VARIANT_DIGITS).show()
         if not result:
             return
         url, org, start, base_digits, variant_digits, org_name, assembly = result
@@ -125,9 +126,9 @@ class OrgSwitching:
         checked = create_vault.check_settings(org, start, base_digits, variant_digits, assembly)
         problems = ([problem] if problem else []) + checked.problems
         if problems:
-            messagebox.showerror("Create new vault", "\n\n".join(problems), parent=self)
+            messagebox.showerror("Create new org", "\n\n".join(problems), parent=self)
             return
-        if not messagebox.askyesno("Create new vault", org_menu.fixed_settings_text(
+        if not messagebox.askyesno("Create new org", org_menu.fixed_settings_text(
                 checked.org, org_name, start, base_digits, variant_digits, checked.warnings, assembly), parent=self):
             return
 
@@ -142,7 +143,7 @@ class OrgSwitching:
             settings.save(self.settings)
             self._reload_org_menu()
             self.switch_org(created.org)
-            messagebox.showinfo("Create new vault", org_menu.vault_created_text(created), parent=self)
+            messagebox.showinfo("Create new org", org_menu.vault_created_text(created), parent=self)
 
         self.run_task(work, f"Created the {checked.org} vault", on_success=made, refresh=False,
                       label="Copying the empty repository and setting up the vault")

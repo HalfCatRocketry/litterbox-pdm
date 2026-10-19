@@ -42,6 +42,12 @@ def set_values(repo, **values):
                 data[key] = True
             else:
                 data.pop(key, None)
+        elif key == "org_name":
+            name = config.check_org_name(value)
+            if name:
+                data[key] = name
+            else:
+                data.pop(key, None)                  # no name: the org code is shown instead
         elif key == "assembly_variant_start":
             data[key] = config.check_assembly_variant(value, config.get_digits(repo)[1])
         elif key == "projects":

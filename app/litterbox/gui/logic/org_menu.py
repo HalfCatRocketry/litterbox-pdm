@@ -1,7 +1,7 @@
 """
 org_menu.py - the orgs: the org box in the header, the orgs you have, moving old settings over, Add org planning,
-Create new vault text, and checking a folder looks like a vault. An org's settings (code, name, numbering) are fixed
-when its vault is created, so there is nothing here to change them.
+Create new org text, and checking a folder looks like a vault. An org's code and numbering are fixed when its vault
+is created, so there is nothing here to change them (the Owner changes the name in Vault Settings).
 """
 
 from pathlib import Path
@@ -12,7 +12,7 @@ from litterbox.gui.logic import error_text
 ADD_ORG = "Add org..."
 
 
-CREATE_VAULT = "Create new vault..."
+CREATE_VAULT = "Create new org..."
 
 
 
@@ -63,23 +63,37 @@ CREATE_VAULT_INTRO = (
     "Have you created the empty repository?")
 
 
+def default_start(base_digits):
+    """The part number Create new org... suggests starting with: 1, then 0s, then 1, as wide as the base (100001
+    for 6 digits; 1 for 1 digit)."""
+    return 1 if base_digits <= 1 else 10 ** (base_digits - 1) + 1
+
+
+def example_number(base_digits, variant_digits):
+    """What a part number looks like with these digits, shown beside the digit boxes: 123456-001 for 6 and 3."""
+    base = "".join(str(i % 10) for i in range(1, base_digits + 1))
+    return f"{base}-{1:0{variant_digits}d}"
+
+
 def fixed_settings_text(org, org_name, start, base_digits, variant_digits, warnings=(), assembly_variant=None):
-    """The last question before Create new vault... goes ahead: these settings can never be changed in Litterbox."""
+    """The last question before Create new org... goes ahead: the org code and part number scheme can never be
+    changed in Litterbox (the Owner can change the org name later)."""
     example = f"{org}-{start:0{base_digits}d}-{1:0{variant_digits}d}"
     lines = [
-        "Check these carefully. Once the vault is created, Litterbox can't change them:",
+        "Check these carefully. Once the organization is created, Litterbox can't change them:",
         "",
-        f"    Org code:  {org}",
-        f"    Org name:  {org_name or '(none)'}",
+        f"    Organization code:  {org}",
         f"    Part numbers:  {base_digits} digits and a {variant_digits}-digit variant",
         f"    First part number:  {example}",
+        "",
+        f"Organization name:  {org_name or '(none)'} (the Owner can change this later)",
     ]
     if assembly_variant is not None:
-        lines += ["", f"New Assembly starts at variant {assembly_variant:0{variant_digits}d} (an Admin can change "
-                      "this later)."]
+        lines += [f"Assembly variant number start:  {assembly_variant:0{variant_digits}d} (an Admin can change "
+                  "this later)"]
     if warnings:
         lines += [""] + list(warnings)
-    lines += ["", "Create the vault?"]
+    lines += ["", "Create the organization?"]
     return "\n".join(lines)
 
 
@@ -96,7 +110,7 @@ def vault_created_text(result):
 
 
 def plan_add_org(url, root, known):
-    """What Add org... (or Create new vault...) will do with the URL the user pasted: (folder to clone into,
+    """What Add org... (or Create new org...) will do with the URL the user pasted: (folder to clone into,
     problem). `known` is the {org: folder} Litterbox already has, so a vault that is already added is said so, not
     cloned again. One whose folder has gone missing is cloned again."""
     from litterbox.vault import clone as vault_clone
@@ -126,7 +140,7 @@ def inspect_vault_folder(folder):
         return config.get_org(path), ""
     except config.NoOrgError:
         return "", ("That repository isn't a Litterbox vault yet: it has no .litterbox/config.yaml and no parts. "
-                    "If it is a new, empty repository, use Create new vault... instead.")
+                    "If it is a new, empty repository, use Create new org... instead.")
     except config.ConfigError as e:
         return "", str(e)
 

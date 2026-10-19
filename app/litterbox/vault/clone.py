@@ -1,5 +1,5 @@
 """
-clone.py - Add org... and Create new vault...: copy a repository on the Git host onto this computer (a vault that
+clone.py - Add org... and Create new org...: copy a repository on the Git host onto this computer (a vault that
 already exists, or the empty repository a new vault starts as).
 
 The user pastes the repository's URL (the one the host's Clone button gives, like
@@ -8,7 +8,7 @@ Litterbox's own folder (C:\\Litterbox\\hcr-litterbox), and Litterbox then reads 
 
     name, problem = vault_clone.parse_url(url)
     vault_clone.clone(url, target)
-    vault_clone.clone_or_reuse(url, target)      (Create new vault: an earlier try's copy is used again)
+    vault_clone.clone_or_reuse(url, target)      (Create new org: an earlier try's copy is used again)
 """
 
 import os
@@ -87,7 +87,7 @@ def origin_url(folder):
 
 
 def clone_or_reuse(url, target, on_demand=True):
-    """Create new vault...: clone `url` into `target`, or use the copy an earlier try already cloned there (one that
+    """Create new org...: clone `url` into `target`, or use the copy an earlier try already cloned there (one that
     stopped part-way, for example because Git didn't know your email yet). Raises LitterboxError if `target` holds
     something else."""
     target = Path(target)

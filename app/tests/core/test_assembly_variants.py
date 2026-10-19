@@ -1,4 +1,4 @@
-"""Tests for the variant assemblies start at (config, numbering, Create new vault's words) and the Break Checkout
+"""Tests for the variant assemblies start at (config, numbering, Create new org's words) and the Break Checkout
 rules and words. None of these need git; the real flows are in tests/parts/test_assembly_variants.py and
 tests/parts/test_break_checkout.py."""
 
@@ -57,7 +57,7 @@ class AssemblyVariantSetting(unittest.TestCase):
         self.assertTrue(create_vault.check_settings("HCR", 1, 5, 3).ok)                 # None: the default
         self.assertFalse(create_vault.check_settings("HCR", 1, 5, 2, 500).ok)           # 2 digits only reach 99
         text = org_menu.fixed_settings_text("HCR", "", 1, 5, 3, assembly_variant=500)
-        self.assertIn("New Assembly starts at variant 500 (an Admin can change this later)", text)
+        self.assertIn("Assembly variant number start:  500 (an Admin can change this later)", text)
 
     def test_the_next_variant_stays_in_its_range(self):
         self.assertEqual(numbering.next_variant({1, 2}), 3)

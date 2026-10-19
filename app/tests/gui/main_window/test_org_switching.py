@@ -1,4 +1,4 @@
-"""Tests for Create new vault and the org box. The window itself is replaced by stand-ins (tests/support/gui_fakes.py): these check the wiring, not the look. Please also try the real window."""
+"""Tests for Create new org and the org box. The window itself is replaced by stand-ins (tests/support/gui_fakes.py): these check the wiring, not the look. Please also try the real window."""
 
 import unittest
 from tests.support.gui_fakes import FakeBox, load_gui_with_fakes, replace
@@ -7,7 +7,7 @@ URL = "https://dev.azure.com/team/project/_git/hcr-litterbox"
 
 
 class CreateVaultWiring(unittest.TestCase):
-    """The Create new vault... entry in the File menu."""
+    """The Create new org... entry in the File menu."""
 
     def setUp(self):
         from types import SimpleNamespace

@@ -1,6 +1,6 @@
 """
-vault_settings_dialog.py - Vault Settings (Admin and Owner): commit style, release rule, signed commits, and the
-variant assemblies start at.
+vault_settings_dialog.py - Vault Settings (Admin and Owner): the org name (Owner only), commit style, release rule,
+signed commits, and the variant assemblies start at.
 """
 
 import tkinter as tk
@@ -17,19 +17,20 @@ from litterbox.vault import config
 
 
 class VaultSettingsDialog(modal_dialog.ModalDialog):
-    """The vault's shared settings, as one dict: commit_style, release_rule, require_signatures and
-    assembly_variant_start (see config.py). show() gives the chosen values (all four) or None."""
+    """The vault's shared settings, as one dict: org_name, commit_style, release_rule, require_signatures and
+    assembly_variant_start (see config.py). show() gives the chosen values or None; org_name is only among them when
+    may_rename (the Owner), otherwise it is shown but can't be edited."""
 
     COMMITS = {"One commit per part (default)": "per_part", "One commit for the whole batch (faster)": "per_batch"}
     RULES = {"Warn, and let me go ahead (default)": "warn", "Block the release": "block", "Say nothing": "off"}
     SIGNATURES = {"Not required (default)": False, "Required: refuse unsigned commits": True}
 
-    def __init__(self, parent, current=None):
+    def __init__(self, parent, current=None, may_rename=False):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         current = current or {}
-        self.result = None
-        width, height = 560, 620
+        self.result, self.may_rename = None, may_rename
+        width, height = 560, 720
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Vault settings")
@@ -41,8 +42,15 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
             row=0, column=0, sticky="ew", padx=20, pady=(18, 0))
         ctk.CTkLabel(self, text="These apply to everyone in the vault.", anchor="w", text_color=theme.MUTED).grid(
             row=1, column=0, sticky="ew", padx=20, pady=(0, 6))
+        ctk.CTkLabel(self, text="Organization name", anchor="w").grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.name_var = tk.StringVar(value=current.get("org_name") or "")
+        ctk.CTkEntry(self, textvariable=self.name_var, width=510, height=32,
+                     state="normal" if may_rename else "disabled").grid(row=3, column=0, padx=20, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(self, text="Shown beside the org code. " + ("" if may_rename else "Only the Owner can change it."),
+                     anchor="w", justify="left", wraplength=510, text_color=theme.MUTED).grid(
+            row=4, column=0, sticky="ew", padx=20, pady=(4, 0))
         self.vars = {}
-        row = 2
+        row = 5
         for key, title, choices, note in (
                 ("commit_style", "When several parts are checked in or saved at once:", self.COMMITS,
                  "One commit per part keeps each part's history separate. One commit for the batch is faster "
@@ -83,6 +91,12 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
 
     def _ok(self):
         result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
+        if self.may_rename:
+            try:
+                result["org_name"] = config.check_org_name(self.name_var.get())
+            except config.ConfigError as e:
+                messagebox.showwarning("Vault settings", str(e), parent=self)
+                return
         try:
             start = number_input.parse_number(self.assembly_var.get(), "assembly variant")
             result["assembly_variant_start"] = config.check_assembly_variant(start)

@@ -1,5 +1,5 @@
 """
-init_vault.py - Create new vault on the command line: python -m litterbox.cli.init_vault --help
+init_vault.py - Create new org on the command line: python -m litterbox.cli.init_vault --help
 """
 
 import argparse

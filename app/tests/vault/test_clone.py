@@ -126,7 +126,7 @@ class Cloning(unittest.TestCase):
         target = vault_clone.clone(empty.as_uri(), self.root / "empty", on_demand=False)
         org, problem = org_menu.inspect_vault_folder(target)
         self.assertEqual(org, "")
-        self.assertIn("Create new vault", problem)
+        self.assertIn("Create new org", problem)
 
 
 class Wiring(unittest.TestCase):

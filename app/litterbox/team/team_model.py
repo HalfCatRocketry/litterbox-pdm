@@ -30,7 +30,7 @@ ADMIN_ACTIONS = frozenset({"manage_people", "manage_workflows", "manage_settings
                            "break_checkout"})
 
 
-OWNER_ACTIONS = frozenset({"transfer_owner"})
+OWNER_ACTIONS = frozenset({"transfer_owner", "rename_org"})
 
 
 STANDARD_ROLES = ["Responsible Engineer", "Manufacturing", "Quality", "Analysis", "Manager", "Chief"]
