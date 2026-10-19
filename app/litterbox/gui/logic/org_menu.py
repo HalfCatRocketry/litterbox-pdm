@@ -112,14 +112,22 @@ def vault_created_text(result):
 def plan_add_org(url, root, known):
     """What Add org... (or Create new org...) will do with the URL the user pasted: (folder to clone into,
     problem). `known` is the {org: folder} Litterbox already has, so a vault that is already added is said so, not
-    cloned again. One whose folder has gone missing is cloned again."""
+    cloned again. One whose folder has gone missing is cloned again. A folder Litterbox isn't allowed to look in is
+    reported as the problem, not raised."""
     from litterbox.vault import clone as vault_clone
     name, problem = vault_clone.parse_url(url)
     if problem:
         return None, problem
     target = vault_clone.target_folder(root, name)
     for org, folder in known.items():
-        if str(Path(folder)).lower() == str(target).lower() and target.exists():
+        if str(Path(folder)).lower() != str(target).lower():
+            continue
+        try:
+            there = target.exists()
+        except OSError as e:
+            return None, (f"Litterbox isn't allowed to look in {target}, where {org} should be ({e.strerror or e}). "
+                          "Check that your Windows account can open that folder, then try again.")
+        if there:
             return None, f"{org} is already added: it is in {target}. Choose it from the org box at the top."
     return target, ""
 

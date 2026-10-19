@@ -5,6 +5,7 @@ Tests for Add org... (vault_clone.py and the planning in gui_logic): reading a r
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -62,9 +63,19 @@ class Planning(unittest.TestCase):
         self.assertIn("HCR is already added", problem)
 
     def test_an_added_vault_whose_folder_is_gone_is_cloned_again(self):
-        target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", "/root/Litterbox",
-                                             {"HCR": "/root/Litterbox/hcr-litterbox"})
-        self.assertEqual((target, problem), (Path("/root/Litterbox/hcr-litterbox"), ""))
+        with tempfile.TemporaryDirectory() as root:          # a real folder: /root can't be looked in when not root
+            gone = Path(root) / "hcr-litterbox"
+            target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", root, {"HCR": str(gone)})
+        self.assertEqual((target, problem), (gone, ""))
+
+    def test_a_folder_that_cant_be_looked_in_is_explained_not_raised(self):
+        with tempfile.TemporaryDirectory() as root:
+            folder = Path(root) / "hcr-litterbox"
+            with mock.patch.object(Path, "exists", side_effect=PermissionError(13, "Permission denied")):
+                target, problem = org_menu.plan_add_org("https://h/t/hcr-litterbox", root, {"HCR": str(folder)})
+        self.assertIsNone(target)
+        self.assertIn("isn't allowed to look in", problem)
+        self.assertIn("Permission denied", problem)
 
     def test_a_bad_url_gives_its_reason(self):
         target, problem = org_menu.plan_add_org("nonsense", "/root/Litterbox", {})
