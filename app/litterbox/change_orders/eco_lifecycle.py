@@ -15,6 +15,7 @@ from litterbox.change_orders import eco_store
 from litterbox.core import part_number
 from litterbox.records import record_model
 from litterbox.records import record_store
+from litterbox.util import person_name
 
 EVENT = {eco_model.RELEASED: "released", eco_model.REJECTED: "rejected", eco_model.WITHDRAWN: "withdrawn"}
 
@@ -24,9 +25,9 @@ def open_eco(repo, name, description, action, template_name, request_id, parts, 
     in your copy, so call this after pulling."""
     name, description = eco_model.clean_name(name), eco_model.clean_description(description)
     eco = eco_model.Eco(eco_store.next_number(repo), name, description, eco_model.OPEN, action, template_name,
-                        request_id, [{"pn": str(pn), "revision": rev} for pn, rev in parts], user,
-                        record_model.now_utc())
-    eco.history.append({"event": "opened", "by": user, "at": eco.requested_at})
+                        request_id, [{"pn": str(pn), "revision": rev} for pn, rev in parts], str(user),
+                        record_model.now_utc(), requested_by_id=person_name.id_of(user))
+    eco.history.append(person_name.stamp({"event": "opened"}, "by", user) | {"at": eco.requested_at})
     eco_store.save(repo, eco)
     return eco
 
@@ -47,7 +48,7 @@ def close_if_done(repo, number, status, user, pending=None, comment=""):
     eco.status = status
     if pending:
         eco.signoffs = [dict(s) for s in pending.get("signoffs", [])]
-    entry = {"event": EVENT[status], "by": user, "at": record_model.now_utc()}
+    entry = person_name.stamp({"event": EVENT[status]}, "by", user) | {"at": record_model.now_utc()}
     if comment:
         entry["comment"] = comment
     eco.history.append(entry)

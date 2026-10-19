@@ -16,7 +16,8 @@ and cloned to your computer) and turns it into a Litterbox vault:
                                          [--no-team] [--no-push] [--name "Your Name"] [--email you@example.com]
 
 The folder must be a clone of an empty (or almost empty) repository. Nothing in it is overwritten: an existing
-.gitattributes or .gitignore only gets the lines it is missing. If any step fails, the files this wrote are
+.gitignore only gets the lines it is missing, and an existing .gitattributes gets Litterbox's block of rules
+(vault/git_attributes.py) with its own lines left as they are. If any step fails, the files this wrote are
 removed again and any commit is undone, so you can simply run it again.
 
     check_settings(...) checks the org code and numbering alone, before there is a folder to check
@@ -47,6 +48,7 @@ from litterbox.git import runner
 from litterbox.team import team_setup
 from litterbox.vault import config
 from litterbox.vault import config_write
+from litterbox.vault import git_attributes
 
 
 GITATTRIBUTES = ".gitattributes"
@@ -56,52 +58,6 @@ GITIGNORE = ".gitignore"
 
 
 README = "README.md"
-
-
-LFS = "filter=lfs diff=lfs merge=lfs -text"
-
-
-def any_case(extension):
-    """'step' -> '*.[sS][tT][eE][pP]': a pattern that matches the extension in any mix of capitals. Git and Git LFS
-    only ignore case where the computer does (Windows), so the pattern itself has to."""
-    return "*." + "".join(f"[{c.lower()}{c.upper()}]" if c.isalpha() else c for c in extension)
-
-
-# Files that belong to a part (they live in cad/ under its name and are checked out with it): SolidWorks files,
-# the exports made from them, and other CAD formats.
-LOCKABLE_EXTENSIONS = (
-    "sldprt", "sldasm", "slddrw",                          # SolidWorks
-    "step", "stp", "pdf",                                   # exports: STEP from the model, PDF from the drawing
-    "iges", "igs", "x_t", "x_b", "sat", "stl", "3mf",       # other 3D exports
-    "dxf", "dwg",                                           # 2D exports (flat patterns, laser and waterjet cutting)
-    "eprt", "easm", "edrw",                                 # eDrawings
-)
-
-
-# Other binary files that may end up in a vault (pictures, office documents, archives, video, SolidWorks
-# templates): stored with Git LFS so they don't bloat the history, but not locked.
-LFS_EXTENSIONS = (
-    "png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic",
-    "doc", "docx", "xls", "xlsx", "xlsm", "ppt", "pptx",
-    "zip", "7z", "rar",
-    "mp4", "mov", "avi",
-    "prtdot", "asmdot", "drwdot", "slddrt", "sldlfp", "sldblk",
-)
-
-
-ATTRIBUTE_LINES = (
-    [f"{any_case(ext)} {LFS} lockable" for ext in LOCKABLE_EXTENSIONS]
-    + [f"{any_case(ext)} {LFS}" for ext in LFS_EXTENSIONS]
-    + [
-        f"cad/** {LFS} lockable",                           # anything else in cad/ belongs to a part too
-        "PN-logs/*.yaml lockable",
-        f"cancelled-revs/** {LFS}",
-    ]
-)
-
-
-ATTRIBUTE_HEADER = ("# Litterbox: CAD files, their exports and other binary files are stored with Git LFS; a part's "
-                    "files can be locked (checked out). Patterns match any capitals.")
 
 
 IGNORE_LINES = [
@@ -352,8 +308,11 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
             warnings.append(f"Could not switch on Git LFS for this repository ({e}). If uploads fail, run "
                             "'git lfs install' once.")
 
-        original, changed = _merge_lines(repo / GITATTRIBUTES, ATTRIBUTE_LINES, ATTRIBUTE_HEADER)
-        if changed:
+        attributes = repo / GITATTRIBUTES
+        original = attributes.read_bytes() if attributes.is_file() else None
+        text = git_attributes.updated_text(original.decode("utf-8", errors="replace") if original is not None else "")
+        if original is None or text.encode("utf-8") != original:
+            attributes.write_bytes(text.encode("utf-8"))
             writer.note(GITATTRIBUTES, original)
         original, changed = _merge_lines(repo / GITIGNORE, IGNORE_LINES, IGNORE_HEADER)
         if changed:

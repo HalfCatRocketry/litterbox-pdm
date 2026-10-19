@@ -110,9 +110,13 @@ def _clean_event(event):
     return cleaned
 
 
+RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration step) only when an older Litterbox
+                        # would misread the new shape; adding a field it can ignore doesn't need it. See
+                        # docs/REMINDERS.md, "Upgrading old part records".
+
 _KNOWN_FIELDS = {
-    "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
-    "imported", "import_path", "created_by", "created_at", "approvals", "pending", "references", "references_outdated", "history",
+    "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
+    "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
 }
 
 
@@ -130,6 +134,7 @@ class Record:
     name: str                   # the formal name of the part (required)
     created_by: str
     created_at: str
+    created_by_id: str = ""     # the creator's id on the team list ("" without one, and in records before 0.4.2)
     description: str = ""       # optional extra context, tags, notes
     project: str = ""           # the project whose block of part numbers it is in (core/projects.py); "" for none
     revision: str = FIRST_REVISION   # the working (latest) revision
@@ -147,6 +152,7 @@ class Record:
 
     def to_dict(self):
         data = {
+            "format": RECORD_FORMAT,
             "org": self.pn.org,
             "pn": _Quoted(self.pn.short),   # without the org: it is the line above
             "revision": self.revision,
@@ -165,6 +171,7 @@ class Record:
             data["import_path"] = self.import_path
         data.update({
             "created_by": self.created_by,
+            **({"created_by_id": self.created_by_id} if self.created_by_id else {}),
             "created_at": self.created_at,
             "approvals": list(self.approvals),
         })
@@ -185,6 +192,12 @@ class Record:
     def from_dict(cls, data):
         if "pn" not in data:
             raise RegistryError("The record has no 'pn' field.")
+        record_format = data.get("format", 1)               # records written before 0.4.2 have none: format 1
+        if isinstance(record_format, bool) or not isinstance(record_format, int) or record_format < 1:
+            raise RegistryError(f"{data['pn']}: 'format' must be a whole number, 1 or higher.")
+        if record_format > RECORD_FORMAT:
+            raise RegistryError(f"{data['pn']}: this record was written by a newer Litterbox (record format "
+                                f"{record_format}). Update Litterbox to read it.")
         try:
             if data.get("org") is not None:
                 pn = parse_short(str(data["pn"]), str(data["org"]))
@@ -266,6 +279,7 @@ class Record:
             description=description,
             project=" ".join(_as_text(data.get("project")).split()),
             created_by=_as_text(data.get("created_by")),
+            created_by_id=_as_text(data.get("created_by_id")),
             created_at=_as_text(data.get("created_at")),
             revision=revision,
             released_revision=released_revision,

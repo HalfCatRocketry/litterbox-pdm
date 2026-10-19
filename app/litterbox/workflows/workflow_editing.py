@@ -54,6 +54,8 @@ def set_template(templates, action, name, rows, allow_same_person=False, request
     named = templates.setdefault(action, {})
     template = workflow_templates.Template(action, name, [workflow_templates.Row([" ".join(str(r).split()) for r in roles]) for roles in rows],
                         allow_same_person, requester_may_sign, require_eco)
+    if old_name in named:
+        template.extra = dict(named[old_name].extra)        # keep what a newer Litterbox added to it
     others = [k for k in named if k != old_name]
     if any(k.lower() == name.lower() for k in others):
         raise workflow_templates.WorkflowError(f"There is already a {workflow_templates.label_of(action)} workflow called '{name}'.")

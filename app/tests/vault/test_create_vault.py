@@ -12,6 +12,7 @@ from litterbox.vault import config
 from litterbox.parts import create
 from litterbox.cli import init_vault as cli_init_vault
 from litterbox.vault import create_vault
+from litterbox.vault import git_attributes
 from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.core import part_number
@@ -89,14 +90,14 @@ class CreatingAVault(EmptyRepo):
     def test_gitattributes_makes_cad_lockable_lfs_files(self):
         self.make()
         text = (self.vault / ".gitattributes").read_text()
-        for line in create_vault.ATTRIBUTE_LINES:
+        for line in git_attributes.RULES:
             self.assertIn(line, text.splitlines())
         self.assertNotIn("\r", text)
         self.assertIn(".tmp-*", (self.vault / ".gitignore").read_text().splitlines())
 
     def test_gitattributes_patterns_match_any_capitals(self):
         lfs, lockable = {}, {}
-        for line in create_vault.ATTRIBUTE_LINES:
+        for line in git_attributes.RULES:
             pattern, *attributes = line.split()
             lfs[pattern], lockable[pattern] = "filter=lfs" in attributes, "lockable" in attributes
 

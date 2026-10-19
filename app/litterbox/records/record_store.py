@@ -15,6 +15,7 @@ from litterbox.core.numbering import next_base, next_variant
 from litterbox.core.part_number import try_parse
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
+from litterbox.util import person_name
 
 
 def log_dir(repo):
@@ -76,14 +77,15 @@ def create_record(repo, pn, name, created_by, description="", cots=False, import
     """
     name = (name or "").strip()
     description = (description or "").strip()
-    created_by = (created_by or "").strip()
+    created_by = person_name.PersonName((created_by or "").strip(), person_name.id_of(created_by))
     if not name:
         raise record_model.RegistryError("A name is required.")
     if not created_by:
         raise record_model.RegistryError("Could not tell who is creating this part. Set your name in git "
                             "(git config user.name).")
 
-    record = record_model.Record(pn=pn, name=name, description=description, created_by=created_by, created_at=record_model.now_utc(),
+    record = record_model.Record(pn=pn, name=name, description=description, created_by=str(created_by),
+                    created_by_id=created_by.id, created_at=record_model.now_utc(),
                     cots=bool(cots), imported=bool(imported),
                     import_path=(str(import_path).strip() if imported else ""), project=(project or "").strip())
     record_lifecycle.add_event(record, record_model.EVENT_CREATED, created_by)

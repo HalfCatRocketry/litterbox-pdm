@@ -276,6 +276,7 @@ class PartsList:
             self._show_behind(behind)
             self.menu_bar.set_title(self._org_name())         # the vault settings may have renamed the org
             self._show_rows(rows)
+            self._check_file_rules()
 
         self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",
                       kind="refresh")

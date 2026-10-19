@@ -117,7 +117,27 @@ class TestShortAndRevisions(unittest.TestCase):
                          ["A", "B", "Z", "AA", "AB", "AZ", "BA"])
         self.assertEqual([revision_letters.revision_number(x) for x in ("A", "z", "AA", "ba")], [1, 26, 27, 53])
         self.assertEqual(revision_letters.next_revision("A"), "B")
-        self.assertEqual(revision_letters.next_revision("Z"), "AA")
+        self.assertEqual(revision_letters.next_revision("Y"), "AA")
+        self.assertEqual(revision_letters.next_revision("Z"), "AA")         # an old vault's Z still moves on
+
+    def test_new_revisions_skip_letters_that_look_like_numbers(self):
+        self.assertEqual(revision_letters.next_revision("H"), "J")
+        self.assertEqual(revision_letters.next_revision("N"), "P")
+        self.assertEqual(revision_letters.next_revision("P"), "R")
+        self.assertEqual(revision_letters.next_revision("R"), "T")
+        self.assertEqual(revision_letters.next_revision("W"), "Y")
+        self.assertEqual(revision_letters.next_revision("AH"), "AJ")
+        self.assertEqual(revision_letters.next_revision("AY"), "BA")
+        self.assertEqual(revision_letters.next_revision("I"), "J")          # an old vault's I still moves on
+        self.assertEqual(revision_letters.next_revision("H", skip=["J"]), "K")
+        letters, rev = ["A"], "A"
+        while len(letters) < 20:
+            rev = revision_letters.next_revision(rev)
+            letters.append(rev)
+        self.assertEqual("".join(letters), "ABCDEFGHJKLMNPRTUVWY")
+        self.assertFalse(revision_letters.usable("Q"))
+        self.assertFalse(revision_letters.usable("AI"))
+        self.assertTrue(revision_letters.usable("B"))
 
     def test_cancelled_letters_are_skipped(self):
         self.assertEqual(revision_letters.next_revision("A", skip=["B"]), "C")

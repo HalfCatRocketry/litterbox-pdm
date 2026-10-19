@@ -116,6 +116,8 @@ class Menus:
         menu.add_command(label="Refresh", accelerator="F5", command=self.refresh)
         menu.add_command(label="Get Latest", command=self.get_latest)
         menu.add_command(label="Download All...", command=self.download_all)
+        menu.add_command(label="Update file rules...", command=self.update_file_rules,
+                         state="normal" if self.file_rules_outdated else "disabled")
         menu.add_separator()
         menu.add_command(label="New Part...", command=self.new_part)
         menu.add_command(label="New Assembly...", command=self.new_assembly)

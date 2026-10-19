@@ -53,12 +53,14 @@ class Person:
     roles: list = field(default_factory=list)
     active: bool = True
     signing_keys: list = field(default_factory=list)
+    extra: dict = field(default_factory=dict)       # fields a newer Litterbox wrote, kept so nothing is lost
 
     def to_dict(self):
         data = {"id": self.id, "name": self.name, "email": self.email, "host_names": list(self.host_names),
                 "access": self.access, "roles": list(self.roles), "active": self.active}
         if self.signing_keys:
             data["signing_keys"] = list(self.signing_keys)
+        data.update({k: v for k, v in self.extra.items() if k not in data})
         return data
 
     @property
@@ -70,6 +72,7 @@ class Person:
 class Directory:
     people: list = field(default_factory=list)
     roles: list = field(default_factory=list)
+    extra: dict = field(default_factory=dict)       # top-level fields a newer Litterbox wrote, kept
 
     def get(self, person_id):
         person_id = str(person_id).strip().lower()
@@ -85,7 +88,12 @@ class Directory:
         return next((p for p in self.people if p.access == OWNER), None)
 
     def to_dict(self):
-        return {"roles": list(self.roles), "people": [p.to_dict() for p in self.people]}
+        data = {"roles": list(self.roles), "people": [p.to_dict() for p in self.people]}
+        data.update({k: v for k, v in self.extra.items() if k not in data})
+        return data
+
+
+PERSON_FIELDS = {"id", "name", "email", "host_names", "access", "roles", "active", "signing_keys"}
 
 
 def text_list(value, what):
@@ -112,8 +120,10 @@ def from_dict(data):
             access=str(entry.get("access", MEMBER)).strip().lower(),
             roles=text_list(entry.get("roles"), "roles"),
             active=bool(entry.get("active", True)),
-            signing_keys=text_list(entry.get("signing_keys"), "signing_keys")))
-    directory = Directory(people, text_list(data.get("roles"), "roles"))
+            signing_keys=text_list(entry.get("signing_keys"), "signing_keys"),
+            extra={k: v for k, v in entry.items() if k not in PERSON_FIELDS}))
+    directory = Directory(people, text_list(data.get("roles"), "roles"),
+                          extra={k: v for k, v in data.items() if k not in ("roles", "people")})
     validate(directory)
     return directory
 

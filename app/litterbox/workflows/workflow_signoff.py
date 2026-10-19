@@ -15,6 +15,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.util import person_name
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_ecos
 from litterbox.workflows import workflow_request
@@ -97,7 +98,8 @@ def sign_off(repo, pns, comment=""):
 def _approval_entry(pending, completed_by, override=None, files=None, action=None, reason=None):
     entry = {"action": action, "revision": pending.get("revision") if pending else None}
     if pending:
-        entry.update({"requested_by": pending.get("requested_by"), "requested_at": pending.get("requested_at"),
+        entry.update({"requested_by": pending.get("requested_by"), "requested_by_id": pending.get("requested_by_id"),
+                      "requested_at": pending.get("requested_at"),
                       "template_name": pending.get("template_name"), "template": pending.get("template"),
                       "slots": pending.get("slots"), "signoffs": list(pending.get("signoffs", [])),
                       "files": dict(pending.get("files", {})), "parts": pending.get("parts"),
@@ -106,7 +108,7 @@ def _approval_entry(pending, completed_by, override=None, files=None, action=Non
         entry.update({"signoffs": [], "files": dict(files or {})})
     if reason:
         entry["reason"] = reason
-    entry["completed_by"] = completed_by
+    person_name.stamp(entry, "completed_by", completed_by)
     entry["completed_at"] = record_model.now_utc()
     if override:
         entry["override"] = override
@@ -125,10 +127,13 @@ def _finish_edit(repo, action, plan, override_reason, ecos=None):
         act = pending["action"] if pending else action
         reason = (pending or {}).get("reason") or override_reason
         signed = [e.get("by") for e in (pending or {}).get("signoffs", [])]
-        details, override = {"signoffs": signed or None, "eco": (pending or {}).get("eco")}, None
+        signed_ids = [e.get("id") for e in (pending or {}).get("signoffs", []) if e.get("id")]
+        details, override = {"signoffs": signed or None, "signoff_ids": signed_ids or None,
+                             "eco": (pending or {}).get("eco")}, None
         if override_reason is not None:
             missing = signoff_slots.waiting_on(pending) if pending else ["every sign-off"]
-            override = {"by": user, "reason": override_reason, "missing": missing}
+            override = person_name.stamp({}, "by", user)
+            override.update(reason=override_reason, missing=missing)
             details.update(override=True, reason=override_reason)
         files = workflow_request.file_hashes(repo, plan.files) if (plan is not None and not pending) else None
         approval = _approval_entry(pending, user, override, files, act, reason)

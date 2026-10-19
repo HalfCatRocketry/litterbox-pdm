@@ -61,6 +61,9 @@ class Row:
         return " or ".join(self.roles)
 
 
+TEMPLATE_FIELDS = {"allow_same_person", "requester_may_sign", "require_eco", "signoffs"}
+
+
 @dataclass
 class Template:
     action: str
@@ -69,12 +72,14 @@ class Template:
     allow_same_person: bool = False
     requester_may_sign: bool = True
     require_eco: bool = False           # starting it asks for an engineering change order (change_orders/)
+    extra: dict = field(default_factory=dict)   # fields a newer Litterbox wrote, kept so nothing is lost
 
     def to_dict(self):
         data = {"allow_same_person": self.allow_same_person, "requester_may_sign": self.requester_may_sign}
         if self.require_eco:                    # only written when on, so older files stay as they were
             data["require_eco"] = True
         data["signoffs"] = [{"roles": list(r.roles)} for r in self.rows]
+        data.update({k: v for k, v in self.extra.items() if k not in data})
         return data
 
     @classmethod
@@ -94,7 +99,8 @@ class Template:
             if not isinstance(roles, list) or not roles or not all(str(r).strip() for r in roles):
                 raise WorkflowError(f"Every sign-off in {where} needs a list of roles.")
             rows.append(Row([" ".join(str(r).split()) for r in roles]))
-        return cls(action, str(name), rows, **flags)
+        extra = {k: v for k, v in data.items() if k not in TEMPLATE_FIELDS}
+        return cls(action, str(name), rows, **flags, extra=extra)
 
 
 def min_version_for(templates, running):

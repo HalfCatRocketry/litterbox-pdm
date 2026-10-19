@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2
+
+- **New revisions skip I, O, Q, S, X and Z** (as ASME Y14.35 recommends: they are easily mistaken for numbers). H is followed by J, N by P, Y by AA. Revisions a vault already has with those letters are still read and sorted as before, and Revise moves on from them as usual.
+- **Every history entry says who by team id as well as by name** (`by_id`, `created_by_id`, `requested_by_id`, `completed_by_id`, and the ids of the signers and of whoever's checkout was broken), so a person's actions stay theirs if their name changes. Entries made before 0.4.2, and in vaults without a team list, have names only.
+- **Part records have a format number** (`format: 1`). A record without one is format 1. A Litterbox that finds a record in a newer format says to update instead of misreading it.
+- **File rules kept up to date.** Litterbox now owns a marked block of the vault's `.gitattributes` (which files Git LFS stores and which can be locked), with a version number. When a vault's rules are older than Litterbox's, an Admin or the Owner is asked once per session, after a refresh, and shown the rules that would be added; anyone else is told an Admin needs to. **Vault > Update file rules...** does it later. The update changes only Litterbox's own lines (the team's lines stay as they are), converts files already in the vault that a new Git LFS rule covers (without rewriting history), and, if it adds rules that lock files, makes the vault need this Litterbox or newer, all in one upload. Vaults from older versions have their rules recognised and marked; a 0.4.0 vault gets no new rules, only the markers.
+- **Uploads check the vault first.** After every sync and before every upload, Litterbox checks that the vault doesn't now need a newer Litterbox (someone may have raised its minimum meanwhile). If it does, nothing is uploaded. The check reads one small local file.
+- **Nothing a newer Litterbox writes is lost.** The team file, the workflows file and ECO files now keep fields this version doesn't know about when it saves them, as part records and the vault settings already did.
+
 ## 0.4.1
 
 - Fixed: buttons only worked when clicked near their middle (since the move to CustomTkinter 6). The whole button works again, and it still acts when the mouse button is released over it.

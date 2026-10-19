@@ -50,11 +50,21 @@ def load(repo):
     return templates
 
 
+def _other_sections(path):
+    """What the file holds besides 'workflows' (written by a newer Litterbox), so saving keeps it."""
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.is_file() else None
+    except (OSError, yaml.YAMLError):
+        return {}
+    return {k: v for k, v in data.items() if k != "workflows"} if isinstance(data, dict) else {}
+
+
 def save(repo, templates):
     path = Path(repo) / layout.WORKFLOWS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     body = {"workflows": {action: {name: t.to_dict() for name, t in named.items()}
                           for action, named in sorted(templates.items()) if named}}
+    body.update(_other_sections(path))
     tmp = path.with_name(".tmp-workflows.yaml")
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         yaml.safe_dump(body, f, sort_keys=False, allow_unicode=True)

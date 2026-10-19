@@ -20,6 +20,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import team_store
 
 
 def held_by_others(repo, pn, locks=None):
@@ -31,6 +32,16 @@ def held_by_others(repo, pn, locks=None):
 
 
 @converts_errors
+def _ids_of(repo, host_names):
+    """The team ids of the people whose locks these are (lock owners are host account names); [] without a team."""
+    try:
+        directory = team_store.load(repo)
+    except LitterboxError:
+        return []
+    found = [directory.find_by_host_name(name) for name in host_names] if directory is not None else []
+    return [person.id for person in found if person is not None]
+
+
 def break_checkout(repo, pn, reason):
     """Release everyone else's locks on a part and note it in its history. A reason is required. Returns the names
     of the people whose checkout was broken."""
@@ -49,9 +60,10 @@ def break_checkout(repo, pn, reason):
     owners = sorted(set(held.values()))
     lfs_locks.force_unlock(repo, list(held))
     who = ", ".join(owners)
+    of_ids = _ids_of(repo, owners)
     batch_core.edit_record(
         repo, pn, "break_checkout",
         lambda record, by: record_lifecycle.add_event(record, record_model.EVENT_CHECKOUT_BROKEN, by, of=who,
-                                                       reason=reason),
+                                                       of_ids=of_ids or None, reason=reason),
         f"{pn}: Checkout by {who} broken - {reason}")
     return owners

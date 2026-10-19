@@ -34,6 +34,7 @@ from litterbox.gui.main_window.actions.release_actions import ReleaseActions
 from litterbox.gui.main_window.actions.revise_actions import ReviseActions
 from litterbox.gui.main_window.background_jobs import BackgroundJobs
 from litterbox.gui.main_window.detail_pane import DetailPane
+from litterbox.gui.main_window.file_rules import FileRules
 from litterbox.gui.main_window.layout import WindowLayout
 from litterbox.gui.main_window.menus import Menus
 from litterbox.gui.main_window.org_switching import OrgSwitching
@@ -60,7 +61,7 @@ AUTO_GET_LATEST_ON_START = False
 
 class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateChecks, OrgSwitching, BackgroundJobs,
           PartsList, TaskActions, TeamAdmin, CreateActions, CheckoutActions, CheckinActions, ReleaseActions,
-          ReviseActions, OpenActions, ReferenceActions, DetailsActions, SolidWorksWatch, ctk.CTk):
+          ReviseActions, OpenActions, ReferenceActions, DetailsActions, SolidWorksWatch, FileRules, ctk.CTk):
     """The main Litterbox window. Each area lives in its own file (the classes above); this file starts the window
     and holds the small helpers every area uses."""
 

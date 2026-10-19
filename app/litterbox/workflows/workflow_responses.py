@@ -60,7 +60,9 @@ def reject(repo, pns, comment):
                 raise record_model.RegistryError("Only a person named to sign this (or an Admin) can reject it.")
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REJECTED, user, action=pending["action"],
                                reason=comment, requested_by=pending.get("requested_by"),
-                               signed=[e.get("by") for e in pending["signoffs"]] or None)
+                               requested_by_id=pending.get("requested_by_id"),
+                               signed=[e.get("by") for e in pending["signoffs"]] or None,
+                               signed_ids=[e["id"] for e in pending["signoffs"] if e.get("id")] or None)
             record.pending = {}
         return edit
 
@@ -82,7 +84,8 @@ def withdraw(repo, pns, reason=""):
             if not (pending.get("requested_by_id") == me.id or signoff_slots.is_admin(me)):
                 raise record_model.RegistryError("Only the person who asked, or an Admin, can withdraw the request.")
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_WITHDRAWN, user, action=pending["action"],
-                               reason=reason or None, requested_by=pending.get("requested_by"))
+                               reason=reason or None, requested_by=pending.get("requested_by"),
+                               requested_by_id=pending.get("requested_by_id"))
             record.pending = {}
         return edit
 
@@ -115,7 +118,8 @@ def reassign(repo, pns, slot, person_id):
                 raise record_model.RegistryError("This workflow doesn't let the person who asked sign.")
             pending["slots"][slot] = new
             record_lifecycle.add_event(record, record_model.EVENT_REASSIGNED, user, action=pending["action"],
-                               roles=[" or ".join(new["roles"])], reason=f"{old['name']} replaced by {new['name']}")
+                               roles=[" or ".join(new["roles"])], reason=f"{old['name']} replaced by {new['name']}",
+                               from_id=old.get("id"), to_id=new.get("id"))
         return edit
 
     return _each(repo, pns, edit_for, "signoff", "{pn}: signer changed")

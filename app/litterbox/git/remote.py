@@ -138,11 +138,15 @@ def commits_behind(repo):
         return None
 
 
-def push_with_retry(repo, attempts=3):
-    """Sync then push. If someone else pushed first, sync again and retry. (Litterbox pushes through
-    team/guarded_push.push, which first checks that the team list still lets you upload.)"""
+def push_with_retry(repo, attempts=3, after_sync=None):
+    """Sync then push. If someone else pushed first, sync again and retry. after_sync() runs after every sync,
+    before the push; it raises to stop the upload. (Litterbox pushes through team/guarded_push.push, which first
+    checks that the team list still lets you upload, and after each sync that this Litterbox may still work in the
+    vault.)"""
     for attempt in range(1, attempts + 1):
         pull(repo)
+        if after_sync is not None:
+            after_sync()
         try:
             runner.run(["git", "push"], repo)
             return

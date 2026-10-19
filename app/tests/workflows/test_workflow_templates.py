@@ -57,7 +57,7 @@ class TestTemplates(Fixture, unittest.TestCase):
 
     def test_a_failed_save_leaves_things_alone(self):
         real = remote.push_with_retry
-        remote.push_with_retry = lambda repo, attempts=3: (_ for _ in ()).throw(LitterboxError("offline"))
+        remote.push_with_retry = lambda repo, attempts=3, after_sync=None: (_ for _ in ()).throw(LitterboxError("offline"))
         self.addCleanup(setattr, remote, "push_with_retry", real)
         with self.assertRaises(LitterboxError):
             with self.user("Alex"):

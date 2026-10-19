@@ -7,6 +7,7 @@ from pathlib import Path
 
 from litterbox.errors import LitterboxError
 from litterbox.git import runner
+from litterbox.util import person_name
 from litterbox.vault import config
 
 
@@ -24,12 +25,13 @@ def validate_repo(repo):
 
 def get_user(repo):
     """Your name, for the history. In a vault with a team list it is your name on that list (as last
-    verified with the host); otherwise it is the name git has for you."""
+    verified with the host), carrying your id on it (a person_name.PersonName); otherwise it is the name git has
+    for you."""
     try:
         from litterbox.team import team_identity
         identity = team_identity.current(repo, probe=False)
         if identity.state == team_identity.OK:
-            return identity.name
+            return person_name.PersonName(identity.name, identity.person.id)
     except LitterboxError:
         pass
     try:

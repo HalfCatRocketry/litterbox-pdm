@@ -50,6 +50,10 @@ def clean_description(text):
     return description
 
 
+ECO_FIELDS = {"number", "name", "description", "status", "action", "template_name", "request_id", "parts",
+              "requested_by", "requested_by_id", "requested_at", "signoffs", "history"}
+
+
 @dataclass
 class Eco:
     number: str                         # ECO-0001
@@ -64,6 +68,8 @@ class Eco:
     requested_at: str = ""
     signoffs: list = field(default_factory=list)    # copied from the request when the ECO is closed
     history: list = field(default_factory=list)     # [{"event", "by", "at", ...}]
+    extra: dict = field(default_factory=dict)       # fields a newer Litterbox wrote, kept so nothing is lost
+    requested_by_id: str = ""                       # the requester's id on the team list ("" before 0.4.2)
 
     @property
     def closed(self):
@@ -72,11 +78,14 @@ class Eco:
     def to_dict(self):
         data = {"number": self.number, "name": self.name, "description": self.description, "status": self.status,
                 "action": self.action, "template_name": self.template_name, "request_id": self.request_id,
-                "parts": [dict(p) for p in self.parts], "requested_by": self.requested_by,
-                "requested_at": self.requested_at}
+                "parts": [dict(p) for p in self.parts], "requested_by": self.requested_by}
+        if self.requested_by_id:
+            data["requested_by_id"] = self.requested_by_id
+        data["requested_at"] = self.requested_at
         if self.signoffs:
             data["signoffs"] = [dict(s) for s in self.signoffs]
         data["history"] = [dict(h) for h in self.history]
+        data.update({k: v for k, v in self.extra.items() if k not in data})
         return data
 
     @classmethod
@@ -94,6 +103,7 @@ class Eco:
             raise EcoError(f"{number}: 'parts' must list the parts it changes.")
         return cls(number, str(data.get("name", "")), str(data.get("description", "") or ""), status,
                    str(data.get("action", "")), str(data.get("template_name", "")), str(data.get("request_id", "")),
-                   [{"pn": str(p["pn"]), "revision": str(p.get("revision", ""))} for p in parts],
+                   [dict(p, pn=str(p["pn"]), revision=str(p.get("revision", ""))) for p in parts],
                    str(data.get("requested_by", "")), str(data.get("requested_at", "")),
-                   list(data.get("signoffs") or []), list(data.get("history") or []))
+                   list(data.get("signoffs") or []), list(data.get("history") or []),
+                   {k: v for k, v in data.items() if k not in ECO_FIELDS}, str(data.get("requested_by_id", "") or ""))

@@ -8,14 +8,19 @@ and the git work are up to the caller.
 
 from litterbox.core.revision_letters import FIRST_REVISION, revision_number
 from litterbox.records import record_model
+from litterbox.util import person_name
 
 
 def add_event(record, event, by, **details):
-    """Append an event to the record's history and return it."""
+    """Append an event to the record's history and return it. `by` is a name; one from repository.get_user also
+    puts the person's team id in the event (by_id)."""
+    by_id = person_name.id_of(by)
     by = (by or "").strip()
     if not by:
         raise record_model.RegistryError("An event must say who did it.")
     entry = {"event": event, "by": by, "at": record_model.now_utc(), "revision": record.revision}
+    if by_id:
+        entry["by_id"] = by_id
     entry.update({key: value for key, value in details.items() if value is not None})
     record.history.append(entry)
     return entry
