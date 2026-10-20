@@ -110,13 +110,15 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
 
 
 def run(repo, manifest_path, backend=None, dry_run=False, allow_external=False, cancel=None,
-        progress=None, log=print, org=None, gap=import_numbering.DEFAULT_GAP, jitter=import_numbering.DEFAULT_JITTER, rng=None, cots=False):
+        progress=None, log=print, org=None, gap=import_numbering.DEFAULT_GAP, jitter=import_numbering.DEFAULT_JITTER, rng=None, cots=False,
+        project=None):
     """prepare() and finish() in one go, with the proposed numbers and names as they are (no table to edit).
 
     Raises ImportFailed (ImportCancelled if cancelled; PNConflict never happens here because
     nothing is typed in) with nothing left behind.
     """
-    prepared = import_prepare.prepare(repo, manifest_path, backend, allow_external, cancel, progress, log, org, gap, jitter, rng, cots)
+    prepared = import_prepare.prepare(repo, manifest_path, backend, allow_external, cancel, progress, log, org, gap, jitter, rng, cots,
+                                      project)
     try:
         return finish(repo, prepared, dry_run, cancel, progress, log)
     finally:

@@ -6,11 +6,12 @@ plain-language problems, and the variant list.
 from litterbox.core import part_number
 
 
-def import_base_placeholder(repo, org):
-    """The base number the Import window's 'same base number' box suggests: what New Part would pick."""
+def import_base_placeholder(repo, org, project=None):
+    """The base number the Import window's 'same base number' box suggests: what New Part would pick (in
+    `project`, a project's name, or outside every project's block)."""
     from litterbox.parts import number_suggestions
     try:
-        return part_number.format_base(number_suggestions.suggest_part_number(repo, org))   # outside project blocks
+        return part_number.format_base(number_suggestions.suggest_part_number(repo, org, project))
     except Exception:
         return ""
 

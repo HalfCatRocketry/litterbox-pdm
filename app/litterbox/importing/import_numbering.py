@@ -8,6 +8,10 @@ at the end, and any that someone took meanwhile are swapped for the next free on
 Variants follow New Part and New Assembly (parts/create.py: variant_range): an assembly (.SLDASM) gets the first
 variant of the assembly range (500 unless the org chose another), everything else 001; in a family, assemblies take
 the free variants from 500 up and parts the free ones below. A typed number is never changed.
+
+An import can go into a project (core/projects.py): its numbers then come from the project's block, lowest free
+first (a block is small, so there is no gap), and a typed number or a family base outside the block is refused.
+With no project, automatic numbers stay outside every block, as New Part's do.
 """
 
 import random
@@ -62,6 +66,7 @@ class Proposal:
     org: str = ""
     note: str = ""                  # where the proposed numbers start and why, for the window's status line
     family: object = None           # a base number: every automatic row is a variant of it (None: separate numbers)
+    project: object = None          # the core/projects.py Project the parts go into (None: no project)
 
     def set_pn(self, index, text):
         """The user typed a part number into row `index`. Raises ImportFailed if it isn't a valid one."""
@@ -103,11 +108,43 @@ def used_numbers(repo, org):
     return set(existing), {pn.base for pn in existing}
 
 
-def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=None):
+def _free_in_project(bases, count, project):
+    """Up to `count` unused part numbers in the project's block, lowest first."""
+    low, high = project.block()
+    found = []
+    for base in range(low, high + 1):
+        if base not in bases:
+            found.append(base)
+            if len(found) == count:
+                break
+    return found
+
+
+def _project_short(project, count):
+    return import_errors.ImportFailed(f"Project {project.describe()} doesn't have {count} unused part numbers left. "
+                                      "Import fewer parts at a time, or into another project.")
+
+
+def free_for(repo, proposal, used, count, near=None):
+    """Up to `count` unused part numbers for automatic rows, none of them in `used`: in the proposal's project's
+    block, or, with no project, from `near` (default the start number) on, outside every block."""
+    if proposal.project is not None:
+        return _free_in_project(used, count, proposal.project)
+    return numbering.free_bases(used, count, near or config.get_start_number(repo),
+                                project_rules.outside_blocks(config.get_projects(repo)))
+
+
+def pick_block(repo, count, org, gap=DEFAULT_GAP, jitter=DEFAULT_JITTER, rng=None, project=None):
     """`count` part numbers (variant 001; with_variant gives an assembly its own) to propose: the free ones starting `gap` places (plus a random extra of up
     to `jitter`) past the LOWEST free part number, which is not the same as above the highest one in use. Numbers
-    count up from the vault's start number and, past the highest the digits allow, round again from 1."""
+    count up from the vault's start number and, past the highest the digits allow, round again from 1.
+    With a `project`, the lowest unused numbers in its block instead."""
     _taken, bases = used_numbers(repo, org)
+    if project is not None:
+        free = _free_in_project(bases, count, project)
+        if len(free) < count:
+            raise _project_short(project, count)
+        return [PN(org, b, 1) for b in free]
     start = config.get_start_number(repo)
     allowed = project_rules.outside_blocks(config.get_projects(repo))      # automatic numbers stay out of project blocks
     lowest = numbering.free_bases(bases, 1, start, allowed)
@@ -177,13 +214,18 @@ def set_family(repo, proposal, base, sync=True):
         proposal.family = None
         if count:
             ranges = variant_ranges(repo)
-            for entry, pn in zip((e for e in proposal.entries if not e.manual), pick_block(repo, count, proposal.org)):
+            for entry, pn in zip((e for e in proposal.entries if not e.manual),
+                                 pick_block(repo, count, proposal.org, project=proposal.project)):
                 entry.pn = with_variant(repo, entry.item, pn, ranges)
         return
     try:
         base = part_number.check_new_base(base)
     except part_number.PNError as e:
         raise import_errors.ImportFailed(str(e)) from None
+    if proposal.project is not None and not proposal.project.contains(base):
+        raise import_errors.ImportFailed(f"{part_number.format_base(base)} isn't in project "
+                                         f"{proposal.project.describe()}: its part numbers start with "
+                                         f"{proposal.project.prefix}.")
     if sync:
         try:
             create_batch.sync_latest(repo)
@@ -199,6 +241,37 @@ def set_family(repo, proposal, base, sync=True):
         raise
     for n, entry in enumerate(automatic):
         entry.pn = PN(proposal.org, base, chosen[n])
+
+
+def set_project(repo, proposal, project, sync=True):
+    """Import into `project` (a core/projects.py Project, or None for no project): every automatic row gets a new
+    number from its block (or from outside every block). A family whose base isn't in the block goes back to
+    separate numbers. Raises ImportFailed, leaving the table as it was, if the block is too full."""
+    if sync:
+        try:
+            create_batch.sync_latest(repo)
+        except create.CreateError as e:
+            raise import_errors.ImportFailed(str(e)) from None
+    previous = (proposal.project, proposal.family)
+    proposal.project = project
+    if proposal.family is not None and project is not None and not project.contains(proposal.family):
+        proposal.family = None
+    automatic = [e for e in proposal.entries if not e.manual]
+    try:
+        if proposal.family is not None:
+            chosen = _family_variants(repo, proposal, automatic)
+            new = [PN(proposal.org, proposal.family, chosen[n]) for n in range(len(automatic))]
+        elif automatic:
+            ranges = variant_ranges(repo)
+            new = [with_variant(repo, entry.item, pn, ranges) for entry, pn in
+                   zip(automatic, pick_block(repo, len(automatic), proposal.org, project=project))]
+        else:
+            new = []
+    except import_errors.ImportFailed:
+        proposal.project, proposal.family = previous
+        raise
+    for entry, pn in zip(automatic, new):
+        entry.pn = pn
 
 
 def check_proposal(repo, proposal):
@@ -223,6 +296,9 @@ def check_proposal(repo, proposal):
                 reason = f"{entry.pn} is already used by '{holder.name}'."
             except record_model.RegistryError:
                 reason = f"{entry.pn} is already used."
+        elif proposal.project is not None and not proposal.project.contains(entry.pn.base):
+            reason = (f"{entry.pn} isn't in project {proposal.project.describe()}: its part numbers start with "
+                      f"{proposal.project.prefix}.")
         elif entry.pn in claimed:
             reason = f"{entry.pn} is used twice in this import (rows {claimed[entry.pn] + 1} and {index + 1})."
         elif separate and entry.pn.base in bases:
@@ -247,8 +323,9 @@ def _renumber_automatic(repo, proposal, conflicts):
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
     bad = [c for c in conflicts if not c.manual]
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
-    near = min(automatic, default=config.get_start_number(repo))          # stay near the proposed block
-    free = numbering.free_bases(bases | in_use, len(bad), near, project_rules.outside_blocks(config.get_projects(repo)))
+    free = free_for(repo, proposal, bases | in_use, len(bad), min(automatic, default=None))   # near the others
+    if len(free) < len(bad) and proposal.project is not None:
+        raise _project_short(proposal.project, len(bad))
     if len(free) < len(bad):
         raise import_errors.ImportFailed("The vault has run out of part numbers for this import.")
     changes, ranges = [], variant_ranges(repo)

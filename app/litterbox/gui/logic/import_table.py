@@ -239,3 +239,14 @@ def already_imported_question(items, total):
     lines += ["", "If you go on, they are imported again as new parts with new part numbers. You can still untick "
                   "any of them in the table.", "", "Press OK to go on, or Cancel to stop without importing anything."]
     return "\n".join(lines)
+
+
+NO_PROJECT = "No project"
+
+
+def project_choices(projects):
+    """{label: project name or None} for the Import window's Project box: no project first, then each project with
+    its block ('Rover (120000 to 129999)')."""
+    choices = {NO_PROJECT: None}
+    choices.update({project.describe(): project.name for project in projects})
+    return choices

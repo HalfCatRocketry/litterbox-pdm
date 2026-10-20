@@ -305,12 +305,22 @@ def _mark_already_imported(items, repo):
 LEFT_OUT_PREFIX = "This file was already imported as"
 
 
+def mark_imported_items(manifest):
+    """A saved scan opened again: items an earlier import from it gave a part number (their `pn`) are marked as
+    already imported, like files the vault remembers, so the Import window can ask about them. Returns every item
+    marked as already imported."""
+    for item in manifest.items:
+        if item.pn and not item.already_imported_as:
+            item.already_imported_as = item.pn
+    return [item for item in manifest.items if item.already_imported_as]
+
+
 def include_already_imported(manifest):
-    """Tick the items the scan left out because they were imported before, so they are imported again as new
-    parts (the Import window asks first). Returns those items."""
-    again = [item for item in manifest.items if item.already_imported_as and not item.include]
+    """Tick the items the scan left out because they were imported before (or that an earlier import from this
+    scan numbered), so they are imported again as new parts (the Import window asks first). Returns those items."""
+    again = [item for item in manifest.items if item.already_imported_as and (not item.include or item.pn)]
     for item in again:
-        item.include = True
+        item.include, item.pn = True, ""
         item.warnings = [w for w in item.warnings if not w.startswith(LEFT_OUT_PREFIX)]
         item.warnings.append(f"{LEFT_OUT_PREFIX} {item.already_imported_as}; it is being imported again as a "
                              "new part.")

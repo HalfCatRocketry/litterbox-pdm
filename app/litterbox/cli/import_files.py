@@ -21,6 +21,7 @@ def main(argv=None, prog=None):
                         help="allow references to files that are not part of the import")
     parser.add_argument("--gap", type=int, default=import_numbering.DEFAULT_GAP,
                         help=f"propose part numbers this far past the lowest free one (default {import_numbering.DEFAULT_GAP})")
+    parser.add_argument("--project", help="import into this project: the part numbers come from its block")
     parser.add_argument("--cots", action="store_true", help="record every imported part as COTS (purchased)")
     parser.add_argument("--recover", action="store_true", help="clean up after an interrupted import and stop")
     args = parser.parse_args(argv)
@@ -31,6 +32,7 @@ def main(argv=None, prog=None):
         if not args.manifest:
             parser.error("the manifest file is required")
         result = import_finish.run(args.repo, args.manifest, dry_run=args.dry_run, allow_external=args.allow_external, gap=args.gap, cots=args.cots,
+                     project=args.project,
                      progress=lambda done, total, text: print(f"[{done}/{total}] {text}"))
     except LitterboxError as e:
         print(f"\nERROR: {e}")

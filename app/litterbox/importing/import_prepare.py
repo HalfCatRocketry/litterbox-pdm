@@ -8,7 +8,6 @@ from dataclasses import dataclass
 
 from litterbox.cad import file_types
 from litterbox.cad.solidworks import sw_backend
-from litterbox.core import numbering
 from litterbox.core import part_number
 from litterbox.core.part_number import PN
 from litterbox.git import repository
@@ -61,8 +60,8 @@ def free_pn(repo, proposal, item=None):
     _taken, bases = import_numbering.used_numbers(repo, proposal.org)
     here = {e.pn.base for e in proposal.entries}
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
-    if automatic:                                       # just after the numbers already proposed
-        free = numbering.free_bases(bases | here, 1, max(automatic) + 1)
+    if automatic or proposal.project is not None:      # just after the numbers already proposed
+        free = import_numbering.free_for(repo, proposal, bases | here, 1, max(automatic) + 1 if automatic else None)
     else:
         free = [import_numbering.pick_block(repo, 1, proposal.org)[0].base]
     if not free:
@@ -95,9 +94,25 @@ def set_included(repo, prepared, item_id, include):
     item.include = True
 
 
+def number_note(repo, proposal):
+    """Where the proposed part numbers come from, for the window's status line."""
+    automatic = [e.pn.base for e in proposal.entries if not e.manual]
+    first = part_number.format_base(min(automatic)) if automatic else ""
+    if proposal.project is not None:
+        return (f"Importing into project {proposal.project.describe()}: the proposed part numbers are the lowest "
+                "unused ones in it" + (f", from {first}." if first else "."))
+    _taken, bases = import_numbering.used_numbers(repo, proposal.org)
+    return ((f"Proposed part numbers start at {first}. " if first else "")
+            + f"This vault's start number is {part_number.format_base(config.get_start_number(repo))}; the highest "
+            "part number in use is " + (part_number.format_base(max(bases)) if bases else "(none yet)") + ". "
+            + config.explain_start_number(repo))
+
+
 def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None, progress=None,
-            log=print, org=None, gap=import_numbering.DEFAULT_GAP, jitter=import_numbering.DEFAULT_JITTER, rng=None, cots=False):
-    """Check the manifest, read every file's references, refresh the vault and propose part numbers.
+            log=print, org=None, gap=import_numbering.DEFAULT_GAP, jitter=import_numbering.DEFAULT_JITTER, rng=None, cots=False,
+            project=None):
+    """Check the manifest, read every file's references, refresh the vault and propose part numbers. `project` is the
+    name of the project to import into (None: none); its numbers come from the project's block.
 
     Writes nothing to the vault. Returns a Prepared with a `proposal` (the table to show).
     Call close() on it when done, whether or not the import went ahead.
@@ -137,18 +152,15 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
         try:
             create_batch.sync_latest(repo)                               # the newest list of part numbers
             org = create.resolve_org(repo, org)
-            block = import_numbering.pick_block(repo, len(items), org, gap, jitter, rng)
+            chosen, _projects = create.chosen_project(repo, project)
+            block = import_numbering.pick_block(repo, len(items), org, gap, jitter, rng, project=chosen)
             ranges = import_numbering.variant_ranges(repo)
-        except (create.CreateError, config.ConfigError, record_model.RegistryError) as e:
+        except (create.CreateError, config.ConfigError, record_model.RegistryError, part_number.PNError) as e:
             raise import_errors.ImportFailed(str(e)) from None
         proposal = import_numbering.Proposal([import_numbering.Entry(item, import_numbering.with_variant(repo, item, pn, ranges),
                                                                      item.name, item.description)
-                                              for item, pn in zip(items, block)], org)
-        _taken, bases = import_numbering.used_numbers(repo, org)
-        proposal.note = (f"Proposed part numbers start at {part_number.format_base(block[0].base)}. This vault's start number is "
-                         f"{part_number.format_base(config.get_start_number(repo))}; the highest part number in use is "
-                         + (part_number.format_base(max(bases)) if bases else "(none yet)") + ". "
-                         + config.explain_start_number(repo))
+                                              for item, pn in zip(items, block)], org, project=chosen)
+        proposal.note = number_note(repo, proposal)
         return Prepared(mf, str(manifest_path), candidates, refs, proposal, backend, owns_backend, version,
                         allow_external, cots)
     except BaseException:

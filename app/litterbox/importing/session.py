@@ -37,7 +37,10 @@ from litterbox.importing import import_numbering
 from litterbox.importing import import_prepare
 from litterbox.importing import manifest as manifest_module
 from litterbox.importing import scan
+from litterbox.core import part_number
+from litterbox.parts import create
 from litterbox.parts import create_batch
+from litterbox.vault import config
 
 
 def default_manifest_path(root, now=None):
@@ -168,6 +171,20 @@ class ImportSession:
         def work():
             import_numbering.set_family(self.repo, self.prepared.proposal, base)
             return self.prepared.proposal
+        self._submit(work, on_done)
+
+    def set_project(self, name, on_done):
+        """Import into the project called `name` (None: no project): the automatic rows get numbers from its
+        block. on_done(proposal, error); proposal.note says where the numbers now come from."""
+        def work():
+            try:
+                chosen, _projects = create.chosen_project(self.repo, name)
+            except (create.CreateError, config.ConfigError, part_number.PNError) as e:
+                raise import_errors.ImportFailed(str(e)) from None
+            proposal = self.prepared.proposal
+            import_numbering.set_project(self.repo, proposal, chosen)
+            proposal.note = import_prepare.number_note(self.repo, proposal)
+            return proposal
         self._submit(work, on_done)
 
     def check_duplicates(self, on_done):

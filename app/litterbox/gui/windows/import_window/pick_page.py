@@ -14,8 +14,10 @@ from litterbox.gui.logic import import_table
 from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import release_button
 from litterbox.importing import import_errors
+from litterbox.importing import manifest as manifest_module
 from litterbox.importing import scan
 from litterbox.user import settings
+from litterbox.vault import config
 
 
 class PickPage:
@@ -85,22 +87,39 @@ class PickPage:
         if error is not None:
             self._prepared(None, error)
             return
+        if self._again_ok(found):
+            self._start_job(dict(scanned=found), "Reading the files...")
+
+    def _again_ok(self, found):
+        """If some of these items were imported before, warn and let the person go on (they are imported again as
+        new parts, and can still be unticked) or stop. True to go on."""
         again = [item for item in found.items if item.already_imported_as]
-        if again:
-            if not messagebox.askokcancel("Import CAD", import_table.already_imported_question(again, len(found.items)),
-                                          icon="warning", parent=self):
-                self._show("pick")
-                self._say("Import cancelled. Nothing was changed.", "warn")
-                return
-            scan.include_already_imported(found)
-        self._start_job(dict(scanned=found), "Reading the files...")
+        if not again:
+            return True
+        if not messagebox.askokcancel(self.heading, import_table.already_imported_question(again, len(found.items)),
+                                      icon="warning", parent=self):
+            self._show("pick")
+            self._say("Import cancelled. Nothing was changed.", "warn")
+            return False
+        scan.include_already_imported(found)
+        return True
 
     def _open_manifest(self):
         path = filedialog.askopenfilename(parent=self, title="Open a saved scan",
                                           initialdir=str(settings.ROOT / "imports"),
                                           filetypes=[("Litterbox scan", "*.yaml *.yml"), ("All files", "*.*")])
-        if path and self._cots_ok():
+        if not path or not self._cots_ok():
+            return
+        try:
+            found = manifest_module.load(path)
+        except manifest_module.ManifestError as e:
+            messagebox.showerror(self.heading, error_text.shorten(str(e)), parent=self)
+            return
+        if not scan.mark_imported_items(found):
             self._start_job(dict(manifest_path=path), "Opening the saved scan...")
+        elif self._again_ok(found):
+            # Imported again as new parts: the scan is saved as a new file, and the old one is left as it was.
+            self._start_job(dict(scanned=found), "Opening the saved scan...")
 
     def _prepared(self, proposal, error):
         if error is not None:
@@ -114,6 +133,10 @@ class PickPage:
         self.conflicts, self.renumbered = [], []
         self.family_applied = None
         self.family_var.set(False)
+        try:
+            self.show_projects(config.get_projects(self.repo))
+        except config.ConfigError:
+            self.show_projects([])
         self.family_placeholder = number_input.import_base_placeholder(self.repo, self.session.prepared.proposal.org)
         self.family_entry.configure(placeholder_text=self.family_placeholder)
         self._show("table")

@@ -1,5 +1,5 @@
 """
-table_page.py - page 2 of the Import window: the table of items, ticks, families, duplicates and
+table_page.py - page 2 of the Import window: the table of items, ticks, the project, families, duplicates and
 the proposed part numbers.
 """
 
@@ -12,6 +12,7 @@ from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui.logic import import_table
 from litterbox.gui.logic import list_view
+from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import release_button
 from litterbox.gui.widgets import table_sorting
 from litterbox.importing import import_errors
@@ -35,8 +36,22 @@ class TablePage:
             release_button.ReleaseButton(bar, text=text, command=command, width=110, height=30, fg_color=theme.GRAY,
                           hover_color=theme.GRAY_HOVER).grid(row=0, column=1 + column, padx=(6, 0))
 
+        self.project_row = ctk.CTkFrame(bar, fg_color="transparent")
+        self.project_row.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        ctk.CTkLabel(self.project_row, text="Import into project:").grid(row=0, column=0)
+        self.project_choices = {import_table.NO_PROJECT: None}
+        self.project_var = tk.StringVar(value=import_table.NO_PROJECT)
+        self.project_applied = import_table.NO_PROJECT
+        self.project_menu = ctk.CTkOptionMenu(self.project_row, variable=self.project_var, width=260, height=30,
+                                              values=list(self.project_choices), fg_color=theme.GRAY,
+                                              button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT,
+                                              command=lambda label: self._project_chosen(label))
+        self.project_menu.grid(row=0, column=1, padx=(8, 0))
+        ctk.CTkLabel(self.project_row, text="(the part numbers come from the project's block)",
+                     text_color=theme.MUTED).grid(row=0, column=2, padx=(10, 0))
+
         family = ctk.CTkFrame(bar, fg_color="transparent")
-        family.grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
+        family.grid(row=2, column=0, columnspan=4, sticky="w", pady=(6, 0))
         self.family_var = tk.BooleanVar(value=False)
         self.family_box = ctk.CTkCheckBox(family, text="Import all as the same base number:", width=0,
                                           variable=self.family_var, command=self._family_toggled)
@@ -241,6 +256,55 @@ class TablePage:
             self.running = False
             self.family_var.set(self.family_applied is not None)
             self._say(str(e), "warn")
+
+    def show_projects(self, projects):
+        """Fill the Project box with the org's projects (core/projects.py), or hide it if there are none."""
+        self.project_choices = import_table.project_choices(projects)
+        self.project_menu.configure(values=list(self.project_choices))
+        self.project_var.set(import_table.NO_PROJECT)
+        self.project_applied = import_table.NO_PROJECT
+        if projects:
+            self.project_row.grid()
+        else:
+            self.project_row.grid_remove()
+
+    def _project_name(self):
+        return self.project_choices.get(self.project_applied)
+
+    def _project_chosen(self, label):
+        """A project (or No project) was picked: the automatic rows get numbers from its block."""
+        if label == self.project_applied:
+            return
+        if self._blocked():
+            self.project_var.set(self.project_applied)          # the table is busy: undo the choice
+            return
+        self._end_edit()
+
+        def done(proposal, error):
+            self._show("table")
+            if error is not None:
+                self.project_var.set(self.project_applied)      # nothing changed: go back
+                self._say(self._error_text(error), "warn")
+                messagebox.showwarning("Project", self._error_text(error), parent=self)
+                return
+            self.project_applied = label
+            if proposal.family is None and self.family_applied is not None:
+                self.family_applied = None                      # its base wasn't in the project's block
+                self.family_var.set(False)
+            self.family_placeholder = number_input.import_base_placeholder(self.repo, proposal.org,
+                                                                           self._project_name())
+            self.family_entry.configure(placeholder_text=self.family_placeholder)
+            self.conflicts, self.duplicates = [], {}
+            self._rebuild()
+            self._say(proposal.note)
+
+        try:
+            self.session.set_project(self.project_choices.get(label), self._after(done))
+        except LitterboxError as e:
+            self.project_var.set(self.project_applied)
+            self._say(str(e), "warn")
+            return
+        self._begin("Choosing part numbers in the project...")
 
     def _refresh_numbers(self):
         if self._blocked():
