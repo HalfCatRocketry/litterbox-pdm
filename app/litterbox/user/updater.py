@@ -5,9 +5,11 @@ How an update works
   1. Every release on GitHub carries three files: the installer (Litterbox-Setup-X.Y.Z.exe), latest.json (which
      version it is, where the installer is, and the installer's SHA-256 fingerprint) and latest.json.sig (a
      signature on latest.json made with a private key only the maintainer holds).
-  2. This program has the matching PUBLIC key built in (build_info.py). It downloads latest.json and the
-     signature, and ignores the release unless the signature is right. So even someone who got into the GitHub
-     account could not push a fake update without the private key.
+  2. This program has the matching PUBLIC key built in (build_info.py), plus a spare one (SPARE_PUBLIC_KEYS). It
+     downloads latest.json and the signature, and ignores the release unless it is signed by one of those keys. So
+     even someone who got into the GitHub account could not push a fake update without a private key.
+     The spare's private key is kept offline by the maintainer. If the release key is ever lost or leaked, the
+     spare becomes the release key and installed copies still trust the next update, with no reinstall by hand.
   3. If the signed version is newer, the person is asked. On yes, the installer is downloaded, its fingerprint is
      checked against the signed one, and it is started quietly; Litterbox closes, the installer replaces the
      program files and starts Litterbox again. Settings, logs and the vault are never touched.
@@ -37,6 +39,11 @@ CHUNK = 256 * 1024
 INSTALLER_NAME = re.compile(r"^[A-Za-z0-9._-]+\.exe$")
 SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
 REPO_NAME = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+
+# Trusted as well as the release key in build_info.py. Public keys are not secret. Added in 0.4.2.
+SPARE_PUBLIC_KEYS = (
+    "WWuh7zIPS+DHeWY+/qn+7BrwcTDP1VcOyJIKZmwQ5ZY=",
+)
 
 
 class UpdateError(Exception):
@@ -93,6 +100,24 @@ def signature_is_good(data, signature_b64, public_b64):
         return False
 
 
+def is_public_key(public_b64):
+    try:
+        _ed25519().Ed25519PublicKey.from_public_bytes(base64.b64decode(public_b64, validate=True))
+        return True
+    except Exception:
+        return False
+
+
+def trusted_keys(public_key):
+    """The key(s) given (one key or a list) followed by the spare keys, without repeats."""
+    given = [public_key] if isinstance(public_key, str) else list(public_key or ())
+    return tuple(dict.fromkeys(k for k in given + list(SPARE_PUBLIC_KEYS) if k))
+
+
+def signed_by_a_trusted_key(data, signature_b64, public_key):
+    return any(signature_is_good(data, signature_b64, key) for key in trusted_keys(public_key))
+
+
 # ---------------------------------------------------------------------------
 # Reading the release information
 # ---------------------------------------------------------------------------
@@ -112,8 +137,9 @@ def release_url(repo, filename):
 
 
 def parse_manifest(raw, signature_b64, public_key, repo):
-    """Check latest.json (the exact bytes) against its signature and return an Update. Raises UpdateError."""
-    if not signature_is_good(raw, signature_b64, public_key):
+    """Check latest.json (the exact bytes) against its signature and return an Update. Raises UpdateError.
+    A signature by the release key (public_key) or by a spare key is accepted."""
+    if not signed_by_a_trusted_key(raw, signature_b64, public_key):
         raise UpdateError("The update information is not signed with the right key, so it was ignored.")
     try:
         data = json.loads(raw.decode("utf-8"))

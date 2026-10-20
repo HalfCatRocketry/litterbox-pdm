@@ -91,6 +91,30 @@ class FindingUpdates(unittest.TestCase):
         with self.assertRaises(updater.UpdateError):
             updater.find_update(REPO, PUBLIC, "0.1.0", fetch=offline)
 
+    def test_a_release_signed_by_a_spare_key_is_accepted(self):
+        spare_private, spare_public = updater.generate_keypair()
+        original = updater.SPARE_PUBLIC_KEYS
+        updater.SPARE_PUBLIC_KEYS = (spare_public,)
+        try:
+            self.assertEqual(self.find(manifest(), key=spare_private).version, "0.2.0")
+        finally:
+            updater.SPARE_PUBLIC_KEYS = original
+
+    def test_the_built_in_spare_key_is_a_real_public_key_and_not_secret_material(self):
+        self.assertTrue(updater.SPARE_PUBLIC_KEYS)
+        for key in updater.SPARE_PUBLIC_KEYS:
+            self.assertTrue(updater.is_public_key(key))
+            self.assertFalse(updater.signature_is_good(b"x", updater.sign(b"x", PRIVATE), key))
+
+    def test_trusted_keys_put_the_release_key_first_without_repeats(self):
+        spare = updater.SPARE_PUBLIC_KEYS[0]
+        self.assertEqual(updater.trusted_keys(PUBLIC), (PUBLIC,) + updater.SPARE_PUBLIC_KEYS)
+        self.assertEqual(updater.trusted_keys(spare), updater.SPARE_PUBLIC_KEYS)
+        self.assertEqual(updater.trusted_keys(""), updater.SPARE_PUBLIC_KEYS)
+
+    def test_the_spare_key_alone_does_not_switch_updates_on_in_a_development_copy(self):
+        self.assertFalse(updater.configured(REPO, ""))
+
     def test_not_configured_in_a_development_copy(self):
         self.assertFalse(updater.configured("", ""))
         self.assertFalse(updater.configured("no-slash", PUBLIC))

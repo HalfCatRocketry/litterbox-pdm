@@ -55,6 +55,9 @@ def problems(assets_dir=None):
         private, public = updater.generate_keypair()
         if not updater.signature_is_good(b"x", updater.sign(b"x", private), public):
             found.append("signature check does not work")
+        for spare in updater.SPARE_PUBLIC_KEYS:
+            if not updater.is_public_key(spare):
+                found.append(f"the spare update key {spare!r} is not a valid public key")
     except Exception as e:
         found.append(f"signature check failed: {e!r}")
     try:
