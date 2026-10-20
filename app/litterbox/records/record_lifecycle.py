@@ -7,6 +7,7 @@ and the git work are up to the caller.
 """
 
 from litterbox.core.revision_letters import FIRST_REVISION, revision_number
+from litterbox.records import purchasing_info
 from litterbox.records import record_model
 from litterbox.util import person_name
 
@@ -122,6 +123,25 @@ def edit_details(record, by, name, description):
         return None
     record.name, record.description = name, description
     return add_event(record, record_model.EVENT_EDITED, by, changes=changes)
+
+
+def edit_purchasing(record, by, fields):
+    """Change the supplier, supplier part number, unit cost and lead time (`fields` is {name: text}; a field left
+    out keeps its value, an empty one clears it). Returns the history entry, or None if nothing changed. Allowed in
+    any status but void: purchasing information is not part of the design, so released and COTS parts take it too."""
+    if record.status == record_model.STATUS_VOID:
+        raise record_model.RegistryError(f"{record.pn} is void, so its purchasing information can't be changed.")
+    wanted = dict(record.purchasing)
+    wanted.update({key: value for key, value in fields.items() if key in purchasing_info.FIELDS})
+    try:
+        cleaned = purchasing_info.clean(wanted)
+    except purchasing_info.PurchasingError as e:
+        raise record_model.RegistryError(str(e))
+    changes = purchasing_info.changes(record.purchasing, cleaned)
+    if not changes:
+        return None
+    record.purchasing = cleaned
+    return add_event(record, record_model.EVENT_PURCHASING_EDITED, by, changes=changes)
 
 
 def change_project(record, by, project):

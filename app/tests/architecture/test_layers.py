@@ -14,6 +14,7 @@ LAYERS = {
     "records": 2,
     "git": 3,
     "vault": 4, "team": 4, "cad": 4, "parts": 4, "references": 4, "workflows": 4, "importing": 4, "change_orders": 4,
+    "exporting": 4,
     "jobs": 5, "user": 5, "cli": 5,
     "gui": 6, "__main__": 6,
 }

@@ -1,7 +1,8 @@
 """
 part_details.py - PartDetailsView: everything about one part, in tabs. Details (pick a revision to see its state,
 release, sign-offs and ECO), History (everything that happened, with buttons to open older revisions), and, in the
-main window's pane, Uses and Where used. The main window's right-hand pane and the pop-out Details window both use
+main window's pane, Uses, Where used and BOM (the bill of materials, single level, indented or every part once, with
+Export...). The main window's right-hand pane and the pop-out Details window both use
 it; show() fills it for another part without building it again.
 """
 
@@ -12,11 +13,13 @@ import customtkinter as ctk
 
 from litterbox.gui import scaling
 from litterbox.gui import theme
+from litterbox.gui.logic import bom_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import part_details_text
 from litterbox.gui.logic import reference_text
 from litterbox.gui.widgets import release_button
 from litterbox.gui.widgets import table_sorting
+from litterbox.references import bom
 
 USES_COLUMNS = (("pn", "Part", 90), ("name", "Name", 160), ("rev", "Rev used", 70), ("latest", "Latest released", 100),
                 ("state", "State", 200))
@@ -48,20 +51,22 @@ def _table(parent, columns, height=None, stretch_last=True):
 
 class PartDetailsView(ctk.CTkFrame):
     """on_open(rev, drawing) opens a revision's file; on_view_eco(number) shows an ECO; with references=True there
-    are Uses and Where used tabs, filled by show_references(), and on_tab(name) says which tab was chosen."""
+    are Uses and Where used tabs, filled by show_references(), and a BOM tab: on_bom(rev, mode) asks for it to be
+    read (show_bom() fills it) and on_export_bom(rev, mode) exports it. on_tab(name) says which tab was chosen."""
 
     def __init__(self, master, on_open=None, on_view_eco=None, references=False, on_tab=None,
-                 on_manage_references=None):
+                 on_manage_references=None, on_bom=None, on_export_bom=None):
         super().__init__(master, fg_color="transparent")
         self.on_open, self.on_view_eco, self.on_tab = on_open, on_view_eco, on_tab
         self.on_manage_references = on_manage_references
+        self.on_bom, self.on_export_bom = on_bom, on_export_bom
         self.record, self.revisions = None, {}
         self.eco_number, self.shown = None, []
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.tabs = ctk.CTkTabview(self, fg_color=theme.BG_PANEL, command=self._tab_changed)
         self.tabs.grid(row=0, column=0, sticky="nsew")
-        names = ("Details", "History") + (("Uses", "Where used") if references else ())
+        names = ("Details", "History") + (("Uses", "Where used", "BOM") if references else ())
         for name in names:
             self.tabs.add(name)
             self.tabs.tab(name).columnconfigure(0, weight=1)
@@ -71,6 +76,9 @@ class PartDetailsView(ctk.CTkFrame):
         if references:
             for name, columns in (("Uses", USES_COLUMNS), ("Where used", USED_IN_COLUMNS)):
                 self._references_tab(self.tabs.tab(name), name, columns)
+        self.bom_tree = None
+        if references:
+            self._bom_tab(self.tabs.tab("BOM"))
         self.tabs.set("Details")
 
     def current_tab(self):
@@ -195,6 +203,51 @@ class PartDetailsView(ctk.CTkFrame):
             empty = "It uses no other parts." if name == "Uses" else "No assembly uses it."
             note.configure(text=empty if not items else f"{len(items)} part{'s' if len(items) != 1 else ''}")
 
+    # -- BOM -----------------------------------------------------------------------------
+    def _bom_tab(self, tab):
+        tab.rowconfigure(2, weight=1)
+        bar = ctk.CTkFrame(tab, fg_color="transparent")
+        bar.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        self.bom_rev = tk.StringVar(value="")
+        self.bom_rev_menu = ctk.CTkOptionMenu(bar, variable=self.bom_rev, values=[""], width=80, height=28,
+                                              fg_color=theme.GRAY, button_color=theme.GRAY_HOVER,
+                                              button_hover_color=theme.ACCENT, command=lambda value: self._bom_changed())
+        self.bom_rev_menu.grid(row=0, column=0, padx=(0, 8))
+        self.bom_mode = tk.StringVar(value=bom.MODE_LABEL[bom.INDENTED])
+        ctk.CTkOptionMenu(bar, variable=self.bom_mode, values=[bom.MODE_LABEL[m] for m in bom.MODES], width=140,
+                          height=28, fg_color=theme.GRAY, button_color=theme.GRAY_HOVER,
+                          button_hover_color=theme.ACCENT, command=lambda value: self._bom_changed()).grid(
+            row=0, column=1, padx=(0, 8))
+        release_button.ReleaseButton(bar, text="Export...", width=90, height=28, fg_color=theme.ACCENT,
+                                     hover_color="#18527f", command=self._export_bom).grid(row=0, column=2)
+        self.bom_note = ctk.CTkLabel(tab, text="", text_color=theme.MUTED, anchor="w", justify="left",
+                                     wraplength=320)
+        self.bom_note.grid(row=1, column=0, sticky="ew", padx=4, pady=(2, 4))
+        frame, self.bom_tree, _sorter = _table(tab, bom_text.COLUMNS)
+        frame.grid(row=2, column=0, sticky="nsew")
+
+    def bom_choice(self):
+        """(revision, mode) picked on the BOM tab."""
+        modes = {label: mode for mode, label in bom.MODE_LABEL.items()}
+        return self.bom_rev.get(), modes.get(self.bom_mode.get(), bom.INDENTED)
+
+    def _bom_changed(self):
+        if self.on_bom and self.record is not None:
+            self.on_bom(*self.bom_choice())
+
+    def _export_bom(self):
+        if self.on_export_bom and self.record is not None:
+            self.on_export_bom(*self.bom_choice())
+
+    def show_bom(self, rows=None, note=""):
+        """Fill the BOM tab with bom_text.table rows (None: not read yet, and `note` says why)."""
+        if self.bom_tree is None:
+            return
+        self.bom_tree.delete(*self.bom_tree.get_children())
+        for iid, values in rows or []:
+            self.bom_tree.insert("", "end", iid=iid, values=values)
+        self.bom_note.configure(text=note)
+
     # -- filling it in -------------------------------------------------------------
     def show(self, record, revisions=None):
         """Show a part (a records Record); `revisions` is {revision: [files]}."""
@@ -214,3 +267,7 @@ class PartDetailsView(ctk.CTkFrame):
             self.tree.insert("", "end", values=row)
         self.sorter.apply()
         self.show_references(None, None, "")
+        if self.bom_tree is not None:
+            self.bom_rev_menu.configure(values=choices)
+            self.bom_rev.set(choices[0])
+            self.show_bom(None, "")

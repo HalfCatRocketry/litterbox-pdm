@@ -18,10 +18,11 @@ from litterbox.gui.widgets import menu_bar
 # The menus beside the everyday buttons: (label, App method). The labels are action_rules.BUTTON_ACTIONS keys where
 # the entry depends on the ticked or highlighted parts. None is a line between entries.
 OPEN_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), None,
-             ("References...", "show_references"), ("Details", "show_history"))
+             ("References...", "show_references"), ("Details", "show_history"), None,
+             ("Export Files", "export_files"))
 
 
-LIFECYCLE_MENU = (("Edit Details", "edit_details"), None, ("Release", "release"), ("Revise", "revise"),
+LIFECYCLE_MENU = (("Edit Details", "edit_details"), ("Purchasing Info", "edit_purchasing"), None, ("Release", "release"), ("Revise", "revise"),
                   ("Cancel Revision", "cancel_revision"), None, ("Make COTS", "make_cots"),
                   ("Unrelease", "reopen"), ("Void", "void"))
 
@@ -37,8 +38,9 @@ EVERYDAY_MENU = (("Check Out", "check_out"), ("Check In", "check_in"), ("Save Pr
 ADMIN_LIFECYCLE_MENU = (None, ("Break Checkout", "break_checkout"))      # only for those who may (Admin, Owner)
 
 
-ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout..."}   # where an entry reads
-                                                                                          # differently from its button
+# Where an entry reads differently from its button
+ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout...",
+              "Purchasing Info": "Purchasing Info...", "Export Files": "Export Files..."}
 
 
 class Menus:

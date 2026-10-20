@@ -10,7 +10,7 @@ def check_permission(repo, user, action):
 
     Every action that changes something calls this first. `action` is one of:
     create, checkout, checkin, undo, edit_details, release, make_cots, revise,
-    cancel_revision, reopen, void (and manage_people / transfer_owner in people.py).
+    cancel_revision, reopen, void, edit_purchasing (and manage_people / transfer_owner in people.py).
     In a vault with a people file, only active team members pass (see people.py); a vault
     without one lets everybody do everything.
     """

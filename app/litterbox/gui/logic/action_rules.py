@@ -25,24 +25,28 @@ ALLOWED_KINDS = {
     "void": {"ok", "cots", "pending"},
     "references": {"ok", "mine", "theirs", "unclaimed", "stray", "released", "cots", "void", "missing", "pending"},
     "break_checkout": {"theirs"},           # Admin and Owner: someone else has it checked out
+    "purchasing": {"ok", "mine", "unclaimed", "stray", "released", "cots", "pending"},     # not void, not theirs
+    "export_files": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
 }
 
 
 # These can be done to several parts at once; the rest need exactly one part selected.
-MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots"}
+MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots", "export_files"}
 
 
 NAME = {            # "...cannot <name> ..."
     "checkout": "check out", "checkin": "check in", "save": "save progress on",
     "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
-    "break_checkout": "break the checkout of",
+    "break_checkout": "break the checkout of", "purchasing": "change the purchasing info of",
+    "export_files": "export the files of",
 }
 
 
 PAST = {            # "<past> 2 parts"
     "checkout": "Checked out", "checkin": "Checked in", "save": "Saved progress on",
     "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
-    "break_checkout": "Broke the checkout of",
+    "break_checkout": "Broke the checkout of", "purchasing": "Changed the purchasing info of",
+    "export_files": "Exported the files of",
 }
 
 
@@ -69,7 +73,7 @@ def plan_action(action, selected, rows_by_pn, pending=None):
     targets, skipped = [], []
     for pn in selected:
         row = rows_by_pn.get(pn)
-        if pending and action not in VIEW_ONLY and str(pn) in pending:
+        if pending and action not in LOOKS and str(pn) in pending:
             skipped.append((pn, f"busy: {pending[str(pn)].lower()}"))
         elif row is not None and row.kind in allowed:
             targets.append(pn)
@@ -89,10 +93,18 @@ def plan_action(action, selected, rows_by_pn, pending=None):
 VIEW_ONLY = {"open", "open_drawing", "references"}      # these only look at a part, so the blue highlighted row will do
 
 
+EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
+
+
+LOOKS = VIEW_ONLY | EXPORTS     # change nothing in the vault, so a part with a job running can still be used
+
+
 def choose_targets(action, ticked, highlighted):
     """Which parts an action applies to. Looking at a part (VIEW_ONLY) uses the highlighted row, or the one
     selected part if nothing is highlighted. Everything else, which changes or proposes a change, uses only the
     parts whose boxes are selected, so a stray click on a row can never be what Release or Check Out acts on."""
+    if action in EXPORTS:
+        return list(ticked) or list(highlighted)
     if action in VIEW_ONLY:
         if highlighted:
             return list(highlighted)
@@ -106,6 +118,7 @@ BUTTON_ACTIONS = {
     "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
     "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
+    "Purchasing Info": "purchasing", "Export Files": "export_files",
 }
 
 
@@ -114,7 +127,7 @@ def action_available(action, ticked, highlighted, rows_by_pn, pending=None):
     targets = choose_targets("open" if action == "history" else action, ticked, highlighted)
     if not targets:
         return False
-    if pending and action not in VIEW_ONLY and action != "history" and any(str(pn) in pending for pn in targets):
+    if pending and action not in LOOKS and action != "history" and any(str(pn) in pending for pn in targets):
         return False
     if action == "history":
         return len(targets) == 1
@@ -132,7 +145,7 @@ def why_not(action, ticked, highlighted, rows_by_pn, pending=None):
     """Why an action's button is greyed out, for its tooltip ("" if it can be used)."""
     if action_available(action, ticked, highlighted, rows_by_pn, pending):
         return ""
-    looking = action in VIEW_ONLY or action == "history"
+    looking = action in LOOKS or action == "history"
     targets = choose_targets("open" if action == "history" else action, ticked, highlighted)
     if not targets:
         return "Click a part first." if looking else "Tick a part's box first."

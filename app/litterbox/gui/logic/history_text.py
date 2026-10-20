@@ -19,7 +19,7 @@ EVENT_LABELS = {
     "references_updated": "Parts used updated",
     "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
     "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",
-    "checkout_broken": "Checkout broken",
+    "checkout_broken": "Checkout broken", "purchasing_edited": "Purchasing info",
 }
 
 

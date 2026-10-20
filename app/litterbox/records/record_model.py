@@ -10,6 +10,7 @@ import yaml
 
 from litterbox.core.part_number import PN, PNError, parse, parse_short
 from litterbox.core.revision_letters import FIRST_REVISION, check_revision, revision_number
+from litterbox.records import purchasing_info
 
 
 STATUS_IN_WORK = "in_work"
@@ -72,6 +73,9 @@ EVENT_REASSIGNED = "workflow_reassigned"
 EVENT_CHECKOUT_BROKEN = "checkout_broken"       # an Admin took a part back from whoever had it checked out
 
 
+EVENT_PURCHASING_EDITED = "purchasing_edited"   # supplier, cost or lead time changed (records/purchasing_info.py)
+
+
 class RegistryError(Exception):
     """Something is wrong with a record. The message is safe to show to a user."""
 
@@ -117,6 +121,7 @@ RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
+    "purchasing",
 }
 
 
@@ -148,6 +153,7 @@ class Record:
     references_outdated: list = field(default_factory=list)  # revisions whose assembly changed but whose list of parts could not be read
     references: dict = field(default_factory=dict)  # revision -> the parts that revision's assembly uses, e.g. {'A': ['HCR-00005-001_A']}
     history: list = field(default_factory=list)     # list of event dicts
+    purchasing: dict = field(default_factory=dict)  # supplier, cost, lead time (records/purchasing_info.py); {} for none
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
 
     def to_dict(self):
@@ -169,6 +175,8 @@ class Record:
         })
         if self.import_path:
             data["import_path"] = self.import_path
+        if self.purchasing:
+            data["purchasing"] = dict(self.purchasing)
         data.update({
             "created_by": self.created_by,
             **({"created_by_id": self.created_by_id} if self.created_by_id else {}),
@@ -268,6 +276,11 @@ class Record:
         except PNError as e:
             raise RegistryError(f"{pn}: bad revision in 'references_outdated'. {e}")
 
+        try:
+            purchasing = purchasing_info.clean(data.get("purchasing"))
+        except purchasing_info.PurchasingError as e:
+            raise RegistryError(f"{pn}: {e}")
+
         name, description = _as_text(data.get("name")), _as_text(data.get("description"))
         if "name" not in data:
             # Records made before parts had a name: the old description becomes the name.
@@ -292,6 +305,7 @@ class Record:
             references=clean_refs,
             references_outdated=outdated,
             history=[_clean_event(e) for e in history],
+            purchasing=purchasing,
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},
         )
 

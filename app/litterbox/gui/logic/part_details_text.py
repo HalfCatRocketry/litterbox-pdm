@@ -1,10 +1,11 @@
 """
 part_details_text.py - a part's Details tab: the revisions you can pick from, and what is known about one of them
-(its state, release, sign-offs, ECO, files and the parts it uses).
+(its state, release, sign-offs, ECO, files, the parts it uses, and the part's purchasing information).
 """
 
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import list_view
+from litterbox.gui.logic import purchasing_text
 from litterbox.workflows import workflow_templates
 
 
@@ -70,6 +71,7 @@ def revision_details(record, rev, revisions, local=True):
     fields.append(("Created", f"by {record.created_by} on {history_text.to_display_time(record.created_at, local)}"))
     if record.cots:
         fields.append(("COTS", "Yes (a purchased part)"))
+    fields += purchasing_text.details_rows(record.purchasing)
     if record.import_path:
         fields.append(("Imported from", record.import_path))
     return fields

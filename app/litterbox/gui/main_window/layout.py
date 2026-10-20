@@ -267,7 +267,8 @@ class WindowLayout:
         self.pane_state.grid(row=1, column=0, sticky="ew", padx=(6, 10), pady=(0, 4))
         self.pane_view = part_details.PartDetailsView(
             parent, on_open=self._pane_open, on_view_eco=self.view_eco, references=True,
-            on_tab=lambda name: self._pane_tab_changed(name), on_manage_references=self.show_references)
+            on_tab=lambda name: self._pane_tab_changed(name), on_manage_references=self.show_references,
+            on_bom=lambda rev, mode: self._load_pane_bom(), on_export_bom=self.export_bom)
         self.pane_view.grid(row=2, column=0, sticky="nsew", padx=(6, 10), pady=(0, 6))
         parent.bind("<Configure>", lambda event: self._wrap_pane(event.width), add="+")
 

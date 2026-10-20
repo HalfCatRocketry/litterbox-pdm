@@ -138,6 +138,7 @@ def load_gui_with_fakes(box):
     dialogs = types.ModuleType("tkinter.filedialog")
     dialogs.askdirectory = lambda **k: ""
     dialogs.askopenfilename = lambda **k: ""
+    dialogs.asksaveasfilename = lambda **k: ""
     mbox = types.ModuleType("tkinter.messagebox")
     for name in ("showinfo", "showwarning", "showerror", "askyesno", "askokcancel"):
         setattr(mbox, name, getattr(box, name))

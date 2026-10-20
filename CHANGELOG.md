@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3
+
+- **Purchasing information.** Lifecycle > **Purchasing Info...** gives a part a supplier, supplier part number, unit cost (a number in your team's currency) and lead time (whole days). They show on the part's Details tab, and the part's history records each change. It belongs to the part, not to a revision, so it needs no check-out and works on released and COTS parts too: the change is uploaded at once. If you have the part checked out, it goes up with your next Save Progress or Check In instead; if someone else has it checked out, it waits until they check it in. Void parts can't take it. Litterbox versions before 0.4.3 keep these fields as they are without showing them.
+- **A BOM tab** in the details pane: the bill of materials of an assembly revision, worked out from the parts it uses, so it is always up to date. Choose **Single level**, **Indented** (what each sub-assembly uses, under it) or **Every part once** (a buying list). Each line shows the part's revision, name, supplier, unit cost and lead time, and whether that use is out of date (a newer revision released, not released yet, void, missing). There are no quantities yet: Litterbox records which parts an assembly uses, not how many. **Export...** saves the BOM shown as a `.csv` spreadsheet (it opens in Excel), to a folder you pick.
+- **Export Files.** Open > **Export Files...** copies the files of the ticked parts (or the highlighted one) to a folder you pick, for example to send to a vendor: any of model, drawing, STEP and PDF, of the latest released revision (or the working one), and if you like the part revisions each assembly uses. Files not downloaded yet are downloaded first. The copies are ordinary files, named as in the vault, and Litterbox asks before replacing files the folder already has.
+- Both exports go only to a folder outside `C:\Litterbox` and outside any git repository, so a copy can never be uploaded or locked with the vault. A cell in an exported BOM that would start like a spreadsheet formula (`=`, `+`, `-`, `@`) gets a `'` in front, so nothing typed into a record runs when the file is opened.
+
 ## 0.4.2
 
 - **New revisions skip I, O, Q, S, X and Z** (as ASME Y14.35 recommends: they are easily mistaken for numbers). H is followed by J, N by P, Y by AA. Revisions a vault already has with those letters are still read and sorted as before, and Revise moves on from them as usual.
