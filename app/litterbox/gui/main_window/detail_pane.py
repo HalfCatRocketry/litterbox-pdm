@@ -16,6 +16,7 @@ from litterbox.records import record_store
 from litterbox.references import bom
 from litterbox.references import reference_model
 from litterbox.references import reference_queries
+from litterbox.references import reference_reader
 
 REFERENCE_TABS = ("Uses", "Where used")
 
@@ -128,7 +129,14 @@ class DetailPane:
                     return None, f"There is no record for {pn}."
                 found = bom.lines(records, pn, rev, mode)
                 outdated = rev in record.references_outdated or rev in reference_queries.needs_update(repo, record)
-                return bom_text.table(found, mode), bom_text.note(found, bool(record.references.get(rev)), outdated)
+                counts_outdated = rev in reference_queries.bom_needs_update(repo, record)
+                if not (outdated or counts_outdated):
+                    return bom_text.table(found, mode), bom_text.note(found, bool(record.references.get(rev)))
+                installed = reference_reader.can_start_solidworks()
+                note = bom_text.note(found, True, outdated, counts_outdated)
+                if not installed:
+                    note += " " + bom_text.update_button_text(False)
+                return bom_text.table(found, mode), note, installed
             except LitterboxError as e:
                 return None, f"Couldn't work out the BOM: {e}"
 

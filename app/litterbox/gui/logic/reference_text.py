@@ -70,9 +70,9 @@ def outdated_note(pn, this_outdated, others):
 
 def update_summary(results):
     """(text, had_problems) for rescan's {PN: result}."""
-    updated = sum(1 for r in results.values() if r == "updated")
-    skipped = {pn: r for pn, r in results.items() if r.startswith("skipped")}
-    text = f"{updated} of {len(results)} assemblies updated."
+    updated = sum(1 for r in results.values() if r.startswith("updated"))
+    skipped = {pn: r for pn, r in results.items() if r.startswith("skipped") or r.startswith("updated, but")}
+    text = f"{updated} of {len(results)} assembl{'y' if len(results) == 1 else 'ies'} updated."
     if skipped:
         text += "\n\n" + "\n".join(f"{pn.short}: {r}" for pn, r in skipped.items())
     return text, bool(skipped)

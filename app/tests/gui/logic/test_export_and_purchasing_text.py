@@ -74,20 +74,26 @@ class Purchasing(unittest.TestCase):
 
 class BomTab(unittest.TestCase):
     def lines(self):
-        return [bom.BomLine(1, PN("HCR", 2, 1), "A", "Frame", sub_assembly=True),
+        return [bom.BomLine(1, PN("HCR", 2, 1), "A", "Frame", sub_assembly=True, quantity=2, total=2),
                 bom.BomLine(2, PN("HCR", 4, 1), "B", "Bolt", purchasing={"supplier": "Acme", "lead_time_days": 3})]
 
     def test_an_indented_table_pushes_parts_right_by_level(self):
         rows = bom_text.table(self.lines(), bom.INDENTED)
         self.assertEqual(rows[0][1][0], "00002-001")
-        self.assertEqual(rows[1][1][:6], ("    00004-001", "B", "Bolt", "Acme", "", "3 days"))
+        self.assertEqual(rows[0][1][2], "2")
+        self.assertEqual(rows[1][1][:7], ("    00004-001", "B", "?", "Bolt", "Acme", "", "3 days"))
         self.assertEqual(bom_text.table(self.lines(), bom.SINGLE)[1][1][0], "00004-001")
 
     def test_the_line_above_the_table(self):
         self.assertIn("uses no other parts", bom_text.note([], False))
         text = bom_text.note(self.lines(), True, outdated=True)
-        self.assertTrue(text.startswith("2 lines. Its list of parts used is out of date"))
-        self.assertIn("No quantities", text)
+        self.assertTrue(text.startswith("2 lines. 1 line: quantity not known. Its list of parts used is out of date"))
+        self.assertIn("Update BOM", text)
+        text = bom_text.note(self.lines(), True, counts_outdated=True)
+        self.assertIn("Its quantities need updating (it was checked in without SolidWorks open", text)
+        self.assertEqual(bom_text.note(self.lines()[:1], True), "1 line.")
+        self.assertIn("isn't installed", bom_text.update_button_text(False))
+        self.assertIn("out of sight", bom_text.update_button_text(True))
 
 
 class Exports(unittest.TestCase):

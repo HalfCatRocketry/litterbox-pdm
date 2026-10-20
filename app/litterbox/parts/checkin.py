@@ -95,14 +95,16 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
 
             # Commit unless the ONLY thing to do is upload commits left over from an earlier failed attempt.
             if changed or report.record_edited or not report.unpushed:
-                found_references = None
+                found = None
                 if references_reader is not None:
                     try:
-                        found_references = references_reader(repo, pn, record.revision, changed)
+                        found = references_reader(repo, pn, record.revision, changed)
                     except Exception as e:
                         diagnostics.LOG(f"WARNING: could not read what {pn} uses: {e}")
                 record_before = (Path(repo) / record_path).read_bytes()
-                record_lifecycle.record_checkin(record, user, changed, comment, references=found_references)
+                record_lifecycle.record_checkin(record, user, changed, comment,
+                                                references=found.references if found is not None else None,
+                                                quantities=found.quantities if found is not None else None)
                 record_store.save(repo, record)
                 message = f"{pn}: {(comment or '').strip() or 'Update'}"
                 to_commit.append((pn, message, changed, record_path, record_before))
@@ -198,8 +200,8 @@ def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, refere
     ahead anyway: the check-in is recorded in the PN record, uploaded, and the
     locks are released. Save Progress with nothing changed just does nothing.
 
-    references_reader(repo, pn, revision, changed_files) may return the list of parts an assembly
-    uses (see references.py), which is stored in the record in the same commit. It returns None
+    references_reader(repo, pn, revision, changed_files) may return what an assembly uses and how many of
+    each (a reference_reader.AssemblyRead), which is stored in the record in the same commit. It returns None
     when there is nothing to update, and any error it raises only costs the update, not the check-in.
     """
     pn = batch_core.as_pn(pn)

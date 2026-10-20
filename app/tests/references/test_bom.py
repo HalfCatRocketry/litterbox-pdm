@@ -65,7 +65,8 @@ class Problems(unittest.TestCase):
         found = bom.lines(records, FRAME, "A", bom.SINGLE)
         states = {line.pn.base: line.state for line in found}
         self.assertEqual(states, {3: reference_model.UNRELEASED, 4: reference_model.OK, 9: reference_model.MISSING})
-        self.assertEqual(bom.problems(found), ["1 line: part not found", "1 line: not released yet"])
+        self.assertEqual(bom.problems(found), ["1 line: part not found", "1 line: not released yet",
+                                               "3 lines: quantity not known"])
 
     def test_a_loop_stops_instead_of_going_round_for_ever(self):
         records = vault()
@@ -83,6 +84,47 @@ class Problems(unittest.TestCase):
             def get(self, pn, default=None):
                 return records.get(pn, default)
         self.assertEqual(listed(bom.lines(Lazy(), TOP, "A", bom.SINGLE)), [(1, 2, "A"), (1, 5, "A")])
+
+
+def counted():
+    """vault(), with counts: Top uses 2 Frames and 1 Panel; a Frame uses 4 Brackets and 6 Bolts; a Panel 8 Bolts."""
+    records = vault()
+    records[TOP].quantities = {"A": {"HCR-00002-001_A": 2, "HCR-00005-001_A": 1}}
+    records[FRAME].quantities = {"A": {"HCR-00003-001_A": 4, "HCR-00004-001_A": 6}}
+    records[PANEL].quantities = {"A": {"HCR-00004-001_A": 8}}
+    return records
+
+
+def amounts(lines):
+    return [(line.pn.base, line.quantity, line.total) for line in lines]
+
+
+class Quantities(unittest.TestCase):
+    def test_single_level_shows_how_many_the_assembly_uses(self):
+        self.assertEqual(amounts(bom.lines(counted(), TOP, "A", bom.SINGLE)), [(2, 2, 2), (5, 1, 1)])
+
+    def test_indented_multiplies_down_the_tree(self):
+        self.assertEqual(amounts(bom.lines(counted(), TOP, "A", bom.INDENTED)),
+                         [(2, 2, 2), (3, 4, 8), (4, 6, 12), (5, 1, 1), (4, 8, 8)])
+
+    def test_every_part_once_adds_up_each_place_it_is_used(self):
+        self.assertEqual(amounts(bom.lines(counted(), TOP, "A", bom.FLAT)),
+                         [(2, 2, 2), (3, 8, 8), (4, 20, 20), (5, 1, 1)])
+
+    def test_an_assembly_never_counted_leaves_its_lines_and_those_below_unknown(self):
+        records = counted()
+        records[FRAME].quantities = {}
+        self.assertEqual(amounts(bom.lines(records, TOP, "A", bom.INDENTED)),
+                         [(2, 2, 2), (3, None, None), (4, None, None), (5, 1, 1), (4, 8, 8)])
+        self.assertEqual(amounts(bom.lines(records, TOP, "A", bom.FLAT))[2], (4, None, None))
+        records[TOP].quantities = {}
+        self.assertEqual(amounts(bom.lines(records, TOP, "A", bom.INDENTED))[4], (4, 8, None))
+        self.assertIn("4 lines: quantity not known", bom.problems(bom.lines(records, TOP, "A", bom.INDENTED)))
+
+    def test_a_part_with_every_copy_suppressed_counts_zero(self):
+        records = counted()
+        records[PANEL].quantities = {"A": {"HCR-00004-001_A": 0}}
+        self.assertEqual(amounts(bom.lines(records, TOP, "A", bom.FLAT))[2], (4, 12, 12))
 
 
 if __name__ == "__main__":

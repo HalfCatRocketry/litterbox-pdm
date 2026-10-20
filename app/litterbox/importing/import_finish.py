@@ -17,6 +17,7 @@ from litterbox.importing import import_prepare
 from litterbox.importing import manifest as manifest_module
 from litterbox.parts import create
 from litterbox.parts import create_batch
+from litterbox.parts import permission_check
 from litterbox.records import record_store
 
 
@@ -41,6 +42,8 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
     items = prepared.items
     if not items:
         raise import_errors.ImportFailed("Nothing is selected, so there is nothing to import.")
+    if not dry_run:
+        permission_check.check_solidworks_version(repo, "import these files")     # SolidWorks copies them in
     originals = import_paths.snapshot_files([p for item in items for p in import_plan.item_files(item)])
     last_error = None
     renumbered = []

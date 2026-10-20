@@ -39,6 +39,7 @@ class PartStatus:
     pending: dict = field(default_factory=dict)     # a release request waiting for sign-offs (see workflow.py)
     not_downloaded: bool = False        # the working revision's files are pointers (see git/lfs_download.py)
     project: str = ""                   # the project it belongs to (core/projects.py), "" for none
+    bom_outdated: bool = False          # an assembly whose part counts are missing or out of date
 
 
 def get_status(repo):
@@ -99,13 +100,16 @@ def get_status(repo):
         if record.released_revision and record.status != record_model.STATUS_RELEASED:
             state += f" (Rev {record.released_revision} released)"
         outdated = any(record_lifecycle.references_need_update(record, rev, fs) for rev, fs in revisions.items())
+        bom_outdated = any(record_lifecycle.bom_needs_update(record, rev, fs) for rev, fs in revisions.items())
         if outdated and kind not in ("error", "missing"):
-            state += " (references need updating)"
+            state += " (references need updating)"          # updating them counts the parts too
+        elif bom_outdated and kind not in ("error", "missing"):
+            state += " (BOM needs updating)"
         if not_downloaded and kind != "void":
             state += " (not downloaded)"         # Check Out and Open download it; nothing else needs the files
 
         rows.append(PartStatus(pn, record.name, record.status, state, kind, owner, files,
                                record.description, record.cots, record.import_path,
                                record.revision, record.released_revision, revisions, outdated, record.pending,
-                               not_downloaded, project=record.project))
+                               not_downloaded, project=record.project, bom_outdated=bom_outdated))
     return rows

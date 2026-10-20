@@ -42,6 +42,8 @@ def mark_revised(record, by, reason, files):
         record.references[record.revision] = list(record.references[previous])
         if previous in record.references_outdated:
             record.references_outdated.append(record.revision)
+    if previous in record.quantities:
+        record.quantities[record.revision] = dict(record.quantities[previous])
     record.status = record_model.STATUS_IN_WORK
     return record_lifecycle.add_event(record, record_model.EVENT_REVISED, by, from_revision=previous, reason=reason, files=list(files))
 
@@ -67,6 +69,7 @@ def mark_revision_cancelled(record, by, reason, files):
     reason = record_lifecycle.require_reason(reason, "cancel a revision")
     cancelled = record.revision
     record.references.pop(cancelled, None)
+    record.quantities.pop(cancelled, None)
     if cancelled in record.references_outdated:
         record.references_outdated.remove(cancelled)
     record.revision = record.released_revision

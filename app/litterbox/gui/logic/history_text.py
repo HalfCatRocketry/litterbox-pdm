@@ -37,6 +37,11 @@ def to_display_time(text, local=True):
     return moment.strftime("%Y-%m-%d %H:%M")
 
 
+def _counts(counts):
+    """{'HCR-00005-001_A': 4} -> '4 x HCR-00005-001_A'."""
+    return ", ".join(f"{n} x {stem}" for stem, n in counts.items()) or "no parts"
+
+
 def format_history(record, local=True):
     """Rows of (when, who, what, details) for a record, newest first."""
     rows = []
@@ -60,6 +65,12 @@ def format_history(record, local=True):
         elif isinstance(used, dict):
             parts.append("; ".join(f"Rev {rev} uses " + (", ".join(stems) if stems else "no parts")
                                    for rev, stems in used.items()))
+        counts = event.get("quantities")
+        if isinstance(counts, dict) and counts:
+            if all(isinstance(value, dict) for value in counts.values()):
+                parts.append("; ".join(f"Rev {rev} counts {_counts(each)}" for rev, each in counts.items()))
+            else:
+                parts.append(f"counts {_counts(counts)}")
         changes = event.get("changes") or []
         if changes:
             parts.append("; ".join(str(c) for c in changes))

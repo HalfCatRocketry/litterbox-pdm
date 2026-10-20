@@ -16,6 +16,7 @@ from litterbox.git import lfs_locks
 from litterbox.git import repository
 from litterbox.parts import checkin
 from litterbox.parts import checkout
+from litterbox.parts import permission_check
 from litterbox.parts import undoing
 from litterbox.records import record_files
 from litterbox.records import record_model
@@ -80,6 +81,8 @@ def replace_references(repo, replacements, comment="Updated to the latest releas
     Returns a ReplaceResult per assembly.
     """
     repository.validate_repo(repo)
+    if replacements:
+        permission_check.check_solidworks_version(repo, "change the assemblies' references")
     by_parent = {}
     for item in replacements:
         by_parent.setdefault(item.parent, []).append(item)

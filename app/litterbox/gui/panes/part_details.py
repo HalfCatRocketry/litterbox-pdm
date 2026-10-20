@@ -19,6 +19,7 @@ from litterbox.gui.logic import part_details_text
 from litterbox.gui.logic import reference_text
 from litterbox.gui.widgets import release_button
 from litterbox.gui.widgets import table_sorting
+from litterbox.gui.widgets import tooltip
 from litterbox.references import bom
 
 USES_COLUMNS = (("pn", "Part", 90), ("name", "Name", 160), ("rev", "Rev used", 70), ("latest", "Latest released", 100),
@@ -52,14 +53,15 @@ def _table(parent, columns, height=None, stretch_last=True):
 class PartDetailsView(ctk.CTkFrame):
     """on_open(rev, drawing) opens a revision's file; on_view_eco(number) shows an ECO; with references=True there
     are Uses and Where used tabs, filled by show_references(), and a BOM tab: on_bom(rev, mode) asks for it to be
-    read (show_bom() fills it) and on_export_bom(rev, mode) exports it. on_tab(name) says which tab was chosen."""
+    read (show_bom() fills it), on_export_bom(rev, mode) exports it and on_update_bom() counts its parts again
+(the Update BOM button, shown only when its quantities need it). on_tab(name) says which tab was chosen."""
 
     def __init__(self, master, on_open=None, on_view_eco=None, references=False, on_tab=None,
-                 on_manage_references=None, on_bom=None, on_export_bom=None):
+                 on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None):
         super().__init__(master, fg_color="transparent")
         self.on_open, self.on_view_eco, self.on_tab = on_open, on_view_eco, on_tab
         self.on_manage_references = on_manage_references
-        self.on_bom, self.on_export_bom = on_bom, on_export_bom
+        self.on_bom, self.on_export_bom, self.on_update_bom = on_bom, on_export_bom, on_update_bom
         self.record, self.revisions = None, {}
         self.eco_number, self.shown = None, []
         self.columnconfigure(0, weight=1)
@@ -220,6 +222,12 @@ class PartDetailsView(ctk.CTkFrame):
             row=0, column=1, padx=(0, 8))
         release_button.ReleaseButton(bar, text="Export...", width=90, height=28, fg_color=theme.ACCENT,
                                      hover_color="#18527f", command=self._export_bom).grid(row=0, column=2)
+        self.bom_update = release_button.ReleaseButton(bar, text="Update BOM", width=100, height=28,
+                                                       fg_color=theme.TEAL, hover_color=theme.TEAL_HOVER,
+                                                       command=self._update_bom)
+        self.bom_update.grid(row=0, column=3, padx=(8, 0))
+        self.bom_update.grid_remove()
+        tooltip.Tooltip(self.bom_update, bom_text.update_button_text(True))
         self.bom_note = ctk.CTkLabel(tab, text="", text_color=theme.MUTED, anchor="w", justify="left",
                                      wraplength=320)
         self.bom_note.grid(row=1, column=0, sticky="ew", padx=4, pady=(2, 4))
@@ -239,10 +247,19 @@ class PartDetailsView(ctk.CTkFrame):
         if self.on_export_bom and self.record is not None:
             self.on_export_bom(*self.bom_choice())
 
-    def show_bom(self, rows=None, note=""):
-        """Fill the BOM tab with bom_text.table rows (None: not read yet, and `note` says why)."""
+    def _update_bom(self):
+        if self.on_update_bom and self.record is not None:
+            self.on_update_bom()
+
+    def show_bom(self, rows=None, note="", can_update=False):
+        """Fill the BOM tab with bom_text.table rows (None: not read yet, and `note` says why). `can_update` shows
+        the Update BOM button."""
         if self.bom_tree is None:
             return
+        if can_update and self.on_update_bom:
+            self.bom_update.grid()
+        else:
+            self.bom_update.grid_remove()
         self.bom_tree.delete(*self.bom_tree.get_children())
         for iid, values in rows or []:
             self.bom_tree.insert("", "end", iid=iid, values=values)

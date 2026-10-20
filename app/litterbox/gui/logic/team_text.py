@@ -3,6 +3,7 @@ team_text.py - the Team window: the people table, the identity banner, Who am I,
 and which vault settings changed.
 """
 
+from litterbox import version
 
 
 def person_unchanged(person, fields):
@@ -116,3 +117,16 @@ def changed_settings(current, chosen):
     if not chosen:
         return {}
     return {key: value for key, value in chosen.items() if current.get(key) != value}
+
+
+def solidworks_version_prompt(year, installed):
+    """The "Are you sure?" before the org's SolidWorks version is set to `year`. `installed` is this computer's
+    (None without one)."""
+    text = (f"From now on, everyone works in SolidWorks {year}. Anyone whose SolidWorks is newer can't check out, "
+            "revise, import or change references until they use "
+            f"{year}, or the version here is changed.")
+    if installed and installed > year:
+        text += f"\n\nYour own SolidWorks is {installed}, so that includes you."
+    text += (f"\n\nEveryone will also need Litterbox {version.VERSION} or newer, since older versions don't check "
+             "this.\n\nSet it?")
+    return text

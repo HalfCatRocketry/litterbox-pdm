@@ -79,6 +79,12 @@ def needs_update(repo, record):
             if record_lifecycle.references_need_update(record, rev, files)]
 
 
+def bom_needs_update(repo, record):
+    """Revisions of this part whose BOM quantities are missing or out of date."""
+    return [rev for rev, files in record_files.cad_index(repo).get(record.pn, {}).items()
+            if record_lifecycle.bom_needs_update(record, rev, files)]
+
+
 def outdated_parts(repo, records=None):
     """Every part in the vault whose list of parts used is missing or out of date."""
     records = records if records is not None else reference_model.load_records(repo)

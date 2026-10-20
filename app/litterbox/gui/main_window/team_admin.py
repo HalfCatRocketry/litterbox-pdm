@@ -5,6 +5,7 @@ handing over the Owner role, vault settings, projects, workflows, and saving the
 
 from tkinter import messagebox
 
+from litterbox.cad import solidworks_versions
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui.dialogs import projects_dialog
@@ -157,12 +158,14 @@ class TeamAdmin:
             current = {"org_name": config.check_org_name(config.load(repo).get("org_name")),
                        "commit_style": config.get_commit_style(repo), "release_rule": config.get_release_rule(repo),
                        "require_signatures": config.get_require_signatures(repo),
-                       "assembly_variant_start": config.get_assembly_variant_start(repo)}
+                       "assembly_variant_start": config.get_assembly_variant_start(repo),
+                       "solidworks_version": config.get_solidworks_version(repo)}
         except config.ConfigError as e:
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
+        installed = solidworks_versions.installed_year()
         chosen = vault_settings_dialog.VaultSettingsDialog(
-            window, current, may_rename=self.identity.allows("rename_org")[0]).show()
+            window, current, may_rename=self.identity.allows("rename_org")[0], installed=installed).show()
         changes = team_text.changed_settings(current, chosen)
         if not changes:
             return
@@ -171,6 +174,10 @@ class TeamAdmin:
                 "From now on, Litterbox refuses to upload any commit that is not signed by a key on the team list. "
                 "Anyone who has not set up signing (Team > Signing...) will not be able to upload until they do."
                 "\n\nTurn this on?", parent=window):
+            return
+        if changes.get("solidworks_version") and not messagebox.askokcancel(
+                "SolidWorks version", team_text.solidworks_version_prompt(changes["solidworks_version"], installed),
+                parent=window):
             return
         self.run_task(lambda: vault_settings.edit(repo, **changes), "Vault settings saved")
 

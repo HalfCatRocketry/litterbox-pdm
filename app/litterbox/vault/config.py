@@ -11,6 +11,7 @@ team uses the same ones):
     format_version: 1     the layout of the vault's files (see version.py), default 1
     min_litterbox_version: 0.1.0   the oldest Litterbox allowed in this vault, default none
     commit_style, release_rule, require_signatures   see their get_ functions below
+    solidworks_version: 2024   the SolidWorks everyone works in (cad/solidworks_versions.py), default none (no check)
     assembly_variant_start: 500   New Assembly's variants start here, New Part's stay below it (default 5 followed
                           by zeros: 500 with 3-digit variants). An Admin can change it at any time
     projects:             blocks of part numbers set aside for projects (core/projects.py), each a name and the
@@ -30,6 +31,7 @@ from pathlib import Path
 import yaml
 
 from litterbox import layout
+from litterbox.cad import solidworks_versions
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
 from litterbox.core.part_number import PNError, check_org
@@ -238,6 +240,24 @@ def get_require_signatures(repo):
     if not isinstance(value, bool):
         raise ConfigError(f"require_signatures in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be true or false.")
     return value
+
+
+def check_solidworks_version(value):
+    """A SolidWorks version for the vault, as a year (2024), or None for none. Raises ConfigError."""
+    if value in (None, ""):
+        return None
+    low, high = solidworks_versions.FIRST_YEAR, solidworks_versions.LAST_YEAR
+    if isinstance(value, bool) or not isinstance(value, int) or not (low <= value <= high):
+        raise ConfigError(f"The SolidWorks version must be a year from {low} to {high}, like 2024.")
+    return value
+
+
+def get_solidworks_version(repo):
+    """The SolidWorks everyone in this vault works in, as a year (2024), or None if the org hasn't chosen one."""
+    try:
+        return check_solidworks_version(load(repo).get("solidworks_version"))
+    except ConfigError as e:
+        raise ConfigError(f"solidworks_version in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
 
 
 def apply(repo):

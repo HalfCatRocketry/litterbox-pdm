@@ -8,6 +8,8 @@ The settings here:
                         are out of date or not released
     require_signatures  True or False (default): refuse uploads of commits not signed by a key on the team list
     org_name            the org's full name; only the Owner may change it (the permission is "rename_org")
+    solidworks_version  the SolidWorks everyone works in, as a year (2024), or None for no check. Setting it makes
+                        the vault need this Litterbox or newer, since older ones don't check it
 Only an Admin or the Owner may change them (the permission is "manage_settings"); everyone then gets the new
 values the next time they get the latest. Projects are changed through the same file, in project_admin.py.
 

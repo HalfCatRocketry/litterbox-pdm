@@ -14,13 +14,16 @@ from litterbox.importing import scan
 
 
 class FakeSolidWorks:
-    """Stands in for SolidWorks. A 'document' is text; each line 'ref: <path>' is one reference."""
+    """Stands in for SolidWorks. A 'document' is text; each line 'ref: <path>' is one reference, and one copy of
+    that component (a line 'suppressed: <path>' is a suppressed copy). `closed` makes it act as if SolidWorks
+    isn't open."""
 
     def __init__(self, search_folder):
         self.search_folder = Path(search_folder)
         self.copied = []
         self.fail_on = None            # file name that makes copy() raise
         self.refuse_repoint = False
+        self.closed = False
 
     @staticmethod
     def refs_in(path):
@@ -34,8 +37,18 @@ class FakeSolidWorks:
         return str(hits[0]) if len(hits) == 1 else ""
 
     def references(self, path):
+        if self.closed:
+            raise RuntimeError("SolidWorks is not open.")
         stored = self.refs_in(path)
         return list(zip(stored, [self.find(s) for s in stored]))
+
+    def components(self, path):
+        if self.closed:
+            raise RuntimeError("SolidWorks is not open.")
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        return [(self.find(line.split(": ", 1)[1].strip()), "counted" if line.startswith("ref: ") else "suppressed")
+                for line in lines if line.startswith(("ref: ", "suppressed: "))]
 
     def copy(self, src, dst):
         if self.fail_on and os.path.basename(src) == self.fail_on:

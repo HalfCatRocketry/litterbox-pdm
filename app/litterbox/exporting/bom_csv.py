@@ -12,7 +12,7 @@ from litterbox.exporting import export_folder
 from litterbox.records import purchasing_info
 from litterbox.references import bom
 
-COLUMNS = ("Level", "Part number", "Rev", "Name", "Description", "Status", "COTS", "Reference state",
+COLUMNS = ("Level", "Part number", "Rev", "Qty", "Total qty", "Name", "Description", "Status", "COTS", "Reference state",
            "Supplier", "Supplier part number", "Unit cost", "Lead time (days)")
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
@@ -29,11 +29,17 @@ def safe_cell(value):
     return "'" + text if text.startswith(FORMULA_START) else text
 
 
+def _number(value):
+    return "" if value is None else str(value)
+
+
 def rows(found):
-    """The table: a heading row, then one row per BomLine."""
+    """The table: a heading row, then one row per BomLine. Qty is how many its parent uses, Total qty how many
+    the whole assembly needs; both are empty when not counted."""
     table = [list(COLUMNS)]
     for line in found:
-        table.append([str(line.level) if line.level else "", str(line.pn), line.revision, line.name,
+        table.append([str(line.level) if line.level else "", str(line.pn), line.revision,
+                      _number(line.quantity), _number(line.total), line.name,
                       line.description, line.status.replace("_", " "), "Yes" if line.cots else "",
                       line.state_text + (" (uses an assembly above it)" if line.loop else ""),
                       line.field(purchasing_info.SUPPLIER), line.field(purchasing_info.SUPPLIER_PN),

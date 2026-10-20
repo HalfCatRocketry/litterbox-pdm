@@ -4,10 +4,12 @@ checkout_actions.py - Check Out, Undo Checkout and Break Checkout.
 
 from tkinter import messagebox
 
+from litterbox.cad import solidworks_versions
 from litterbox.gui.logic import checkin_text
 from litterbox.parts import break_checkout as breaking
 from litterbox.parts import checkout
 from litterbox.parts import undoing
+from litterbox.vault import config
 
 
 class CheckoutActions:
@@ -31,8 +33,30 @@ class CheckoutActions:
 
     def check_out(self):
         plan = self._plan("checkout")
-        if plan:
+        if plan and self._older_solidworks_ok():
             self._run_batch("checkout", plan, checkout.checkout_many)
+
+    def _older_solidworks_ok(self):
+        """Warn, once per org each time Litterbox runs, when this computer's SolidWorks is older than the org's.
+        True to go ahead. (A newer one is refused by the check-out itself.)"""
+        repo = str(self.repo())
+        warned = self.__dict__.setdefault("_warned_older_solidworks", set())
+        if repo in warned:
+            return True
+        try:
+            org_year = config.get_solidworks_version(repo)
+        except config.ConfigError:
+            return True                                  # the check-out reports a broken settings file
+        if not org_year:
+            return True
+        installed = solidworks_versions.installed_year()
+        if solidworks_versions.compare(org_year, installed) != solidworks_versions.OLDER:
+            return True
+        if not messagebox.askokcancel("SolidWorks version",
+                                      solidworks_versions.older_text(org_year, installed) + "\n\nCheck out anyway?"):
+            return False
+        warned.add(repo)
+        return True
 
     def undo_checkout(self):
         plan = self._plan("undo")

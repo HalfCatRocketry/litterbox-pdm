@@ -1,6 +1,7 @@
 """
 sw_backend.py - SolidWorks as the importer, Revise and Update references use it: read a file's
-references, copy a file with its references updated (Pack and Go), point a file at a different one, close.
+references, list an assembly's components (to count them), copy a file with its references updated (Pack and
+Go), point a file at a different one, close.
 
 Through COM, so on one thread only (see importing/session.py and com.com_thread).
 """
@@ -11,6 +12,30 @@ import shutil
 from litterbox import diagnostics
 from litterbox.cad.solidworks import sw_errors
 from litterbox.cad.solidworks import sw_process
+
+
+# What an assembly's component is, for counting (components())
+COUNTED, SUPPRESSED, EXCLUDED = "counted", "suppressed", "excluded"
+
+
+DOC_ASSEMBLY = 2                    # swDocumentTypes_e
+OPEN_SILENT, OPEN_READ_ONLY = 1, 2  # swOpenDocOptions_e
+
+
+def full_path(path):
+    """An absolute Windows path with backslashes. SolidWorks crashed (tried with SolidWorks 2024) when given a
+    relative path, and misses an open document when the slashes are mixed."""
+    return os.path.abspath(os.path.normpath(str(path)))
+
+
+def component_state(suppressed, excluded, envelope):
+    """How a component counts in a BOM: suppressed ones and envelopes aren't there, and some are left out of
+    the BOM on purpose."""
+    if suppressed:
+        return SUPPRESSED
+    if excluded or envelope:
+        return EXCLUDED
+    return COUNTED
 
 
 def pair_references(stored, found):
@@ -33,9 +58,10 @@ def pair_references(stored, found):
 
 
 class SolidWorksBackend:
-    """The four things the importer needs from SolidWorks. None of them writes to an original file.
+    """The things the importer and check-in need from SolidWorks. None of them writes to an original file.
 
     references(path)         [(stored, found)] for the file's direct references
+    components(path)         [(file, COUNTED / SUPPRESSED / EXCLUDED)] for an assembly's top-level components
     copy(src, dst)           copy a file on disk (nothing needs to be open)
     repoint(file, old, new)  change one reference inside the NEW file
     version()                the SolidWorks version, for the log
@@ -68,11 +94,47 @@ class SolidWorksBackend:
 
     def _dependencies(self, path, search):
         from litterbox.cad.solidworks import com
-        deps = com.call(self._app(), "GetDocumentDependencies2", path, False, search, False) or []
+        deps = com.call(self._app(), "GetDocumentDependencies2", full_path(path), False, search, False) or []
         return [p for p in list(deps)[1::2] if isinstance(p, str)]
 
     def references(self, path):
         return pair_references(self._dependencies(path, False), self._dependencies(path, True))
+
+    def components(self, path):
+        """One (file, state) per component at the top of an assembly, one entry for each copy. An assembly that
+        isn't open is opened read-only, out of sight, and closed again; one the person has open is read as it
+        is in SolidWorks and left open. A component whose file can't be found is reported as suppressed."""
+        import pythoncom
+        from litterbox.cad.solidworks import com
+        from win32com.client import VARIANT
+        sw, path = self._app(), full_path(path)
+        model = sw.GetOpenDocumentByName(path)
+        opened = model is None
+        if opened:
+            errors = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
+            warnings = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
+            sw.DocumentVisible(False, DOC_ASSEMBLY)                   # don't show it in the person's SolidWorks
+            try:
+                model = sw.OpenDoc6(path, DOC_ASSEMBLY, OPEN_SILENT | OPEN_READ_ONLY, "", errors, warnings)
+            finally:
+                sw.DocumentVisible(True, DOC_ASSEMBLY)
+            if model is None:
+                raise sw_errors.SolidWorksError(f"SolidWorks could not open {os.path.basename(path)} "
+                                                f"(error {errors.value}).")
+        try:
+            found = []
+            for component in com.call(model, "GetComponents", True) or []:
+                found.append((str(com.call(component, "GetPathName") or ""),
+                              component_state(com.call(component, "IsSuppressed"),
+                                              com.call(component, "ExcludeFromBOM"),
+                                              com.call(component, "IsEnvelope"))))
+            return found
+        finally:
+            if opened:
+                try:
+                    sw.CloseDoc(com.call(model, "GetTitle"))
+                except Exception as e:
+                    diagnostics.LOG(f"Could not close {os.path.basename(path)} in SolidWorks: {e}")
 
     def copy(self, src, dst):
         import pythoncom

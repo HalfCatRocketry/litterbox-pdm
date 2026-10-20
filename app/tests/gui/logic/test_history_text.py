@@ -109,5 +109,17 @@ class TestWorkflowHistory(unittest.TestCase):
         self.assertEqual(by_label["Released (Admin override)"], "Urgent")
 
 
+
+class TestCountsInHistory(unittest.TestCase):
+    def test_check_in_and_update_events_show_the_counts(self):
+        record = record_model.Record(pn=PN("HCR", 2, 1), name="Frame", created_by="Alex", created_at="t", history=[
+            {"event": "checked_in", "by": "Alex", "at": "t", "quantities": {"HCR-00004-001_A": 6}},
+            {"event": "references_updated", "by": "Alex", "at": "t",
+             "quantities": {"A": {"HCR-00004-001_A": 6, "HCR-00005-001_B": 0}}}])
+        rows = history_text.format_history(record)
+        self.assertIn("Rev A counts 6 x HCR-00004-001_A, 0 x HCR-00005-001_B", rows[0][3])
+        self.assertIn("counts 6 x HCR-00004-001_A", rows[1][3])
+
+
 if __name__ == "__main__":
     unittest.main()

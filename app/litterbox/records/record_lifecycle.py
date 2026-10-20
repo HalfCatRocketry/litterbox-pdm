@@ -79,17 +79,53 @@ def references_need_update(record, revision, files):
     return revision not in record.references or revision in record.references_outdated
 
 
-def record_checkin(record, by, files, comment="", references=None):
+def set_quantities(record, counts, revision=None):
+    """Remember how many of each part this revision's assembly uses ({stem: count}). Every part in its list of
+    parts used gets a count, 0 if none was found (all its copies suppressed, say). Returns True if anything
+    changed."""
+    revision = revision or record.revision
+    counts = {stem: int(n) for stem, n in counts.items()}
+    for stem in record.references.get(revision, []):
+        counts.setdefault(stem, 0)
+    changed = record.quantities.get(revision) != counts
+    record.quantities[revision] = counts
+    return changed
+
+
+def bom_needs_update(record, revision, files):
+    """True if the quantities in this revision's BOM can't be trusted: it has an assembly file (in `files`) and
+    its counts were never read, were lost when the assembly changed without SolidWorks to count it, or don't
+    cover every part it uses (an older Litterbox checked it in)."""
+    if record.cots or record.status == record_model.STATUS_VOID:
+        return False
+    if not any(str(f).lower().endswith(".sldasm") for f in files):
+        return False
+    if references_need_update(record, revision, files) or revision not in record.quantities:
+        return True
+    counts = record.quantities[revision]
+    return any(stem not in counts for stem in record.references.get(revision, []))
+
+
+def record_checkin(record, by, files, comment="", references=None, quantities=None):
     """Log a check-in. `references` (a list, or None for 'not read this time') updates what the
     working revision uses; the event lists them when they changed. If an assembly file was checked
-    in and the references could not be read, the revision is marked as needing an update."""
+    in and the references could not be read, the revision is marked as needing an update.
+    `quantities` ({stem: count}, or None) are how many of each it uses; when an assembly file was checked in
+    without them, the old counts are dropped, so its BOM shows that it needs updating."""
     changed = set_references(record, references) if references is not None else False
-    if references is None and any(str(f).lower().endswith(".sldasm") for f in files):
+    assembly = any(str(f).lower().endswith(".sldasm") for f in files)
+    if references is None and assembly:
         if record.revision not in record.references_outdated:
             record.references_outdated.append(record.revision)
+    counted = False
+    if quantities is not None:
+        counted = set_quantities(record, quantities)
+    elif assembly:
+        record.quantities.pop(record.revision, None)
     return add_event(record, record_model.EVENT_CHECKED_IN, by, files=list(files),
                      comment=(comment or "").strip() or None,
-                     references=list(record.references.get(record.revision, [])) if changed else None)
+                     references=list(record.references.get(record.revision, [])) if changed else None,
+                     quantities=dict(record.quantities[record.revision]) if counted else None)
 
 
 def mark_released(record, by, files, **details):

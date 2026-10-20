@@ -121,7 +121,7 @@ RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
-    "purchasing",
+    "purchasing", "quantities",
 }
 
 
@@ -152,6 +152,7 @@ class Record:
     pending: dict = field(default_factory=dict)     # a request waiting for sign-offs (see workflow.py); empty when there is none
     references_outdated: list = field(default_factory=list)  # revisions whose assembly changed but whose list of parts could not be read
     references: dict = field(default_factory=dict)  # revision -> the parts that revision's assembly uses, e.g. {'A': ['HCR-00005-001_A']}
+    quantities: dict = field(default_factory=dict)  # revision -> how many of each it uses, e.g. {'A': {'HCR-00005-001_A': 4}}
     history: list = field(default_factory=list)     # list of event dicts
     purchasing: dict = field(default_factory=dict)  # supplier, cost, lead time (records/purchasing_info.py); {} for none
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
@@ -190,6 +191,10 @@ class Record:
         if self.references:
             data["references"] = {rev: list(stems) for rev, stems in sorted(
                 self.references.items(), key=lambda item: revision_number(item[0]))}
+        if self.quantities:
+            data["quantities"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
+                                  for rev, counts in sorted(self.quantities.items(),
+                                                            key=lambda item: revision_number(item[0]))}
         data.update({
             "history": [dict(e) for e in self.history],
         })
@@ -268,6 +273,21 @@ class Record:
                 raise RegistryError(f"{pn}: 'references' for Rev {rev} must be a list of part numbers.")
             clean_refs[rev] = list(stems)
 
+        quantities = data.get("quantities") or {}
+        if not isinstance(quantities, dict):
+            raise RegistryError(f"{pn}: 'quantities' must give how many of each part each revision uses.")
+        clean_quantities = {}
+        for rev, counts in quantities.items():
+            try:
+                rev = check_revision(str(rev))
+            except PNError as e:
+                raise RegistryError(f"{pn}: bad revision in 'quantities'. {e}")
+            if not isinstance(counts, dict) or not all(
+                    isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v >= 0
+                    for k, v in counts.items()):
+                raise RegistryError(f"{pn}: 'quantities' for Rev {rev} must give a whole number for each part.")
+            clean_quantities[rev] = dict(counts)
+
         outdated = data.get("references_outdated") or []
         if not isinstance(outdated, list):
             raise RegistryError(f"{pn}: 'references_outdated' must be a list of revisions.")
@@ -304,6 +324,7 @@ class Record:
             pending=pending,
             references=clean_refs,
             references_outdated=outdated,
+            quantities=clean_quantities,
             history=[_clean_event(e) for e in history],
             purchasing=purchasing,
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},

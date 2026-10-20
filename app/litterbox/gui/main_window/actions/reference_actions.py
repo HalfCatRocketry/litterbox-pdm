@@ -1,6 +1,6 @@
 """
 reference_actions.py - References...: showing what a part uses and where it is used, and
-updating out-of-date references.
+updating out-of-date references; Update BOM on the BOM tab.
 """
 
 from tkinter import messagebox
@@ -86,6 +86,28 @@ class ReferenceActions:
 
         if not self.run_task(work, "Updated the lists of parts used", on_success=done, refresh=False):
             window.set_idle()
+
+    def update_bom(self):
+        """Update BOM on the BOM tab: read the highlighted assembly's files again and count its parts. SolidWorks
+        is used if it is open; if not, it is started out of sight and closed afterwards."""
+        pn = self.pane_pn
+        if pn is None:
+            return
+        repo = self.repo()
+
+        def work():
+            results = reference_rescan.rescan(repo, [pn], log=lambda text: self.queue.put(("log", text)))
+            return results, part_status.get_status(repo)
+
+        def done(result):
+            results, rows = result
+            self._show_rows(rows)                         # the pane reads the BOM again
+            text, problems = reference_text.update_summary(results)
+            if problems:
+                messagebox.showwarning("Update BOM", text)
+
+        self.run_task(work, "Updated the BOM", on_success=done, refresh=False, label="Counting parts with SolidWorks",
+                      parts=(pn,))
 
     def _replace_references(self, items):
         repo = self.repo()

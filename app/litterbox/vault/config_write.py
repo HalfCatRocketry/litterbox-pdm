@@ -48,6 +48,13 @@ def set_values(repo, **values):
                 data[key] = name
             else:
                 data.pop(key, None)                  # no name: the org code is shown instead
+        elif key == "solidworks_version":
+            year = config.check_solidworks_version(value)
+            if year is None:
+                data.pop(key, None)
+            else:
+                data[key] = year
+                _require_at_least(data, version.VERSION)     # older Litterbox wouldn't check it
         elif key == "assembly_variant_start":
             data[key] = config.check_assembly_variant(value, config.get_digits(repo)[1])
         elif key == "projects":

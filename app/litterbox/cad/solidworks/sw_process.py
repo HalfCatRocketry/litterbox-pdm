@@ -5,6 +5,40 @@ sure it exits when Litterbox is done with it.
 
 
 
+def solidworks_installed():
+    """Is SolidWorks installed on this computer (can Litterbox start it)? Looks for its program registration
+    in the Windows registry; False on any other system."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"SldWorks.Application\CLSID"):
+            return True
+    except Exception:
+        return False
+
+
+def installed_major_version():
+    """The major version of the SolidWorks installed on this computer (32 for SolidWorks 2024), read from the
+    Windows registry without starting it: the SldWorks.Application.N whose program is the one that starts.
+    None if it isn't installed, or on any other system."""
+    try:
+        import winreg
+
+        def clsid(name):
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, name + r"\CLSID") as key:
+                return winreg.QueryValue(key, None)
+
+        current = clsid("SldWorks.Application")
+    except Exception:
+        return None
+    for major in range(60, 9, -1):                          # newest first; a few old ones may still be listed
+        try:
+            if clsid(f"SldWorks.Application.{major}").lower() == current.lower():
+                return major
+        except OSError:
+            continue
+    return None
+
+
 def solidworks_pids():
     """The process ids of every SLDWORKS.exe running now (empty if none, or on a system without tasklist)."""
     import subprocess
