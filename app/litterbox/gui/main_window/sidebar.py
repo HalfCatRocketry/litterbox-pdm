@@ -1,6 +1,6 @@
 """
 sidebar.py - the sidebar on the left of the main window: the parts list's views (All, Mine, Checked out, ...) with
-how many parts each has (under PARTS), then My Tasks and ECOs (under PROCESS) and Team, which are screens of their
+how many parts each has (under PARTS), then Workflows and ECO (under PROCESS) and Team, which are screens of their
 own. On a narrow window it shows only the icons (View > Sidebar names switches the names back on).
 """
 
@@ -22,7 +22,7 @@ VIEW_ICONS = {"All": "list", "Mine": "pencil", "Checked out": "padlock", "Releas
               "Not downloaded": "cloud", "Void": "ban"}
 
 
-SCREENS = (("tasks", "My Tasks", "tasks"), ("ecos", "ECOs", "document"))
+SCREENS = (("tasks", "Workflows", "tasks"), ("ecos", "ECO", "document"))
 
 
 NAV_ICON = 18                   # the sidebar's icons, at 100%
@@ -82,7 +82,7 @@ class Sidebar:
             item.set_chosen(screen == self.screen and (view is None or view == self.view.get()))
 
     def _update_counts(self):
-        """The numbers beside the views and My Tasks."""
+        """The numbers beside the views and Workflows."""
         nav = getattr(self, "nav", None)
         if not nav:
             return

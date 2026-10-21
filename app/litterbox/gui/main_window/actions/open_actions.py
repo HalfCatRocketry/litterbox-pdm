@@ -97,10 +97,20 @@ class OpenActions:
         except record_model.RegistryError as e:
             messagebox.showerror("Litterbox", str(e))
             return
-        row = self.rows_by_pn.get(chosen[0])
-        history_window.HistoryWindow(self, record, history_text.row_revisions(row) if row else {},
-                      on_open=lambda rev, drawing, pn=chosen[0]: self._open_revision(pn, rev, drawing),
-                      on_view_eco=self.view_eco)
+        pn = chosen[0]
+        row = self.rows_by_pn.get(pn)
+
+        def read_bom():
+            if window.winfo_exists():
+                self._read_bom_into(window.view, pn, window.winfo_exists)
+
+        window = history_window.HistoryWindow(
+            self, record, history_text.row_revisions(row) if row else {},
+            on_open=lambda rev, drawing: self._open_revision(pn, rev, drawing), on_view_eco=self.view_eco,
+            on_tab=lambda name: self._popout_tab_changed(window, pn, name),
+            on_manage_references=lambda: self._load_references(pn), on_bom=lambda rev, mode: read_bom(),
+            on_export_bom=lambda rev, mode: self.export_bom(rev, mode, pn),
+            on_update_bom=lambda: self.update_bom(pn, then=read_bom))
 
     def show_ecos(self):
         """The ECOs screen: every engineering change order in your copy of the vault."""

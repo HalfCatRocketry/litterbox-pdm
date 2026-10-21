@@ -61,9 +61,10 @@ class ExportActions:
                                                              + (f" {notes}" if notes else "")),
                       refresh=False, label="Exporting files")
 
-    def export_bom(self, rev, mode):
-        """The BOM tab's Export...: write the BOM of the part shown, as it is picked on the tab, to a .csv file."""
-        pn = getattr(self, "pane_pn", None)
+    def export_bom(self, rev, mode, pn=None):
+        """The BOM tab's Export...: write the BOM of the part shown (`pn`, or the details pane's), as it is picked on
+        the tab, to a .csv file."""
+        pn = pn or getattr(self, "pane_pn", None)
         if pn is None or not rev:
             return
         start = Path(export_text.start_folder(self.settings))

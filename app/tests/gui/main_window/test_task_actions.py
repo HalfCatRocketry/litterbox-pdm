@@ -1,7 +1,7 @@
 """Tests for sign-off workflows and My Tasks in the main window. The window itself is replaced by stand-ins (tests/support/gui_fakes.py): these check the wiring, not the look. Please also try the real window."""
 
 import unittest
-from tests.support.gui_fakes import FakeBox, load_gui_with_fakes, replace
+from tests.support.gui_fakes import FakeBox, FakeParent, load_gui_with_fakes, replace
 
 
 class WorkflowWiring(unittest.TestCase):
@@ -279,18 +279,73 @@ class WorkflowWiring(unittest.TestCase):
         self.app.task_reassign(self.task())
         self.assertEqual(self.tasks, [])
 
-    def test_the_button_shows_how_many_things_need_you(self):
-        shown = []
-        self.app.tasks_button = self.SimpleNamespace(configure=lambda **k: shown.append(k["text"]))
-        self.app._task_windows = lambda: []
-        self.app.identity = self.SimpleNamespace(state="ok", directory=self.directory,
-                                                 person=self.directory.get("bea"))
-        self.app.rows = [self.row("pending", self.pending())]
+    def test_approve_as_superuser_signs_the_ticked_sign_offs(self):
+        seen, signed = [], []
+
+        class Dialog:
+            answer = ([0], "Bea is away")
+
+            def __init__(inner, parent, task):
+                seen.append(task.superuser_slots)
+
+            def show(inner):
+                return Dialog.answer
+
+        replace(self, self.gui.superuser_sign_dialog, "SuperuserSignDialog", Dialog)
+        replace(self, self.gui.workflow_signoff, "sign_as_superuser",
+                lambda repo, pns, slots, comment: signed.append((pns, slots, comment)))
+        self.app.task_superuser_sign(self.task(superuser_slots=[0]))
+        work, done, _ = self.tasks.pop()
+        work()
+        self.assertEqual((seen, signed), ([[0]], [(["HCR-00001-001"], [0], "Bea is away")]))
+        self.assertIn("as superuser", done)
+        Dialog.answer = None                            # cancelled
+        self.app.task_superuser_sign(self.task(superuser_slots=[0]))
+        self.assertEqual(self.tasks, [])
+
+    def test_override_reject_needs_a_reason_and_is_an_override(self):
+        rejected = []
+        replace(self, self.gui.workflow_responses, "reject",
+                lambda repo, pns, reason, override=False: rejected.append((pns, reason, override)))
+        self.app.task_override_reject(self.task())
+        self.assertEqual(self.tasks, [])                # no reason given
+        self.answer = "Wrong material"
+        self.app.task_override_reject(self.task())
+        self.tasks.pop()[0]()
+        self.assertEqual(rejected, [(["HCR-00001-001"], "Wrong material", True)])
+
+    def test_the_workflows_screen_shows_all_workflows_only_to_admins_and_superusers(self):
+        model = self.gui.team_model
+        directory = model.Directory(
+            [model.Person("alex", "Alex", "", ["Alex"], "owner", ["Responsible Engineer"]),
+             model.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"]),
+             model.Person("cy", "Cy", "", ["Cy"], "member", ["Chief"]),
+             model.Person("dee", "Dee", "", ["Dee"], "member", ["Quality"])],
+            ["Responsible Engineer", "Quality", "Chief"], superuser_roles=["Chief"])
+        self.app.rows = [self.row("pending", self.pending())]       # Alex asked, Bea signs
+
+        def screen_for(person_id):
+            self.app.identity = self.SimpleNamespace(state="ok", directory=directory, person=directory.get(person_id))
+            return self.gui.tasks_screen.TasksScreen(FakeParent(), self.app)
+
+        for person_id, all_tab, mine in (("alex", True, 1), ("bea", False, 1), ("cy", True, 0), ("dee", False, 0)):
+            screen = screen_for(person_id)
+            self.assertEqual((screen.everything is not None, len(screen.mine.tasks)), (all_tab, mine), person_id)
+            if all_tab:
+                self.assertEqual(len(screen.everything.tasks), 1)
+        cy = screen_for("cy").everything.tasks["b1"]
+        self.assertEqual(cy.superuser_slots, [0])
+        text = self.gui.task_text
+        self.assertEqual(text.all_workflows_buttons(self.app.identity), {"complete", "reassign", "withdraw", "superuser"})
+        self.app.identity = self.SimpleNamespace(state="ok", directory=directory, person=directory.get("alex"))
+        self.assertEqual(text.all_workflows_buttons(self.app.identity),
+                         {"complete", "reassign", "withdraw", "override", "override_reject"})
+
+    def test_refreshing_reloads_the_my_tasks_screen(self):
+        reloaded = []
+        self.app._task_windows = lambda: [self.SimpleNamespace(reload=lambda: reloaded.append(1))]
         self.app._refresh_tasks()
-        self.assertEqual(shown[-1], "My Tasks (1)")
-        self.app.rows = []
-        self.app._refresh_tasks()
-        self.assertEqual(shown[-1], "My Tasks")
+        self.assertEqual(reloaded, [1])
 
     def _draft_window(self, roles, templates=None):
         directory = self.gui.team_model.Directory(

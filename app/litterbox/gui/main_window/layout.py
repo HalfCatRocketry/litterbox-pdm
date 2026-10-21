@@ -1,11 +1,11 @@
 """
-layout.py - building the main window: the menu bar, the header (org, who you are, My Tasks, Get Latest), the
+layout.py - building the main window: the menu bar, the header (org, who you are, Get Latest), the
 sidebar, the parts screen (toolbar, search, list) beside the details pane, the log drawer and the status bar.
 Each area's behaviour lives in its own file (menus.py, sidebar.py, parts_list.py, detail_pane.py, status_bar.py).
 
     +-----------------------------------------------------------------------+
     | File  Vault  View  Help            <org name>           [logo] Litterbox |
-    | [HCR v]  C:\\Litterbox\\hcr-litterbox      Austin (Admin)  My Tasks  Get Latest |
+    | [HCR v]  C:\\Litterbox\\hcr-litterbox           Austin (Admin)  Get Latest |
     | sidebar |  toolbar / search / parts list           |  details pane     |
     | (log drawer, when open)                                                |
     | * Ready  .  what just happened                     SolidWorks  Jobs  Log |
@@ -83,14 +83,10 @@ class WindowLayout:
         tooltip.Tooltip(self.behind_label, lambda: self.behind_text)
         self.identity_label = ctk.CTkLabel(header, text="", text_color=theme.MUTED, anchor="e")
         self.identity_label.grid(row=0, column=3, sticky="e", padx=(0, 10))
-        self.tasks_button = release_button.ReleaseButton(header, text="My Tasks", width=100, height=30,
-                                                         fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
-                                                         command=lambda: self.show_screen("tasks"))
-        self.tasks_button.grid(row=0, column=4, padx=(0, 6))
         self.get_latest_button = release_button.ReleaseButton(header, text="Get Latest", width=100, height=30,
                                                               fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                                                               command=self.get_latest)
-        self.get_latest_button.grid(row=0, column=5)
+        self.get_latest_button.grid(row=0, column=4)
         tooltip.Tooltip(self.get_latest_button, "Download what others have uploaded since you last looked.")
 
     behind_text = ""
@@ -266,7 +262,7 @@ class WindowLayout:
                                        anchor="w", justify="left", wraplength=320)
         self.pane_state.grid(row=1, column=0, sticky="ew", padx=(6, 10), pady=(0, 4))
         self.pane_view = part_details.PartDetailsView(
-            parent, on_open=self._pane_open, on_view_eco=self.view_eco, references=True,
+            parent, on_open=self._pane_open, on_view_eco=self.view_eco,
             on_tab=lambda name: self._pane_tab_changed(name), on_manage_references=self.show_references,
             on_bom=lambda rev, mode: self._load_pane_bom(), on_export_bom=self.export_bom,
             on_update_bom=self.update_bom)

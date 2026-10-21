@@ -56,8 +56,6 @@ class TestWorkflowText(unittest.TestCase):
         self.assertIn("✓ Quality: Bea", detail)
         self.assertIn("ECO: ECO-0003", detail)
         self.assertIn("Reason: Drawing error", detail)
-        self.assertEqual(task_text.tasks_button_text(0), "My Tasks")
-        self.assertEqual(task_text.tasks_button_text(3), "My Tasks (3)")
 
     def test_signoff_result_text_is_empty_unless_something_failed(self):
         from types import SimpleNamespace

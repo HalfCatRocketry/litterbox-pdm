@@ -1,7 +1,7 @@
 """
 workflow_signoff.py - signing, and what happens when the last person signs: Release, Unrelease and
-Void happen at once; Make COTS waits for the button again (complete). An Admin can override with a recorded
-reason.
+Void happen at once; Make COTS waits for the button again (complete). A superuser can sign for anyone, and an Admin
+can override with a recorded reason.
 """
 
 from dataclasses import dataclass, field
@@ -15,6 +15,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import team_store
 from litterbox.util import person_name
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_ecos
@@ -35,35 +36,72 @@ def sign_off(repo, pns, comment=""):
     """Approve, as the person named, every sign-off waiting for you on these parts. When a part then has all its
     sign-offs, release / reopen / void happens straight away; if that fails the sign-off is still saved.
     All the parts are signed with one download and one upload, and finished together."""
-    pns = workflow_request.as_pns(pns)
     me = workflow_request.current_member(repo, "signoff")
+    return _sign(repo, pns, comment, me, lambda pending: signoff_slots.open_slots(pending, me.id), superuser=False)
+
+
+@converts_errors
+def sign_as_superuser(repo, pns, slots, comment=""):
+    """Approve, as a superuser, the chosen sign-offs (`slots`: indices into the request's sign-offs) on these parts,
+    whoever they are named for. Each is recorded with the superuser's name and the person it was named for. The
+    rest is as sign_off."""
+    me = workflow_request.current_member(repo, "signoff")
+    directory = team_store.load(repo)
+    if directory is None or not directory.is_superuser(me):
+        raise workflow_templates.WorkflowError("Only someone with a superuser role can sign for others.")
+    wanted = set(slots)
+    if not wanted:
+        raise workflow_templates.WorkflowError("Tick at least one sign-off to give.")
+
+    def slots_for(pending):
+        if signoff_slots.requester_blocked(pending, me):
+            raise record_model.RegistryError(f"The {pending.get('template_name', '')} workflow doesn't let you sign "
+                                             "your own request.")
+        return [i for i in signoff_slots.superuser_slots(pending, me, directory) if i in wanted]
+
+    return _sign(repo, pns, comment, me, slots_for, superuser=True)
+
+
+def _sign(repo, pns, comment, me, slots_for, superuser):
+    """Give the sign-offs slots_for(pending) picks on each part (it may raise RegistryError to refuse a part)."""
+    pns = workflow_request.as_pns(pns)
     comment = " ".join((comment or "").split())
     result = SignResult()
     items = []
     for pn in pns:
         try:
             record = record_store.load(repo, pn)
+            chosen = slots_for(record.pending) if record.pending else []
         except record_model.RegistryError as e:
             result.errors[pn] = str(e)
             continue
-        if not record.pending or not signoff_slots.open_slots(record.pending, me.id):
+        if not chosen:
             continue                                            # nothing left for you here (or already done)
 
         def edit(record, user, batch_id=record.pending.get("id")):
             pending = workflow_request.pending_of(record, batch_id)
-            mine = signoff_slots.open_slots(pending, me.id)
+            mine = slots_for(pending)
             if not mine:
                 raise record_model.RegistryError(f"You have nothing left to sign on {record.pn}.")
             workflow_request.check_files_unchanged(repo, pending)
             for index in mine:
-                pending["signoffs"].append({"slot": index, "by": user, "id": me.id, "roles": pending["slots"][index]
-                                            ["roles"], "at": record_model.now_utc(),
-                                            **({"comment": comment} if comment else {})})
+                slot = pending["slots"][index]
+                entry = {"slot": index, "by": user, "id": me.id, "roles": slot["roles"], "at": record_model.now_utc(),
+                         **({"comment": comment} if comment else {})}
+                if superuser:
+                    entry["superuser"] = True
+                    if slot.get("id") != me.id:
+                        entry.update({"for": slot.get("name", ""), "for_id": slot.get("id")})
+                pending["signoffs"].append(entry)
+            roles = [" or ".join(pending["slots"][i]["roles"]) for i in mine]
+            if superuser:
+                roles = [role + ("" if pending["slots"][i].get("id") == me.id else
+                                 f" for {pending['slots'][i].get('name', '')}") for role, i in zip(roles, mine)]
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_SIGNED, user, action=pending["action"],
-                               roles=[" or ".join(pending["slots"][i]["roles"]) for i in mine],
+                               roles=roles, superuser=True if superuser else None,
                                comment=comment or None, waiting_on=signoff_slots.waiting_on(pending) or None)
 
-        items.append((pn, "signoff", edit, f"{pn}: signed off"))
+        items.append((pn, "signoff", edit, f"{pn}: signed off" + (" as superuser" if superuser else "")))
     if items:
         batch = batch_core.edit_records(repo, items)
         result.signed = list(batch.results)

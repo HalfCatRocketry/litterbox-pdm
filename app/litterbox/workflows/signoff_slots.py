@@ -1,6 +1,7 @@
 """
 signoff_slots.py - the sign-off slots of a pending request: who is named for each, who has signed, who
-the request is still waiting on, and whether a person may sign.
+the request is still waiting on, and whether a person may sign (as the person named, or as a superuser, who may
+sign for anyone).
 """
 
 from litterbox.team import team_model
@@ -49,6 +50,21 @@ def is_admin(person):
 
 def is_signer(pending, person):
     return any(s.get("id") == person.id for s in pending["slots"])
+
+
+def requester_blocked(pending, person):
+    """True if this person asked for the request and its workflow doesn't let whoever asked sign it."""
+    return (not (pending.get("template") or {}).get("requester_may_sign", True)
+            and pending.get("requested_by_id") == person.id)
+
+
+def superuser_slots(pending, person, directory):
+    """Indices of the sign-offs still open that this person may give as a superuser, whoever they are named for:
+    [] unless they hold a superuser role. A superuser may fill several sign-offs of one request, but not sign their
+    own request when its workflow doesn't allow that."""
+    if directory is None or not directory.is_superuser(person) or requester_blocked(pending, person):
+        return []
+    return [i for i in range(len(pending["slots"])) if not slot_done(pending, i)]
 
 
 def may_sign(pending, person):

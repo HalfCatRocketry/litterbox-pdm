@@ -110,6 +110,34 @@ class OpenWiring(unittest.TestCase):
         self.app.open_part()
         self.assertEqual(len(self.opened), 2)
 
+    def test_open_also_offers_revisions_released_before(self):
+        self.row.revision, self.row.released_revision, self.row.released_revisions = "C", "B", ("A", "B")
+        self.row.revisions = {"A": self.A, "B": self.B, "C": ["cad/HCR-00007-001_C.SLDPRT"]}
+        self.app.open_part()
+        self.assertEqual(self.asked[0][0], ["Rev C (working)", "Rev B (released)", "Rev A (previously released)"])
+        self.assertEqual(self.opened, [("HCR-00007-001_A.SLDPRT", {".pdf": "x"})])      # answered A
+
+    def test_the_pop_out_details_window_reads_its_own_parts_tabs(self):
+        from litterbox.records import record_model
+        record = record_model.Record(self.pn, "Part", "Alex", "2026-10-01T10:00:00Z", revision="B",
+                                     released_revision="A")
+        replace(self, self.gui.record_store, "load", lambda repo, pn: record)
+        windows, read, exported = [], [], []
+        real = self.gui.history_window.HistoryWindow
+        replace(self, self.gui.history_window, "HistoryWindow",
+                lambda *a, **k: windows.append(real(*a, **k)) or windows[-1])
+        self.app._read_references_into = lambda view, pn, wanted: read.append(("references", pn))
+        self.app._read_bom_into = lambda view, pn, wanted: read.append(("bom", pn))
+        self.app.export_bom = lambda rev, mode, pn=None: exported.append((rev, pn))
+        self.app.show_history()
+        view = windows[0].view
+        self.assertIn("Where used", view.reference_trees)
+        for tab in ("Uses", "Where used", "BOM", "Uses"):
+            view.on_tab(tab)
+        self.assertEqual(read, [("references", self.pn), ("bom", self.pn)])        # each read once
+        view.on_export_bom("A", "flat")
+        self.assertEqual(exported, [("A", self.pn)])
+
     def test_history_window_can_open_a_chosen_revision(self):
         self.app._open_revision(self.pn, "A", False)
         self.app._open_revision(self.pn, "B", True)

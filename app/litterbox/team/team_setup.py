@@ -45,8 +45,10 @@ def setup_team(repo, name=None, email=None, roles=None):
     person_id = re.sub(r"[^a-z0-9._-]+", "-", host_name.lower()).strip("-.")[:40] or "owner"
     if not team_model.ID_PATTERN.match(person_id):
         person_id = "owner"
+    roles = list(roles if roles is not None else team_model.STANDARD_ROLES)
+    standard = {r.lower() for r in team_model.STANDARD_SUPERUSER_ROLES}
     directory = team_model.Directory([team_model.Person(person_id, name, email, [host_name], team_model.OWNER, [], True, [])],
-                          list(roles if roles is not None else team_model.STANDARD_ROLES))
+                          roles, superuser_roles=[r for r in roles if r.lower() in standard])
     team_store.save(repo, directory)
     try:
         runner.run(["git", "add", "--", layout.PEOPLE_FILE], repo)

@@ -36,7 +36,7 @@ MISSING = "missing"             # there is no record for the part
 STATE_TEXT = {
     OK: "OK",
     STALE: "Newer revision released",
-    UNRELEASED: "Not released yet",
+    UNRELEASED: "Not released",
     CANCELLED: "Revision was cancelled",
     VOID: "Part was voided",
     MISSING: "Part not found",

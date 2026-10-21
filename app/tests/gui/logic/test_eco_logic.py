@@ -105,8 +105,7 @@ class TestPartDetails(unittest.TestCase):
         self.assertNotIn("Released", c)
         self.assertEqual((a["Workflow"], a["Signed off by"]), ("Release T1", "Alex Smith, Bea Jones"))
         self.assertEqual((a["Files"], b["Files"]), ("PRT", "No files"))
-        self.assertEqual(a["Uses"], "HCR-00005-001_A")
-        self.assertNotIn("Uses", b)
+        self.assertNotIn("Uses", a)                    # that's the Uses tab
         for one in (a, b, c):                          # the same whatever revision is picked
             self.assertEqual((one["Part"], one["Name"], one["Description"]), ("HCR-00001-001", "Bracket", "Left side"))
 

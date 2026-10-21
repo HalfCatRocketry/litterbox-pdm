@@ -75,7 +75,7 @@ def format_history(record, local=True):
         if changes:
             parts.append("; ".join(str(c) for c in changes))
         if event.get("event") == "release_signed" and event.get("roles"):
-            parts.append("as " + ", ".join(event["roles"]))
+            parts.append("as " + ", ".join(event["roles"]) + (" (superuser)" if event.get("superuser") else ""))
         if event.get("event") == "release_requested" and event.get("waiting_on"):
             parts.append("needs " + ", ".join(event["waiting_on"]))
         if event.get("event") == "release_rejected" and event.get("signed"):
@@ -92,6 +92,8 @@ def format_history(record, local=True):
                                                                          else " rejected")
         if name == "released" and event.get("override"):
             label = "Released (Admin override)"
+        elif name == "release_rejected" and event.get("override"):
+            label += " (Admin override)"
         rows.append((
             to_display_time(event.get("at", ""), local),
             str(event.get("by", "")),
@@ -110,10 +112,14 @@ def row_revisions(row):
 
 
 def revision_label(row, rev):
-    """'Rev B (working)' / 'Rev A (released)' for the question asked before opening."""
+    """'Rev C (working)' / 'Rev B (released)' / 'Rev A (previously released)' for the question asked before
+    opening."""
     released = getattr(row, "released_revision", "")
-    if rev == released and not (rev == getattr(row, "revision", "") and row.record_status != "released"):
+    working = getattr(row, "revision", "")
+    if rev == released and not (rev == working and row.record_status != "released"):
         return f"Rev {rev} (released)"
+    if rev != working and rev in getattr(row, "released_revisions", ()):
+        return f"Rev {rev} (previously released)"
     return f"Rev {rev} (working)"
 
 

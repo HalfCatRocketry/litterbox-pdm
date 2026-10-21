@@ -21,7 +21,7 @@ STATUS = {
     "released":  ("check",    "Released", "Frozen. Revise it to make a new revision."),
     "cots":      ("nut",      "COTS", "A purchased part."),
     "void":      ("ban",      "Void", "No longer used."),
-    "pending":   ("clock",    "Waiting for sign-off", "A request is waiting for sign-offs (see My Tasks)."),
+    "pending":   ("clock",    "Waiting for sign-off", "A request is waiting for sign-offs (see Workflows)."),
     "missing":   ("cross",    "Missing", "Its files are missing."),
     "error":     ("cross",    "Unreadable", "Its record can't be read."),
 }

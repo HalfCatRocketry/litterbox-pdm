@@ -87,10 +87,11 @@ class ReferenceActions:
         if not self.run_task(work, "Updated the lists of parts used", on_success=done, refresh=False):
             window.set_idle()
 
-    def update_bom(self):
-        """Update BOM on the BOM tab: read the highlighted assembly's files again and count its parts. SolidWorks
-        is used if it is open; if not, it is started out of sight and closed afterwards."""
-        pn = self.pane_pn
+    def update_bom(self, pn=None, then=None):
+        """Update BOM on the BOM tab: read the assembly's files again (`pn`, or the details pane's) and count its
+        parts, then call then(). SolidWorks is used if it is open; if not, it is started out of sight and closed
+        afterwards."""
+        pn = pn or self.pane_pn
         if pn is None:
             return
         repo = self.repo()
@@ -105,6 +106,8 @@ class ReferenceActions:
             text, problems = reference_text.update_summary(results)
             if problems:
                 messagebox.showwarning("Update BOM", text)
+            if then:
+                then()
 
         self.run_task(work, "Updated the BOM", on_success=done, refresh=False, label="Counting parts with SolidWorks",
                       parts=(pn,))

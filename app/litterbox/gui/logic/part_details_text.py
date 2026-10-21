@@ -1,6 +1,7 @@
 """
 part_details_text.py - a part's Details tab: the revisions you can pick from, and what is known about one of them
-(its state, release, sign-offs, ECO, files, the parts it uses, and the part's purchasing information).
+(its state, release, sign-offs, ECO and files, and the part's purchasing information). The parts it uses are on the
+Uses tab.
 """
 
 from litterbox.gui.logic import history_text
@@ -58,16 +59,14 @@ def revision_details(record, rev, revisions, local=True):
         if approval.get("template_name"):
             label = workflow_templates.label_of(approval.get("action") or workflow_templates.RELEASE)
             fields.append(("Workflow", f"{label} {approval['template_name']}"))
-        signed = [s.get("by", "") for s in approval.get("signoffs", [])]
+        signed = [s.get("by", "") + (f" (superuser, for {s['for']})" if s.get("for") else "")
+                  for s in approval.get("signoffs", [])]
         if signed:
             fields.append(("Signed off by", ", ".join(signed)))
     number, how = eco_for(record, rev)
     fields.append(("ECO", f"{number} ({how})" if number else "None"))
     files = revisions.get(rev, [])
     fields.append(("Files", list_view.file_types(files) if files else "No files"))
-    if rev in record.references:
-        used = record.references[rev]
-        fields.append(("Uses", ", ".join(used) if used else "No other parts"))
     fields.append(("Created", f"by {record.created_by} on {history_text.to_display_time(record.created_at, local)}"))
     if record.cots:
         fields.append(("COTS", "Yes (a purchased part)"))

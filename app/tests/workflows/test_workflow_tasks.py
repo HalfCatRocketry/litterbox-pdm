@@ -33,9 +33,10 @@ class TestTasks(Fixture, unittest.TestCase):
         self.assertEqual(t.label, str(PART))
         self.assertEqual([s["name"] for s in t.slots], ["Bea Jones", "Alex Smith"])
 
-    def test_someone_not_named_only_looks(self):
+    def test_someone_not_named_only_looks_in_all_workflows(self):
         self.request()
-        (t,) = self.tasks("cy")
+        self.assertEqual(self.tasks("cy"), [])                         # not in their My Tasks
+        (t,) = workflow_tasks.tasks_from_rows(self.rows(), identity_for("cy", team_store.load(self.a)), everything=True)
         self.assertEqual((t.can_sign, t.can_reject, t.can_complete), (False, False, False))
         self.assertIn("not one of the people named", t.why_not_sign)
 
@@ -64,7 +65,7 @@ class TestTasks(Fixture, unittest.TestCase):
     def test_nobody_can_act_without_a_team_identity(self):
         self.request()
         ident = SimpleNamespace(state=team_identity.NOT_LISTED, person=None, directory=None)
-        (t,) = workflow_tasks.tasks_from_rows(self.rows(), ident)
+        (t,) = workflow_tasks.tasks_from_rows(self.rows(), ident, everything=True)
         self.assertFalse(any((t.can_sign, t.can_reject, t.can_complete, t.can_withdraw, t.can_override)))
 
     def test_things_waiting_on_me_come_first(self):

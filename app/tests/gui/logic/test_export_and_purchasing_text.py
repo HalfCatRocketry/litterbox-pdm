@@ -53,12 +53,12 @@ class Purchasing(unittest.TestCase):
         self.assertEqual(purchasing_text.dialog_result(old, {"unit_cost": "$3"}),
                          ("", {"supplier": "Acme", "supplier_pn": "", "unit_cost": "3", "lead_time_days": ""}))
 
-    def test_the_details_tab_shows_the_filled_in_fields(self):
+    def test_the_details_tab_shows_every_field_even_blank_ones(self):
         record = record_model.Record(pn=PN("HCR", 1, 1), name="Bolt", created_by="Alex", created_at="t",
                                      purchasing={"supplier": "Acme", "lead_time_days": 3})
         fields = dict(part_details_text.revision_details(record, "A", {}))
         self.assertEqual((fields["Supplier"], fields["Lead time (days)"]), ("Acme", "3"))
-        self.assertNotIn("Unit cost", fields)
+        self.assertEqual((fields["Unit cost"], fields["Supplier part number"]), ("", ""))
 
     def test_the_history_names_the_event(self):
         record = record_model.Record(pn=PN("HCR", 1, 1), name="Bolt", created_by="Alex", created_at="t",

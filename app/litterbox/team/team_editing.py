@@ -89,8 +89,9 @@ def holders_of(directory, role):
     return [p.name for p in directory.people if role.lower() in (r.lower() for r in p.roles)]
 
 
-def set_roles(directory, actor, roles, scrub=False):
-    """Replace the list of roles this org uses.
+def set_roles(directory, actor, roles, scrub=False, superusers=None):
+    """Replace the list of roles this org uses, and (if `superusers` is given) which of them are superuser roles,
+    whose holders may sign for anyone.
 
     A role that somebody still holds can't be dropped, unless scrub=True, which takes it off everyone who
     has it (the Roles window asks the Admin to confirm that first)."""
@@ -104,4 +105,6 @@ def set_roles(directory, actor, roles, scrub=False):
             raise team_model.PeopleError(f"{p.name} still has the role '{gone[0]}'. Take it off them first.")
         p.roles = [r for r in p.roles if r.lower() in keep]
     directory.roles = roles
+    if superusers is not None:
+        directory.superuser_roles = [" ".join(r.split()) for r in team_model.text_list(list(superusers), "roles")]
     team_model.validate(directory)

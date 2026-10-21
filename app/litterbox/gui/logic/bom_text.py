@@ -6,7 +6,7 @@ is exported.
 from litterbox.records import purchasing_info
 from litterbox.references import bom
 
-COLUMNS = (("pn", "Part", 130), ("rev", "Rev", 40), ("qty", "Qty", 40), ("name", "Name", 160), ("supplier", "Supplier", 110),
+COLUMNS = (("pn", "Part", 130), ("rev", "Rev", 50), ("qty", "Qty", 50), ("name", "Name", 160), ("supplier", "Supplier", 110),
            ("cost", "Unit cost", 70), ("lead", "Lead time", 70), ("state", "State", 160))
 
 INDENT = "    "

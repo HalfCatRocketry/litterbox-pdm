@@ -1,9 +1,9 @@
 """
 part_details.py - PartDetailsView: everything about one part, in tabs. Details (pick a revision to see its state,
-release, sign-offs and ECO), History (everything that happened, with buttons to open older revisions), and, in the
-main window's pane, Uses, Where used and BOM (the bill of materials, single level, indented or every part once, with
-Export...). The main window's right-hand pane and the pop-out Details window both use
-it; show() fills it for another part without building it again.
+release, sign-offs and ECO), History (everything that happened, with buttons to open older revisions), Uses, Where
+used and BOM (the bill of materials, single level, indented or every part once, with Export...). The main window's
+right-hand pane and the pop-out Details window both use it; show() fills it for another part without building it
+again.
 """
 
 import tkinter as tk
@@ -26,22 +26,27 @@ USES_COLUMNS = (("pn", "Part", 90), ("name", "Name", 160), ("rev", "Rev used", 7
                 ("state", "State", 200))
 
 
-USED_IN_COLUMNS = (("pn", "Assembly", 90), ("name", "Name", 160), ("rev", "Its rev", 60), ("status", "Its status", 80),
-                   ("used", "Rev of this part", 100), ("state", "State", 200))
+USED_IN_COLUMNS = (("pn", "Assembly", 90), ("name", "Name", 160), ("rev", "Rev", 60), ("status", "Status", 80),
+                   ("used", "Rev used", 80), ("state", "State", 200))
 
 
 HISTORY_COLUMNS = (("when", "When", 130), ("who", "Who", 100), ("what", "What", 90), ("details", "Details", 360))
 
 
-def _table(parent, columns, height=None, stretch_last=True):
-    """A dark table with sortable headings and a scroll bar, in a frame of its own. Returns (frame, tree, sorter)."""
+REVISION_COLUMNS = (("rev", "Rev", 60), ("state", "State", 150), ("details", "Details", 300))
+
+
+def _table(parent, columns, height=None, stretch_last=True, scale=1.0):
+    """A dark table with sortable headings and a scroll bar, in a frame of its own. Returns (frame, tree, sorter).
+    The widths are at 100%; `scale` is the display's (Tk draws the headings bigger on a scaled display)."""
     frame = ctk.CTkFrame(parent, fg_color="transparent")
     frame.columnconfigure(0, weight=1)
     frame.rowconfigure(0, weight=1)
     options = {"height": height} if height else {}
     tree = ttk.Treeview(frame, columns=[c[0] for c in columns], show="headings", selectmode="browse", **options)
     for index, (name, _title, width) in enumerate(columns):
-        tree.column(name, width=width, minwidth=40, anchor="w", stretch=stretch_last and index == len(columns) - 1)
+        tree.column(name, width=round(width * scale), minwidth=round(40 * scale), anchor="w",
+                    stretch=stretch_last and index == len(columns) - 1)
     sorter = table_sorting.TableSorter(tree, [(c[0], c[1]) for c in columns])
     tree.grid(row=0, column=0, sticky="nsew")
     scroll = ctk.CTkScrollbar(frame, command=tree.yview)
@@ -51,14 +56,15 @@ def _table(parent, columns, height=None, stretch_last=True):
 
 
 class PartDetailsView(ctk.CTkFrame):
-    """on_open(rev, drawing) opens a revision's file; on_view_eco(number) shows an ECO; with references=True there
-    are Uses and Where used tabs, filled by show_references(), and a BOM tab: on_bom(rev, mode) asks for it to be
-    read (show_bom() fills it), on_export_bom(rev, mode) exports it and on_update_bom() counts its parts again
-(the Update BOM button, shown only when its quantities need it). on_tab(name) says which tab was chosen."""
+    """on_open(rev, drawing) opens a revision's file; on_view_eco(number) shows an ECO. The Uses and Where used tabs
+    are filled by show_references(), and the BOM tab by show_bom(): on_bom(rev, mode) asks for it to be read,
+    on_export_bom(rev, mode) exports it and on_update_bom() counts its parts again (the Update BOM button, shown only
+    when its quantities need it). on_tab(name) says which tab was chosen."""
 
-    def __init__(self, master, on_open=None, on_view_eco=None, references=False, on_tab=None,
+    def __init__(self, master, on_open=None, on_view_eco=None, on_tab=None,
                  on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None):
         super().__init__(master, fg_color="transparent")
+        self.scale = scaling.scale_of(self)
         self.on_open, self.on_view_eco, self.on_tab = on_open, on_view_eco, on_tab
         self.on_manage_references = on_manage_references
         self.on_bom, self.on_export_bom, self.on_update_bom = on_bom, on_export_bom, on_update_bom
@@ -68,19 +74,15 @@ class PartDetailsView(ctk.CTkFrame):
         self.rowconfigure(0, weight=1)
         self.tabs = ctk.CTkTabview(self, fg_color=theme.BG_PANEL, command=self._tab_changed)
         self.tabs.grid(row=0, column=0, sticky="nsew")
-        names = ("Details", "History") + (("Uses", "Where used", "BOM") if references else ())
-        for name in names:
+        for name in ("Details", "History", "Uses", "Where used", "BOM"):
             self.tabs.add(name)
             self.tabs.tab(name).columnconfigure(0, weight=1)
         self._details_tab(self.tabs.tab("Details"))
         self._history_tab(self.tabs.tab("History"))
         self.reference_trees = {}
-        if references:
-            for name, columns in (("Uses", USES_COLUMNS), ("Where used", USED_IN_COLUMNS)):
-                self._references_tab(self.tabs.tab(name), name, columns)
-        self.bom_tree = None
-        if references:
-            self._bom_tab(self.tabs.tab("BOM"))
+        for name, columns in (("Uses", USES_COLUMNS), ("Where used", USED_IN_COLUMNS)):
+            self._references_tab(self.tabs.tab(name), name, columns)
+        self._bom_tab(self.tabs.tab("BOM"))
         self.tabs.set("Details")
 
     def current_tab(self):
@@ -155,9 +157,10 @@ class PartDetailsView(ctk.CTkFrame):
         box.columnconfigure(0, weight=1)
         self.rev_tree = ttk.Treeview(box, columns=("rev", "state", "details"), show="headings", height=3,
                                      selectmode="browse")
-        for name, title, width in (("rev", "Rev", 50), ("state", "State", 130), ("details", "Details", 300)):
+        for name, title, width in REVISION_COLUMNS:
             self.rev_tree.heading(name, text=title, anchor="w")
-            self.rev_tree.column(name, width=width, minwidth=40, anchor="w", stretch=name == "details")
+            self.rev_tree.column(name, width=round(width * self.scale), minwidth=round(40 * self.scale), anchor="w",
+                                 stretch=name == "details")
         self.rev_tree.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         if self.on_open:
             buttons = ctk.CTkFrame(box, fg_color="transparent")
@@ -168,7 +171,7 @@ class PartDetailsView(ctk.CTkFrame):
             release_button.ReleaseButton(buttons, text="Open Drawing", width=100, height=28, fg_color=theme.TEAL,
                                          hover_color=theme.TEAL_HOVER, command=lambda: self._open(True)).grid(
                 row=1, column=0)
-        frame, self.tree, self.sorter = _table(tab, HISTORY_COLUMNS)
+        frame, self.tree, self.sorter = _table(tab, HISTORY_COLUMNS, scale=self.scale)
         frame.grid(row=1, column=0, sticky="nsew")
 
     def _open(self, drawing):
@@ -181,7 +184,7 @@ class PartDetailsView(ctk.CTkFrame):
         tab.rowconfigure(1, weight=1)
         note = ctk.CTkLabel(tab, text="", text_color=theme.MUTED, anchor="w", justify="left")
         note.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 4))
-        frame, tree, _sorter = _table(tab, columns)
+        frame, tree, _sorter = _table(tab, columns, scale=self.scale)
         frame.grid(row=1, column=0, sticky="nsew")
         if self.on_manage_references:
             release_button.ReleaseButton(tab, text="Update references...", height=28, fg_color=theme.GRAY,
@@ -207,6 +210,7 @@ class PartDetailsView(ctk.CTkFrame):
 
     # -- BOM -----------------------------------------------------------------------------
     def _bom_tab(self, tab):
+        """The revision and kind of list on one line, Export... and Update BOM under them, so a narrow pane fits."""
         tab.rowconfigure(2, weight=1)
         bar = ctk.CTkFrame(tab, fg_color="transparent")
         bar.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
@@ -220,19 +224,27 @@ class PartDetailsView(ctk.CTkFrame):
                           height=28, fg_color=theme.GRAY, button_color=theme.GRAY_HOVER,
                           button_hover_color=theme.ACCENT, command=lambda value: self._bom_changed()).grid(
             row=0, column=1, padx=(0, 8))
-        release_button.ReleaseButton(bar, text="Export...", width=90, height=28, fg_color=theme.ACCENT,
-                                     hover_color="#18527f", command=self._export_bom).grid(row=0, column=2)
-        self.bom_update = release_button.ReleaseButton(bar, text="Update BOM", width=100, height=28,
+        buttons = ctk.CTkFrame(bar, fg_color="transparent")
+        buttons.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        release_button.ReleaseButton(buttons, text="Export...", width=90, height=28, fg_color=theme.ACCENT,
+                                     hover_color="#18527f", command=self._export_bom).grid(row=0, column=0)
+        self.bom_update = release_button.ReleaseButton(buttons, text="Update BOM", width=100, height=28,
                                                        fg_color=theme.TEAL, hover_color=theme.TEAL_HOVER,
                                                        command=self._update_bom)
-        self.bom_update.grid(row=0, column=3, padx=(8, 0))
+        self.bom_update.grid(row=0, column=1, padx=(8, 0))
         self.bom_update.grid_remove()
         tooltip.Tooltip(self.bom_update, bom_text.update_button_text(True))
         self.bom_note = ctk.CTkLabel(tab, text="", text_color=theme.MUTED, anchor="w", justify="left",
                                      wraplength=320)
         self.bom_note.grid(row=1, column=0, sticky="ew", padx=4, pady=(2, 4))
-        frame, self.bom_tree, _sorter = _table(tab, bom_text.COLUMNS)
+        tab.bind("<Configure>", lambda event: self._wrap_bom_note(event.width), add="+")
+        frame, self.bom_tree, _sorter = _table(tab, bom_text.COLUMNS, scale=self.scale)
         frame.grid(row=2, column=0, sticky="nsew")
+
+    def _wrap_bom_note(self, width):
+        """The note under the BOM tab's buttons wraps to the tab's width (the event says pixels; labels want sizes
+        at 100%)."""
+        self.bom_note.configure(wraplength=max(width / self.scale - 20, 120))
 
     def bom_choice(self):
         """(revision, mode) picked on the BOM tab."""
@@ -254,8 +266,6 @@ class PartDetailsView(ctk.CTkFrame):
     def show_bom(self, rows=None, note="", can_update=False):
         """Fill the BOM tab with bom_text.table rows (None: not read yet, and `note` says why). `can_update` shows
         the Update BOM button."""
-        if self.bom_tree is None:
-            return
         if can_update and self.on_update_bom:
             self.bom_update.grid()
         else:
@@ -284,7 +294,6 @@ class PartDetailsView(ctk.CTkFrame):
             self.tree.insert("", "end", values=row)
         self.sorter.apply()
         self.show_references(None, None, "")
-        if self.bom_tree is not None:
-            self.bom_rev_menu.configure(values=choices)
-            self.bom_rev.set(choices[0])
-            self.show_bom(None, "")
+        self.bom_rev_menu.configure(values=choices)
+        self.bom_rev.set(choices[0])
+        self.show_bom(None, "")

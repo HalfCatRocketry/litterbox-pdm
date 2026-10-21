@@ -62,8 +62,8 @@ class ReferencesWindow(ctk.CTkToplevel):
                                        ("state", "State", 250)),
                  reference_text.uses_table(uses_list), uses_list),
                 (2, "This part is used in", (("tick", "", 34), ("pn", "Assembly", 110), ("name", "Name", 200),
-                                             ("rev", "Its rev", 60), ("status", "Its status", 80),
-                                             ("used", "Rev of this part", 110), ("state", "State", 230)),
+                                             ("rev", "Rev", 60), ("status", "Status", 80),
+                                             ("used", "Rev used", 90), ("state", "State", 230)),
                  reference_text.used_in_table(used_list), used_list)):
             ctk.CTkLabel(body, text=title if rows else title + " - nothing", text_color=theme.MUTED, anchor="w").grid(
                 row=row, column=0, sticky="w", padx=20, pady=(8, 0))

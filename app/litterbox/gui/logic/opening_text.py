@@ -13,8 +13,8 @@ def open_choices(row, drawing=False):
     """[(revision, files)] that Open (or Open Drawing) can open for this part.
 
     Normally one. When the part has both a released revision and a different working revision
-    with files, both are offered, working first, and the user is asked which to open.
-    With drawing=True only revisions that have a drawing are offered.
+    with files, both are offered, working first, then any revisions released before those (newest first),
+    and the user is asked which to open. With drawing=True only revisions that have a drawing are offered.
     """
     revisions = history_text.row_revisions(row)
     working = getattr(row, "revision", "A")
@@ -26,6 +26,9 @@ def open_choices(row, drawing=False):
         wanted.append(released)
     if not wanted and revisions:                       # fall back to the newest revision that has files
         wanted.append(max(revisions, key=revision_letters.revision_number))
+    for rev in reversed(getattr(row, "released_revisions", ())):
+        if rev not in wanted and revisions.get(rev):
+            wanted.append(rev)
     choices = [(rev, revisions[rev]) for rev in wanted]
     if drawing:
         choices = [(rev, files) for rev, files in choices if _has_drawing(files)]

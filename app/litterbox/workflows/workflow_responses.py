@@ -42,10 +42,10 @@ def _each(repo, pns, edit_for, action_name, message, ecos=None):
 
 
 @converts_errors
-def reject(repo, pns, comment):
+def reject(repo, pns, comment, override=False):
     """Send a pending batch back. A person named to sign (or an Admin) may; a comment is required. The parts are
-    free to check out again."""
-    me = workflow_request.current_member(repo, "signoff")
+    free to check out again. override=True is an Admin's Override Reject, recorded as an Admin override."""
+    me = workflow_request.current_member(repo, "override_release" if override else "signoff")
     comment = " ".join((comment or "").split())
     if not comment:
         raise workflow_templates.WorkflowError("Say why you are rejecting it, so the person who asked knows what to fix.")
@@ -59,14 +59,16 @@ def reject(repo, pns, comment):
             if not (signoff_slots.is_signer(pending, me) or signoff_slots.is_admin(me)):
                 raise record_model.RegistryError("Only a person named to sign this (or an Admin) can reject it.")
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REJECTED, user, action=pending["action"],
-                               reason=comment, requested_by=pending.get("requested_by"),
+                               reason=comment, override=True if override else None,
+                               requested_by=pending.get("requested_by"),
                                requested_by_id=pending.get("requested_by_id"),
                                signed=[e.get("by") for e in pending["signoffs"]] or None,
                                signed_ids=[e["id"] for e in pending["signoffs"] if e.get("id")] or None)
             record.pending = {}
         return edit
 
-    return _each(repo, pns, edit_for, "signoff", "{pn}: request rejected - " + comment, ecos)
+    return _each(repo, pns, edit_for, "signoff", "{pn}: request rejected" + (" (Admin override)" if override else "")
+                 + " - " + comment, ecos)
 
 
 @converts_errors

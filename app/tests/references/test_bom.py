@@ -65,7 +65,7 @@ class Problems(unittest.TestCase):
         found = bom.lines(records, FRAME, "A", bom.SINGLE)
         states = {line.pn.base: line.state for line in found}
         self.assertEqual(states, {3: reference_model.UNRELEASED, 4: reference_model.OK, 9: reference_model.MISSING})
-        self.assertEqual(bom.problems(found), ["1 line: part not found", "1 line: not released yet",
+        self.assertEqual(bom.problems(found), ["1 line: part not found", "1 line: not released",
                                                "3 lines: quantity not known"])
 
     def test_a_loop_stops_instead_of_going_round_for_ever(self):

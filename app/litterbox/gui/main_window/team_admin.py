@@ -128,8 +128,9 @@ class TeamAdmin:
             return
         directory = window.draft.directory
         roles_dialog.RolesDialog(window, directory.roles, lambda role: team_editing.holders_of(window.draft.directory, role),
-                    apply=lambda roles: self._stage(window, "Roles", lambda d, who: team_editing.set_roles(
-                        d, who, roles, scrub=True))).show()
+                    apply=lambda roles, superusers: self._stage(window, "Roles", lambda d, who: team_editing.set_roles(
+                        d, who, roles, scrub=True, superusers=superusers)),
+                    superusers=directory.superuser_roles).show()
 
     def transfer_owner(self, window, person_id):
         if not self._may("transfer_owner"):

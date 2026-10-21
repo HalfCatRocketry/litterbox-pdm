@@ -22,8 +22,12 @@ ROWS = [
 BY_PN = {r.pn: r for r in ROWS}
 
 
-def revised(base, working, released, revisions, status="in_work"):
-    """A part row with several revisions, e.g. revised(7, "B", "A", {"A": [...], "B": [...]})."""
+def revised(base, working, released, revisions, status="in_work", released_revisions=None):
+    """A part row with several revisions, e.g. revised(7, "B", "A", {"A": [...], "B": [...]}). `released_revisions`
+    is every revision released (oldest first); by default just `released`."""
+    if released_revisions is None:
+        released_revisions = (released,) if released else ()
     r = PartStatus(PN("HCR", base, 1), "Part", status, "Available", "ok", files=list(revisions.get(working, [])),
-                   revision=working, released_revision=released, revisions=revisions)
+                   revision=working, released_revision=released, revisions=revisions,
+                   released_revisions=tuple(released_revisions))
     return r

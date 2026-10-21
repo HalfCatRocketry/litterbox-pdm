@@ -40,6 +40,14 @@ class PartStatus:
     not_downloaded: bool = False        # the working revision's files are pointers (see git/lfs_download.py)
     project: str = ""                   # the project it belongs to (core/projects.py), "" for none
     bom_outdated: bool = False          # an assembly whose part counts are missing or out of date
+    released_revisions: tuple = ()      # every revision that has been released, oldest first
+
+
+def released_revisions(record):
+    """Every revision of a record that has been released, oldest first."""
+    released = {e.get("revision") for e in record.history
+                if e.get("event") == record_model.EVENT_RELEASED and e.get("revision")}
+    return tuple(sorted(released, key=revision_letters.revision_number))
 
 
 def get_status(repo):
@@ -111,5 +119,6 @@ def get_status(repo):
         rows.append(PartStatus(pn, record.name, record.status, state, kind, owner, files,
                                record.description, record.cots, record.import_path,
                                record.revision, record.released_revision, revisions, outdated, record.pending,
-                               not_downloaded, project=record.project, bom_outdated=bom_outdated))
+                               not_downloaded, project=record.project, bom_outdated=bom_outdated,
+                               released_revisions=released_revisions(record)))
     return rows

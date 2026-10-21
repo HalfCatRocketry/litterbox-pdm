@@ -2,7 +2,7 @@
 detail_pane.py - the details pane beside the parts list: it follows the highlighted part (the blue row), showing
 its status, Details, History, what it uses and where it is used, and its BOM. The Uses, Where used and BOM tabs are
 read in the background, only when one of them is showing. The pane can be hidden (its » button, or View > Details pane; a « at
-the right of the toolbar brings it back) or popped out into a window of its own.
+the right of the toolbar brings it back) or popped out into a window of its own, whose tabs are read the same way.
 """
 
 from litterbox.core.part_number import parse as parse_pn
@@ -109,6 +109,16 @@ class DetailPane:
         elif name == "BOM" and self.pane_pn is not None:
             self._load_pane_bom()
 
+    def _popout_tab_changed(self, window, pn, name):
+        """A tab of a pop-out Details window (windows/history_window.py) was chosen: read what it shows, the first
+        time it is shown."""
+        if name in REFERENCE_TABS and "references" not in window.loaded:
+            window.loaded.add("references")
+            self._read_references_into(window.view, pn, window.winfo_exists)
+        elif name == "BOM" and "bom" not in window.loaded:
+            window.loaded.add("bom")
+            self._read_bom_into(window.view, pn, window.winfo_exists)
+
     def _load_pane_bom(self):
         """Work out the BOM of the revision and the kind of list picked on the BOM tab, in the background."""
         pn = self.pane_pn
@@ -118,7 +128,13 @@ class DetailPane:
         if getattr(self, "_pane_bom_for", None) == (pn, rev, mode, id(self.rows)):
             return
         self._pane_bom_for = (pn, rev, mode, id(self.rows))
-        self.pane_view.show_bom(None, "Reading...")
+        self._read_bom_into(self.pane_view, pn, lambda: self.pane_pn == pn)
+
+    def _read_bom_into(self, view, pn, wanted):
+        """Work out the BOM of `pn` for the revision and kind of list picked on `view`'s BOM tab, in the background.
+        wanted() says whether the view still shows that part once it is done."""
+        rev, mode = view.bom_choice()
+        view.show_bom(None, "Reading...")
         repo = self.repo()
 
         def load():
@@ -141,8 +157,8 @@ class DetailPane:
                 return None, f"Couldn't work out the BOM: {e}"
 
         def show(result):
-            if self.pane_pn == pn and self.pane_view.bom_choice() == (rev, mode):
-                self.pane_view.show_bom(*result)
+            if wanted() and view.bom_choice() == (rev, mode):
+                view.show_bom(*result)
 
         self.run_task(load, "", on_success=show, refresh=False, is_refresh=True, label="Reading the BOM")
 
@@ -151,7 +167,12 @@ class DetailPane:
         if getattr(self, "_pane_refs_for", None) == (pn, id(self.rows)):
             return
         self._pane_refs_for = (pn, id(self.rows))
-        self.pane_view.show_references(None, None, "Reading...")
+        self._read_references_into(self.pane_view, pn, lambda: self.pane_pn == pn)
+
+    def _read_references_into(self, view, pn, wanted):
+        """Read what `pn` uses and where it is used, in the background, then fill `view`'s two tabs. wanted() says
+        whether the view still shows that part once it is done."""
+        view.show_references(None, None, "Reading...")
         repo = self.repo()
 
         def load():
@@ -162,10 +183,10 @@ class DetailPane:
                 return None, None, str(e)
 
         def show(result):
-            if self.pane_pn != pn:
-                return                                  # another part was clicked meanwhile
+            if not wanted():
+                return                                  # another part was clicked meanwhile, or the window closed
             uses, used, problem = result
-            self.pane_view.show_references(uses, used, f"Couldn't read the references: {problem}" if problem else "")
+            view.show_references(uses, used, f"Couldn't read the references: {problem}" if problem else "")
 
         self.run_task(load, "", on_success=show, refresh=False, is_refresh=True, label="Reading references")
 

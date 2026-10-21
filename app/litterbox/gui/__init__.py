@@ -12,7 +12,7 @@ rest of the litterbox package; the git work is in git/.
     widgets/          small building blocks (ReleaseButton, menu bar, tooltips, icons, table sorting, ...)
     dialogs/          one small window per file
     windows/          the bigger non-modal windows (a part's Details pop-out, References, ECO, Import)
-    screens/          My Tasks, ECOs and Team, shown in the main window from its sidebar
+    screens/          Workflows, ECOs and Team, shown in the main window from its sidebar
     panes/            a part's details, shown beside the parts list
     main_window/      the main window (App), one file per area
     logic/            decisions with no window code

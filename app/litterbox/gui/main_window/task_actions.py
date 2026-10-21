@@ -8,6 +8,7 @@ from tkinter import messagebox
 from litterbox.errors import LitterboxError
 from litterbox.gui.dialogs.workflow import reassign_dialog
 from litterbox.gui.dialogs.workflow import request_dialog
+from litterbox.gui.dialogs.workflow import superuser_sign_dialog
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import request_parts
 from litterbox.gui.logic import task_text
@@ -16,7 +17,6 @@ from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_responses
 from litterbox.workflows import workflow_signoff
 from litterbox.workflows import workflow_store
-from litterbox.workflows import workflow_tasks
 from litterbox.workflows import workflow_templates
 
 
@@ -29,12 +29,7 @@ class TaskActions:
         return [screen] if screen is not None else []
 
     def _refresh_tasks(self):
-        """Update the My Tasks button's count and the My Tasks screen."""
-        button = getattr(self, "tasks_button", None)
-        if button is None:
-            return
-        tasks = workflow_tasks.tasks_from_rows(self.rows, self.identity)
-        button.configure(text=task_text.tasks_button_text(workflow_tasks.count_for_me(tasks)))
+        """Reload the My Tasks screen. (The count beside My Tasks in the sidebar is updated with the other counts.)"""
         for window in self._task_windows():
             window.reload()
 
@@ -77,10 +72,31 @@ class TaskActions:
                                                          "discarded, and you can ask again later."):
             self.run_task(lambda: workflow_responses.withdraw(repo, pns), f"Withdrew the request for {task.label}")
 
+    def task_superuser_sign(self, task):
+        """All Workflows' Approve as superuser...: review the request and tick the sign-offs to give for others."""
+        chosen = superuser_sign_dialog.SuperuserSignDialog(self, task).show()
+        if chosen is None:
+            return
+        slots, comment = chosen
+        repo, pns = self.repo(), task.pns
+        self.run_task(lambda: workflow_signoff.sign_as_superuser(repo, pns, slots, comment),
+                      f"Signed off {task.label} as superuser", on_success=lambda result: self._signed(task, result))
+
+    def task_override_reject(self, task):
+        """All Workflows' Override Reject...: an Admin sends a request back, recorded as an Admin override."""
+        reason = self._ask_reason("Why are you rejecting it? The person who asked will see this, and it is recorded "
+                                  "as an Admin override.", f"Override Reject: {task.label}")
+        if reason is None:
+            return
+        repo, pns = self.repo(), task.pns
+        self.run_task(lambda: workflow_responses.reject(repo, pns, reason, override=True),
+                      f"Rejected {task.label} (Admin override)")
+
     def task_override(self, task):
+        """All Workflows' Override Approve...: an Admin does the action without the sign-offs, with a reason."""
         label = workflow_templates.label_of(task.action)
         reason = self._ask_reason(f"Why {label.lower()} without the sign-offs? This is recorded permanently.",
-                                  f"Admin override: {label.lower()} {task.label}")
+                                  f"Override Approve: {label.lower()} {task.label}")
         if reason is None:
             return
         repo, pns, action = self.repo(), task.pns, task.action
@@ -143,12 +159,12 @@ class TaskActions:
         other = next((r for r in rows if r.pending.get("action") != action), None)
         if other is not None:
             messagebox.showinfo(label, f"{other.pn} has a {workflow_templates.label_of(other.pending.get('action'))} request "
-                                       "waiting for sign-offs. Open My Tasks to approve, reject or withdraw it.")
+                                       "waiting for sign-offs. Open Workflows to approve, reject or withdraw it.")
             return
         waiting = next((r for r in rows if not signoff_slots.is_complete(r.pending)), None)
         if waiting is not None:
             messagebox.showinfo(label, f"{waiting.pn} is still waiting for: " + ", ".join(
-                signoff_slots.waiting_on(waiting.pending)) + ".\n\nOpen My Tasks to approve, reject or withdraw the "
+                signoff_slots.waiting_on(waiting.pending)) + ".\n\nOpen Workflows to approve, reject or withdraw the "
                                                         "request.")
             return
         if messagebox.askokcancel(f"{label} {len(pns)} part{'s' if len(pns) != 1 else ''}",

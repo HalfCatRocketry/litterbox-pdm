@@ -36,6 +36,10 @@ OWNER_ACTIONS = frozenset({"transfer_owner", "rename_org"})
 STANDARD_ROLES = ["Responsible Engineer", "Manufacturing", "Quality", "Analysis", "Manager", "Chief"]
 
 
+# Standard roles that are superuser roles when they are added: someone at the top who may sign for anyone
+STANDARD_SUPERUSER_ROLES = ["Chief"]
+
+
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 
 
@@ -73,6 +77,7 @@ class Directory:
     people: list = field(default_factory=list)
     roles: list = field(default_factory=list)
     extra: dict = field(default_factory=dict)       # top-level fields a newer Litterbox wrote, kept
+    superuser_roles: list = field(default_factory=list)     # roles whose holders may sign any sign-off
 
     def get(self, person_id):
         person_id = str(person_id).strip().lower()
@@ -87,13 +92,23 @@ class Directory:
     def owner(self):
         return next((p for p in self.people if p.access == OWNER), None)
 
+    def is_superuser(self, person):
+        """True if this person is active and holds a superuser role: they may sign for any role."""
+        wanted = {r.lower() for r in self.superuser_roles}
+        return bool(person and person.active and any(r.lower() in wanted for r in person.roles))
+
     def to_dict(self):
         data = {"roles": list(self.roles), "people": [p.to_dict() for p in self.people]}
+        if self.superuser_roles:
+            data["superuser_roles"] = list(self.superuser_roles)
         data.update({k: v for k, v in self.extra.items() if k not in data})
         return data
 
 
 PERSON_FIELDS = {"id", "name", "email", "host_names", "access", "roles", "active", "signing_keys"}
+
+
+DIRECTORY_FIELDS = {"roles", "people", "superuser_roles"}
 
 
 def text_list(value, what):
@@ -123,7 +138,8 @@ def from_dict(data):
             signing_keys=text_list(entry.get("signing_keys"), "signing_keys"),
             extra={k: v for k, v in entry.items() if k not in PERSON_FIELDS}))
     directory = Directory(people, text_list(data.get("roles"), "roles"),
-                          extra={k: v for k, v in data.items() if k not in ("roles", "people")})
+                          extra={k: v for k, v in data.items() if k not in DIRECTORY_FIELDS},
+                          superuser_roles=text_list(data.get("superuser_roles"), "superuser_roles"))
     validate(directory)
     return directory
 
@@ -137,6 +153,9 @@ def validate(directory):
     for role in directory.roles:
         if "," in role or "\n" in role:
             raise PeopleError(f"The role '{role}' can't contain a comma or a line break.")
+    # A superuser role that is no longer a role is dropped (an older Litterbox may have removed the role)
+    directory.superuser_roles = list(dict.fromkeys(canon[r.lower()] for r in directory.superuser_roles
+                                                   if r.lower() in canon))
     owners = 0
     for p in directory.people:
         if not ID_PATTERN.match(p.id):

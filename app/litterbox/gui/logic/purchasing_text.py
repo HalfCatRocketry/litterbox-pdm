@@ -20,9 +20,8 @@ def dialog_result(old, typed):
 
 
 def details_rows(section):
-    """[(label, text)] for the Details tab: only the fields that are filled in."""
-    return [(purchasing_info.LABELS[key], purchasing_info.shown(section, key))
-            for key in purchasing_info.FIELDS if purchasing_info.shown(section, key)]
+    """[(label, text)] for the Details tab: every field, blank when it isn't filled in."""
+    return [(purchasing_info.LABELS[key], purchasing_info.shown(section, key)) for key in purchasing_info.FIELDS]
 
 
 def done_text(pn, outcome):

@@ -1,8 +1,9 @@
 """
-workflow_tasks.py - "My tasks": the requests waiting on you, worked out from the parts list.
+workflow_tasks.py - the Workflows screen's lists, worked out from the parts list: My Tasks (the requests you are
+named to sign or asked for) and All Workflows (every request, for Admins and superusers).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from litterbox.team import team_identity
 from litterbox.workflows import signoff_slots
@@ -28,9 +29,11 @@ class Task:
     can_reject: bool = False
     can_complete: bool = False
     can_withdraw: bool = False
-    can_override: bool = False
+    can_override: bool = False      # an Admin: Override Approve and Override Reject
     can_reassign: bool = False
     why_not_sign: str = ""
+    involved: bool = False          # you are named to sign it, or you asked for it
+    superuser_slots: list = field(default_factory=list)    # sign-offs you may give as a superuser (indices)
 
     @property
     def pns(self):
@@ -42,10 +45,19 @@ class Task:
         return first if len(self.parts) == 1 else f"{first} +{len(self.parts) - 1} more"
 
 
-def tasks_from_rows(rows, identity):
-    """Everything waiting on a sign-off, from the part list's rows (PartStatus), one task per request. With no
-    team member identity the tasks are listed, but nothing can be done to them."""
+def can_see_all(identity):
+    """True if this person gets the All Workflows tab: an Admin (or the Owner), or someone with a superuser role."""
     me = identity.person if identity.state == team_identity.OK else None
+    return me is not None and (signoff_slots.is_admin(me) or
+                               (identity.directory is not None and identity.directory.is_superuser(me)))
+
+
+def tasks_from_rows(rows, identity, everything=False):
+    """The requests waiting on a sign-off, from the part list's rows (PartStatus), one task per request: only the
+    ones you are involved in (named to sign, or asked for), or with everything=True all of them. With no team
+    member identity nothing can be done to them."""
+    me = identity.person if identity.state == team_identity.OK else None
+    directory = getattr(identity, "directory", None)
     groups = {}
     for row in rows:
         pending = getattr(row, "pending", None)
@@ -68,8 +80,15 @@ def tasks_from_rows(rows, identity):
                     first.get("requested_by", ""), first.get("requested_at", ""), summary, slots, ready,
                     me is not None and first.get("requested_by_id") == me.id, first.get("reason", ""),
                     first.get("template_name", ""), first.get("eco", ""))
+        who = getattr(identity, "person", None)
+        task.involved = who is not None and (any(signoff_slots.is_signer(p, who) for p in pendings)
+                                             or first.get("requested_by_id") == who.id)
+        if not (everything or task.involved):
+            continue
         if me is not None:
             task.can_sign = any(signoff_slots.open_slots(p, me.id) for p in pendings)
+            task.superuser_slots = sorted(set().union(*(signoff_slots.superuser_slots(p, me, directory)
+                                                        for p in pendings)))
             if not task.can_sign:
                 task.why_not_sign = signoff_slots.may_sign(first, me)[1]
             task.can_reject = any(signoff_slots.is_signer(p, me) for p in pendings) or signoff_slots.is_admin(me)

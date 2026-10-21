@@ -22,6 +22,19 @@ class TestRevisions(unittest.TestCase):
         self.assertEqual(history_text.revision_label(part, "B"), "Rev B (working)")
         self.assertEqual(history_text.revision_label(part, "A"), "Rev A (released)")
 
+    def test_open_also_offers_revisions_released_before_newest_first(self):
+        C = ["cad/HCR-00007-001_C.SLDPRT"]
+        D = ["cad/HCR-00007-001_D.SLDPRT"]
+        part = revised(7, "D", "C", {"A": self.A, "B": self.B, "C": C, "D": D}, released_revisions="ABC")
+        self.assertEqual(opening_text.open_choices(part), [("D", D), ("C", C), ("B", self.B), ("A", self.A)])
+        self.assertEqual([history_text.revision_label(part, r) for r in "DCBA"],
+                         ["Rev D (working)", "Rev C (released)", "Rev B (previously released)",
+                          "Rev A (previously released)"])
+        self.assertEqual(opening_text.open_choices(part, drawing=True), [("A", self.A)])
+        released = revised(7, "B", "B", {"A": self.A, "B": self.B}, status="released", released_revisions="AB")
+        self.assertEqual(opening_text.open_choices(released), [("B", self.B), ("A", self.A)])
+        self.assertEqual(history_text.revision_label(released, "B"), "Rev B (released)")
+
     def test_open_drawing_only_offers_revisions_that_have_one(self):
         part = revised(7, "B", "A", {"A": self.A, "B": self.B})
         self.assertEqual(opening_text.open_choices(part, drawing=True), [("A", self.A)])          # no prompt needed
