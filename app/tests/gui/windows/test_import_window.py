@@ -15,8 +15,9 @@ from litterbox.core import part_number
 from tests.support.gui_fakes import REAL_SESSION, FakeBox, load_gui_with_fakes, FakeParent
 
 
-@SKIP_ON_WINDOWS
-class ImportWindowWiring(ImportFixture, unittest.TestCase):
+class ImportWindowHarness(ImportFixture):
+    """Opens the Import window on stand-ins. Shared with test_import_window_projects; holds no tests itself."""
+
     def setUp(self):
         super().setUp()
         self.box = FakeBox()
@@ -62,7 +63,9 @@ class ImportWindowWiring(ImportFixture, unittest.TestCase):
     def rows(self):
         return list(self.window.tree.rows.values())
 
-    # -- tests -------------------------------------------------------------------
+
+@SKIP_ON_WINDOWS
+class ImportWindowWiring(ImportWindowHarness, unittest.TestCase):
     def test_scanning_fills_the_table(self):
         self.scan()
         self.assertEqual(self.window.mode, "table")

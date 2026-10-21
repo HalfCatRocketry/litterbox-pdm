@@ -9,19 +9,11 @@ from litterbox.importing import manifest as manifest_module
 from litterbox.records import record_store
 from litterbox.vault import config_write
 from tests.gui.windows import test_import_window as window_tests
-from tests.support.import_fixture import ImportFixture
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, git
 
 
 @SKIP_ON_WINDOWS
-class ProjectsAndSavedScans(ImportFixture, unittest.TestCase):
-    setUp = window_tests.ImportWindowWiring.setUp
-    open_window = window_tests.ImportWindowWiring.open_window
-    make_session = window_tests.ImportWindowWiring.make_session
-    pump_until_idle = window_tests.ImportWindowWiring.pump_until_idle
-    scan = window_tests.ImportWindowWiring.scan
-    rows = window_tests.ImportWindowWiring.rows
-
+class ProjectsAndSavedScans(window_tests.ImportWindowHarness, unittest.TestCase):
     def add_project(self):
         with self.user("Alex"):
             config_write.set_values(self.a, projects=[Project("Rover", "12")])
