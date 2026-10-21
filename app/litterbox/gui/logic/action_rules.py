@@ -27,18 +27,20 @@ ALLOWED_KINDS = {
     "break_checkout": {"theirs"},           # Admin and Owner: someone else has it checked out
     "purchasing": {"ok", "mine", "unclaimed", "stray", "released", "cots", "pending"},     # not void, not theirs
     "export_files": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
+    "generate_step_pdf": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "pending"},
 }
 
 
 # These can be done to several parts at once; the rest need exactly one part selected.
-MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots", "export_files"}
+MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots", "export_files",
+         "generate_step_pdf"}
 
 
 NAME = {            # "...cannot <name> ..."
     "checkout": "check out", "checkin": "check in", "save": "save progress on",
     "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
     "break_checkout": "break the checkout of", "purchasing": "change the purchasing info of",
-    "export_files": "export the files of",
+    "export_files": "export the files of", "generate_step_pdf": "make the STEP/PDF of",
 }
 
 
@@ -46,7 +48,7 @@ PAST = {            # "<past> 2 parts"
     "checkout": "Checked out", "checkin": "Checked in", "save": "Saved progress on",
     "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
     "break_checkout": "Broke the checkout of", "purchasing": "Changed the purchasing info of",
-    "export_files": "Exported the files of",
+    "export_files": "Exported the files of", "generate_step_pdf": "Made the STEP/PDF of",
 }
 
 
@@ -96,6 +98,10 @@ VIEW_ONLY = {"open", "open_drawing", "references"}      # these only look at a p
 EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
 
 
+# The ticked parts, or else the highlighted one: its window lists the parts before anything is done
+TICKED_OR_HIGHLIGHTED = EXPORTS | {"generate_step_pdf"}
+
+
 LOOKS = VIEW_ONLY | EXPORTS     # change nothing in the vault, so a part with a job running can still be used
 
 
@@ -103,7 +109,7 @@ def choose_targets(action, ticked, highlighted):
     """Which parts an action applies to. Looking at a part (VIEW_ONLY) uses the highlighted row, or the one
     selected part if nothing is highlighted. Everything else, which changes or proposes a change, uses only the
     parts whose boxes are selected, so a stray click on a row can never be what Release or Check Out acts on."""
-    if action in EXPORTS:
+    if action in TICKED_OR_HIGHLIGHTED:
         return list(ticked) or list(highlighted)
     if action in VIEW_ONLY:
         if highlighted:
@@ -118,7 +124,7 @@ BUTTON_ACTIONS = {
     "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
     "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
-    "Purchasing Info": "purchasing", "Export Files": "export_files",
+    "Purchasing Info": "purchasing", "Export Files": "export_files", "Generate STEP/PDF": "generate_step_pdf",
 }
 
 

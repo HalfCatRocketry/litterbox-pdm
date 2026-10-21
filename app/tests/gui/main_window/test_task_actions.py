@@ -32,6 +32,9 @@ class WorkflowWiring(unittest.TestCase):
         self.app = app
         self.templates = {"T1": self.gui.workflow_templates.Template("release", "T1", [self.gui.workflow_templates.Row(["Quality"])])}
         replace(self, self.gui.workflow_store, "templates_for", lambda repo, action: self.templates)
+        self.made_after = []
+        replace(self, self.gui.generate_files, "after_release",
+                lambda repo, pns: self.made_after.append(pns) or self.gui.generate_files.Generated())
 
     def row(self, kind, pending=None, pn="HCR-00001-001"):
         return self.SimpleNamespace(pn=pn, name="Upright", kind=kind, state=kind, pending=pending or {})
@@ -207,11 +210,13 @@ class WorkflowWiring(unittest.TestCase):
         replace(self, self.gui.workflow_signoff, "sign_off", lambda repo, pns, comment: seen.append((pns, comment)) or "result")
         self.app.task_sign(self.task())
         work, done, on_success = self.tasks.pop()
-        self.assertEqual(work(), "result")
+        result, files = work()
+        self.assertEqual(result, "result")
         self.assertEqual(seen, [(["HCR-00001-001"], "Looks right")])
-        on_success(self.SimpleNamespace(completed=[], errors={"HCR-00001-001": "offline"}))
+        self.assertEqual(self.made_after, [["HCR-00001-001"]])     # whatever it released gets its STEP and PDF
+        on_success((self.SimpleNamespace(completed=[], errors={"HCR-00001-001": "offline"}), files))
         self.assertIn("offline", self.shown("showwarning")[0][1][1])
-        on_success(self.SimpleNamespace(completed=["HCR-00001-001"], errors={}))
+        on_success((self.SimpleNamespace(completed=["HCR-00001-001"], errors={}), files))
         self.assertIn("Release done on 1 part", self.app.note)
 
     def test_cancelling_the_comment_box_cancels_the_approval(self):

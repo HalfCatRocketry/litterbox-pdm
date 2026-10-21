@@ -19,7 +19,7 @@ EVENT_LABELS = {
     "references_updated": "Parts used updated",
     "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
     "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",
-    "checkout_broken": "Checkout broken", "purchasing_edited": "Purchasing info",
+    "checkout_broken": "Checkout broken", "purchasing_edited": "Purchasing info", "files_made": "STEP/PDF made",
 }
 
 
@@ -94,6 +94,8 @@ def format_history(record, local=True):
             label = "Released (Admin override)"
         elif name == "release_rejected" and event.get("override"):
             label += " (Admin override)"
+        elif name == "files_made" and event.get("forced"):
+            label = "STEP/PDF made again (Admin)"
         rows.append((
             to_display_time(event.get("at", ""), local),
             str(event.get("by", "")),

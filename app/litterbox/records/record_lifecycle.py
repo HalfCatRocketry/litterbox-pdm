@@ -137,6 +137,7 @@ def mark_released(record, by, files, **details):
         raise record_model.RegistryError(f"Cannot release {record.pn}: it is a COTS (purchased) part.")
     record.status = record_model.STATUS_RELEASED
     record.released_revision = record.revision
+    record.exports[record.revision] = {"wanted": True}     # its STEP and PDF are made again (record_exports.py)
     return add_event(record, record_model.EVENT_RELEASED, by, files=list(files), **details)
 
 

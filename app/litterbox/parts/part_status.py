@@ -11,9 +11,11 @@ from pathlib import Path
 
 from litterbox.core import revision_letters
 from litterbox.core.part_number import PN
+from litterbox.exporting import step_pdf
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
 from litterbox.git import repository
+from litterbox.records import record_exports
 from litterbox.records import record_files
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
@@ -41,6 +43,7 @@ class PartStatus:
     project: str = ""                   # the project it belongs to (core/projects.py), "" for none
     bom_outdated: bool = False          # an assembly whose part counts are missing or out of date
     released_revisions: tuple = ()      # every revision that has been released, oldest first
+    files_needed: tuple = ()            # the STEP and/or PDF its released revision still needs (record_exports.py)
 
 
 def released_revisions(record):
@@ -113,6 +116,9 @@ def get_status(repo):
             state += " (references need updating)"          # updating them counts the parts too
         elif bom_outdated and kind not in ("error", "missing"):
             state += " (BOM needs updating)"
+        needed = tuple(record_exports.needed(record, step_pdf.possible_kinds(files)))
+        if needed and kind not in ("error", "missing"):
+            state += " (STEP/PDF needs updating)"
         if not_downloaded and kind != "void":
             state += " (not downloaded)"         # Check Out and Open download it; nothing else needs the files
 
@@ -120,5 +126,5 @@ def get_status(repo):
                                record.description, record.cots, record.import_path,
                                record.revision, record.released_revision, revisions, outdated, record.pending,
                                not_downloaded, project=record.project, bom_outdated=bom_outdated,
-                               released_revisions=released_revisions(record)))
+                               released_revisions=released_revisions(record), files_needed=needed))
     return rows

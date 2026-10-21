@@ -22,6 +22,7 @@ import sys
 from litterbox.errors import LitterboxError, NoChangesError
 from litterbox.parts import checkin
 from litterbox.parts import checkout
+from litterbox.parts import generate_files
 from litterbox.parts import get_latest
 from litterbox.parts import lifecycle
 from litterbox.parts import part_status
@@ -86,6 +87,12 @@ def main(argv=None, prog=None):
                     print("Cancelled.")
                     return
                 lifecycle.release(args.repo, args.pn)
+                files = generate_files.after_release(args.repo, [args.pn])
+                for _pn, names in files.done:
+                    print("Made " + ", ".join(names))
+                for _pn, why in files.failed:
+                    print(f"The STEP/PDF were not made ({why}). The part is flagged: make them with SolidWorks "
+                          "later (Part > Generate STEP/PDF...).")
             elif args.action == "makecots":
                 plan = planning.make_cots_plan(args.repo, args.pn)
                 if not plan.ok:

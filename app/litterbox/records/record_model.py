@@ -76,6 +76,9 @@ EVENT_CHECKOUT_BROKEN = "checkout_broken"       # an Admin took a part back from
 EVENT_PURCHASING_EDITED = "purchasing_edited"   # supplier, cost or lead time changed (records/purchasing_info.py)
 
 
+EVENT_FILES_MADE = "files_made"         # Litterbox made the STEP and/or PDF of a revision (records/record_exports.py)
+
+
 class RegistryError(Exception):
     """Something is wrong with a record. The message is safe to show to a user."""
 
@@ -121,7 +124,7 @@ RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
-    "purchasing", "quantities",
+    "purchasing", "quantities", "exports",
 }
 
 
@@ -155,6 +158,7 @@ class Record:
     quantities: dict = field(default_factory=dict)  # revision -> how many of each it uses, e.g. {'A': {'HCR-00005-001_A': 4}}
     history: list = field(default_factory=list)     # list of event dicts
     purchasing: dict = field(default_factory=dict)  # supplier, cost, lead time (records/purchasing_info.py); {} for none
+    exports: dict = field(default_factory=dict)     # revision -> the STEP and PDF Litterbox made (records/record_exports.py)
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
 
     def to_dict(self):
@@ -195,6 +199,9 @@ class Record:
             data["quantities"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
                                   for rev, counts in sorted(self.quantities.items(),
                                                             key=lambda item: revision_number(item[0]))}
+        if self.exports:
+            data["exports"] = {rev: dict(made) for rev, made in sorted(
+                self.exports.items(), key=lambda item: revision_number(item[0]))}
         data.update({
             "history": [dict(e) for e in self.history],
         })
@@ -296,6 +303,14 @@ class Record:
         except PNError as e:
             raise RegistryError(f"{pn}: bad revision in 'references_outdated'. {e}")
 
+        exports = data.get("exports") or {}
+        if not isinstance(exports, dict) or not all(isinstance(made, dict) for made in exports.values()):
+            raise RegistryError(f"{pn}: 'exports' must say which files were made for each revision.")
+        try:
+            exports = {check_revision(str(rev)): dict(made) for rev, made in exports.items()}
+        except PNError as e:
+            raise RegistryError(f"{pn}: bad revision in 'exports'. {e}")
+
         try:
             purchasing = purchasing_info.clean(data.get("purchasing"))
         except purchasing_info.PurchasingError as e:
@@ -327,6 +342,7 @@ class Record:
             quantities=clean_quantities,
             history=[_clean_event(e) for e in history],
             purchasing=purchasing,
+            exports=exports,
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},
         )
 

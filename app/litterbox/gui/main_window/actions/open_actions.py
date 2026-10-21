@@ -110,7 +110,8 @@ class OpenActions:
             on_tab=lambda name: self._popout_tab_changed(window, pn, name),
             on_manage_references=lambda: self._load_references(pn), on_bom=lambda rev, mode: read_bom(),
             on_export_bom=lambda rev, mode: self.export_bom(rev, mode, pn),
-            on_update_bom=lambda: self.update_bom(pn, then=read_bom))
+            on_update_bom=lambda: self.update_bom(pn, then=read_bom),
+            on_generate=lambda part: self.generate_step_pdf([part]))
 
     def show_ecos(self):
         """The ECOs screen: every engineering change order in your copy of the vault."""

@@ -15,17 +15,18 @@ from litterbox.gui import window_chrome
 from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 
-WHICH_LABEL = {part_files_export.RELEASED: "Latest released", part_files_export.WORKING: "Working"}
-
-
 class ExportFilesDialog(modal_dialog.ModalDialog):
-    """ExportFilesDialog(parent, title, folder, litterbox_root, has_assembly).show()
-    -> None if cancelled, else {"kinds": [...], "which": RELEASED or WORKING, "with_used": bool, "folder": Path}"""
+    """ExportFilesDialog(parent, title, folder, litterbox_root, has_assembly, choices, first).show()
+    -> None if cancelled, else {"kinds": [...], "which": RELEASED, WORKING or a revision letter, "with_used": bool,
+    "folder": Path}. `choices` are the Revision list's [(label, which)] (export_text.revision_choices), `first` the
+    label chosen to start with."""
 
-    def __init__(self, parent, title, folder, litterbox_root, has_assembly=False):
+    def __init__(self, parent, title, folder, litterbox_root, has_assembly=False, choices=None, first=None):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result, self.litterbox_root = None, litterbox_root
+        self.choices = list(choices or [("Latest released", part_files_export.RELEASED),
+                                        ("Working", part_files_export.WORKING)])
         width, height = 520, 470
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
@@ -48,9 +49,10 @@ class ExportFilesDialog(modal_dialog.ModalDialog):
             self.kinds[kind] = flag
 
         ctk.CTkLabel(self, text="Revision", anchor="w").grid(row=3, column=0, sticky="ew", padx=20)
-        self.which = ctk.CTkSegmentedButton(self, values=list(WHICH_LABEL.values()))
-        self.which.set(WHICH_LABEL[part_files_export.RELEASED])
-        self.which.grid(row=4, column=0, sticky="w", padx=20, pady=(2, 2))
+        self.which = tk.StringVar(master=self, value=first or self.choices[0][0])
+        ctk.CTkOptionMenu(self, variable=self.which, values=[label for label, _which in self.choices], width=260,
+                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
+            row=4, column=0, sticky="w", padx=20, pady=(2, 2))
         ctk.CTkLabel(self, text="A part never released gives its working revision.", text_color=theme.MUTED,
                      anchor="w").grid(row=5, column=0, sticky="ew", padx=20)
 
@@ -104,6 +106,6 @@ class ExportFilesDialog(modal_dialog.ModalDialog):
         except export_folder.ExportError as e:
             self.problem.configure(text=str(e))
             return
-        which = {label: key for key, label in WHICH_LABEL.items()}.get(self.which.get(), part_files_export.RELEASED)
+        which = dict(self.choices).get(self.which.get(), part_files_export.RELEASED)
         self.result = {"kinds": kinds, "which": which, "with_used": bool(self.with_used.get()), "folder": folder}
         self.destroy()

@@ -4,9 +4,11 @@ part_details_text.py - a part's Details tab: the revisions you can pick from, an
 Uses tab.
 """
 
+from litterbox.exporting import step_pdf
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import list_view
 from litterbox.gui.logic import purchasing_text
+from litterbox.records import record_exports
 from litterbox.workflows import workflow_templates
 
 
@@ -38,6 +40,30 @@ def eco_for(record, rev):
     return None, ""
 
 
+def files_flagged(record, rev, revisions):
+    """The STEP and/or PDF that revision `rev` still needs (the working revision, released and flagged)."""
+    if record is None or rev != record.revision:
+        return []
+    return record_exports.needed(record, step_pdf.possible_kinds(revisions.get(rev, [])))
+
+
+def files_made_text(record, rev, revisions, local=True):
+    """What the Details tab says about the STEP and PDF Litterbox made for a revision ("" if it made none and none
+    are needed)."""
+    entry = record.exports.get(rev, {})
+    lines = []
+    for kind in record_exports.KINDS:
+        made = entry.get(kind)
+        if made:
+            lines.append(f"{record_exports.LABEL[kind]} made by {made.get('by', '')} on "
+                         f"{history_text.to_display_time(made.get('at', ''), local)}")
+    needed = files_flagged(record, rev, revisions)
+    if needed:
+        lines.insert(0, " and ".join(record_exports.LABEL[kind] for kind in needed)
+                     + (" need" if len(needed) > 1 else " needs") + " updating")
+    return "; ".join(lines)
+
+
 def revision_details(record, rev, revisions, local=True):
     """[(label, text)] for the Details tab with revision `rev` picked. `revisions` is {revision: [files]}."""
     rows = {row[0]: row for row in history_text.revision_rows(record, revisions)}
@@ -67,6 +93,9 @@ def revision_details(record, rev, revisions, local=True):
     fields.append(("ECO", f"{number} ({how})" if number else "None"))
     files = revisions.get(rev, [])
     fields.append(("Files", list_view.file_types(files) if files else "No files"))
+    made = files_made_text(record, rev, revisions, local)
+    if made:
+        fields.append(("STEP/PDF", made))
     fields.append(("Created", f"by {record.created_by} on {history_text.to_display_time(record.created_at, local)}"))
     if record.cots:
         fields.append(("COTS", "Yes (a purchased part)"))

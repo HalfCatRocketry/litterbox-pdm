@@ -1,5 +1,5 @@
 """
-menus.py - the window's menus: File, Vault, View and Help in the menu bar, the Open / Lifecycle / Create menus
+menus.py - the window's menus: File, Vault, View and Help in the menu bar, the Part / Lifecycle / Create menus
 beside the everyday buttons, and the right-click menu on a part. An entry that can't be used right now is greyed out
 (the status line says why when the mouse is on it).
 """
@@ -17,9 +17,9 @@ from litterbox.gui.widgets import menu_bar
 
 # The menus beside the everyday buttons: (label, App method). The labels are action_rules.BUTTON_ACTIONS keys where
 # the entry depends on the ticked or highlighted parts. None is a line between entries.
-OPEN_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), None,
+PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), None,
              ("References...", "show_references"), ("Details", "show_history"), None,
-             ("Export Files", "export_files"))
+             ("Generate STEP/PDF", "generate_step_pdf"), ("Export Files", "export_files"))
 
 
 LIFECYCLE_MENU = (("Edit Details", "edit_details"), ("Purchasing Info", "edit_purchasing"), None, ("Release", "release"), ("Revise", "revise"),
@@ -40,7 +40,8 @@ ADMIN_LIFECYCLE_MENU = (None, ("Break Checkout", "break_checkout"))      # only 
 
 # Where an entry reads differently from its button
 ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout...",
-              "Purchasing Info": "Purchasing Info...", "Export Files": "Export Files..."}
+              "Purchasing Info": "Purchasing Info...", "Export Files": "Export Files...",
+              "Generate STEP/PDF": "Generate STEP/PDF..."}
 
 
 class Menus:
@@ -58,7 +59,7 @@ class Menus:
                 ("Help", self._fill_help_menu)]
 
     def _toolbar_menus(self):
-        return [("Open", lambda menu: self._fill_actions(menu, OPEN_MENU)),
+        return [("Part", lambda menu: self._fill_actions(menu, PART_MENU)),
                 ("Lifecycle", lambda menu: self._fill_actions(menu, self._lifecycle_entries())),
                 ("Create", lambda menu: self._fill_actions(menu, CREATE_MENU))]
 

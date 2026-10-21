@@ -59,15 +59,17 @@ class PartDetailsView(ctk.CTkFrame):
     """on_open(rev, drawing) opens a revision's file; on_view_eco(number) shows an ECO. The Uses and Where used tabs
     are filled by show_references(), and the BOM tab by show_bom(): on_bom(rev, mode) asks for it to be read,
     on_export_bom(rev, mode) exports it and on_update_bom() counts its parts again (the Update BOM button, shown only
-    when its quantities need it). on_tab(name) says which tab was chosen."""
+    when its quantities need it). on_tab(name) says which tab was chosen. on_generate(pn) makes a released part's
+    STEP and PDF (the Generate STEP/PDF... button, shown only while they need updating)."""
 
     def __init__(self, master, on_open=None, on_view_eco=None, on_tab=None,
-                 on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None):
+                 on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None, on_generate=None):
         super().__init__(master, fg_color="transparent")
         self.scale = scaling.scale_of(self)
         self.on_open, self.on_view_eco, self.on_tab = on_open, on_view_eco, on_tab
         self.on_manage_references = on_manage_references
         self.on_bom, self.on_export_bom, self.on_update_bom = on_bom, on_export_bom, on_update_bom
+        self.on_generate = on_generate
         self.record, self.revisions = None, {}
         self.eco_number, self.shown = None, []
         self.columnconfigure(0, weight=1)
@@ -106,6 +108,10 @@ class PartDetailsView(ctk.CTkFrame):
         self.eco_button = release_button.ReleaseButton(bar, text="View ECO", width=90, height=28, fg_color=theme.ACCENT,
                                                        hover_color="#18527f", command=self._view_eco)
         self.eco_button.grid(row=0, column=2, padx=(10, 0))
+        self.generate_button = release_button.ReleaseButton(bar, text="Generate STEP/PDF...", width=140, height=28,
+                                                            fg_color=theme.ACCENT, hover_color="#18527f",
+                                                            command=self._generate)
+        self.generate_button.grid(row=0, column=3, padx=(10, 0))
         self.fields = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         self.fields.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 4))
         self.fields.columnconfigure(1, weight=1)
@@ -144,6 +150,14 @@ class PartDetailsView(ctk.CTkFrame):
             self.eco_button.grid()
         else:
             self.eco_button.grid_remove()
+        if self.on_generate and part_details_text.files_flagged(self.record, rev, self.revisions):
+            self.generate_button.grid()
+        else:
+            self.generate_button.grid_remove()
+
+    def _generate(self):
+        if self.record is not None and self.on_generate:
+            self.on_generate(self.record.pn)
 
     def _view_eco(self):
         if self.eco_number and self.on_view_eco:

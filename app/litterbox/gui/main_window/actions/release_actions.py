@@ -38,9 +38,10 @@ class ReleaseActions:
             return
         pns = [p.pn for p in good]
         skipped = [(p.pn, p.problems[0]) for p in bad]
-        self.run_task(lambda: lifecycle.release_many(repo, pns), "",
-                      on_success=lambda result: self._after_batch("release", action_rules.ActionPlan(pns, skipped), result),
-                      label=job_text.job_label("release", len(pns)), parts=pns)
+        self.run_releasing(lambda: lifecycle.release_many(repo, pns), pns, "",
+                           on_success=lambda result: self._after_batch("release", action_rules.ActionPlan(pns, skipped),
+                                                                       result),
+                           label=job_text.job_label("release", len(pns)), parts=pns)
 
     def make_cots(self):
         plan = self._plan("make_cots")

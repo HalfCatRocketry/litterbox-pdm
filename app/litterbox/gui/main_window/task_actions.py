@@ -41,8 +41,8 @@ class TaskActions:
         if comment is None:
             return
         repo, pns = self.repo(), task.pns
-        self.run_task(lambda: workflow_signoff.sign_off(repo, pns, comment), f"Signed off {task.label}",
-                      on_success=lambda result: self._signed(task, result))
+        self.run_releasing(lambda: workflow_signoff.sign_off(repo, pns, comment), pns, f"Signed off {task.label}",
+                           on_success=lambda result: self._signed(task, result))
 
     def _signed(self, task, result):
         text, _warn = task_text.signoff_result_text(result)
@@ -64,7 +64,7 @@ class TaskActions:
         repo, pns = self.repo(), task.pns
         label = workflow_templates.label_of(task.action)
         if messagebox.askokcancel(f"{label} {task.label}", f"Everyone needed has signed. {label} now?"):
-            self.run_task(lambda: workflow_signoff.complete_many(repo, pns), f"{label} done: {task.label}")
+            self.run_releasing(lambda: workflow_signoff.complete_many(repo, pns), pns, f"{label} done: {task.label}")
 
     def task_withdraw(self, task):
         repo, pns = self.repo(), task.pns
@@ -79,8 +79,8 @@ class TaskActions:
             return
         slots, comment = chosen
         repo, pns = self.repo(), task.pns
-        self.run_task(lambda: workflow_signoff.sign_as_superuser(repo, pns, slots, comment),
-                      f"Signed off {task.label} as superuser", on_success=lambda result: self._signed(task, result))
+        self.run_releasing(lambda: workflow_signoff.sign_as_superuser(repo, pns, slots, comment), pns,
+                           f"Signed off {task.label} as superuser", on_success=lambda result: self._signed(task, result))
 
     def task_override_reject(self, task):
         """All Workflows' Override Reject...: an Admin sends a request back, recorded as an Admin override."""
@@ -102,8 +102,8 @@ class TaskActions:
         repo, pns, action = self.repo(), task.pns, task.action
         if messagebox.askokcancel(f"{label} {task.label}", f"{label} without the required sign-offs?\n\nReason: "
                                                            f"{reason}\n\nThis is recorded as an Admin override."):
-            self.run_task(lambda: workflow_signoff.override(repo, pns, reason, action=action),
-                          f"{label} done: {task.label} (Admin override)")
+            self.run_releasing(lambda: workflow_signoff.override(repo, pns, reason, action=action), pns,
+                               f"{label} done: {task.label} (Admin override)")
 
     def task_reassign(self, task):
         directory = self.identity.directory
@@ -169,4 +169,5 @@ class TaskActions:
             return
         if messagebox.askokcancel(f"{label} {len(pns)} part{'s' if len(pns) != 1 else ''}",
                                   f"Everyone needed has signed. {label} now?"):
-            self.run_task(lambda: workflow_signoff.complete_many(repo, pns), f"{label} done: {', '.join(map(str, pns))}")
+            self.run_releasing(lambda: workflow_signoff.complete_many(repo, pns), pns,
+                               f"{label} done: {', '.join(map(str, pns))}")

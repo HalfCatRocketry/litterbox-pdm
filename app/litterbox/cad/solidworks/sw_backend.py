@@ -1,7 +1,7 @@
 """
-sw_backend.py - SolidWorks as the importer, Revise and Update references use it: read a file's
-references, list an assembly's components (to count them), copy a file with its references updated (Pack and
-Go), point a file at a different one, close.
+sw_backend.py - SolidWorks as the importer, Revise, Update references and Generate STEP/PDF use it: read a
+file's references, list an assembly's components (to count them), copy a file with its references updated (Pack
+and Go), point a file at a different one, save a STEP or PDF of it (sw_saving.py), close.
 
 Through COM, so on one thread only (see importing/session.py and com.com_thread).
 """
@@ -12,6 +12,7 @@ import shutil
 from litterbox import diagnostics
 from litterbox.cad.solidworks import sw_errors
 from litterbox.cad.solidworks import sw_process
+from litterbox.cad.solidworks import sw_saving
 
 
 # What an assembly's component is, for counting (components())
@@ -64,6 +65,8 @@ class SolidWorksBackend:
     components(path)         [(file, COUNTED / SUPPRESSED / EXCLUDED)] for an assembly's top-level components
     copy(src, dst)           copy a file on disk (nothing needs to be open)
     repoint(file, old, new)  change one reference inside the NEW file
+    save_step(path, out)     save a part or assembly as an AP214 STEP file
+    save_pdf(path, out)      save every sheet of a drawing as a PDF
     version()                the SolidWorks version, for the log
     """
 
@@ -160,6 +163,12 @@ class SolidWorksBackend:
 
     def repoint(self, file, old, new):
         return bool(self._app().ReplaceReferencedDocument(file, old, new))
+
+    def save_step(self, path, out):
+        sw_saving.save_step(self._app(), full_path(path), full_path(out))
+
+    def save_pdf(self, path, out):
+        sw_saving.save_pdf(self._app(), full_path(path), full_path(out))
 
     def version(self):
         app = self._app()                       # a failure to connect should be reported, not hidden

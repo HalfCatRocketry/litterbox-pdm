@@ -38,8 +38,9 @@ class ExportActions:
         has_assembly = any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS
                            for pn in pns for files in self.rows_by_pn[pn].revisions.values() for f in files)
         title = str(pns[0]) if len(pns) == 1 else f"{len(pns)} parts"
+        choices, first = export_text.revision_choices([self.rows_by_pn[pn] for pn in pns])
         answer = export_files_dialog.ExportFilesDialog(self, title, export_text.start_folder(self.settings),
-                                                       settings.ROOT, has_assembly).show()
+                                                       settings.ROOT, has_assembly, choices, first).show()
         if answer is None:
             return
         try:

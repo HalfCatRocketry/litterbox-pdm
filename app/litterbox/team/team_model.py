@@ -23,11 +23,12 @@ ACCESS_LABEL = {OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member"}
 
 
 # What read-only people may still do
-READ_ACTIONS = frozenset({"open", "open_drawing", "references", "history", "view", "export_files", "export_bom"})
+READ_ACTIONS = frozenset({"open", "open_drawing", "references", "history", "view", "export_files", "export_bom",
+                          "export_step_pdf"})
 
 
 ADMIN_ACTIONS = frozenset({"manage_people", "manage_workflows", "manage_settings", "override_release",
-                           "break_checkout"})
+                           "break_checkout", "remake_files"})
 
 
 OWNER_ACTIONS = frozenset({"transfer_owner", "rename_org"})

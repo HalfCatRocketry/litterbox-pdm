@@ -43,11 +43,13 @@ def kind_of(rel):
 
 
 def revision_for(record, which):
-    """The revision to export: the latest released one (or the working one if it was never released), or the
-    working one."""
+    """The revision to export: the latest released one (or the working one if it was never released), the
+    working one, or the revision letter `which` names."""
     if which == RELEASED and record.released_revision:
         return record.released_revision
-    return record.revision
+    if which in (RELEASED, WORKING):
+        return record.revision
+    return which
 
 
 @dataclass
@@ -58,8 +60,9 @@ class ExportPlan:
 
 
 def plan(repo, pns, kinds, which=RELEASED, with_used=False):
-    """Which files an export of these parts copies. `kinds` is a selection of KINDS. With with_used, an assembly
-    brings the part revisions it uses (and what they use, and so on), of the same kinds."""
+    """Which files an export of these parts copies. `kinds` is a selection of KINDS; `which` is RELEASED, WORKING
+    or a revision letter. With with_used, an assembly brings the part revisions it uses (and what they use, and
+    so on), of the same kinds."""
     kinds = set(kinds)
     if not kinds:
         raise export_folder.ExportError("Choose at least one kind of file to export.")

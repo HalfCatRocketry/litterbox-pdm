@@ -87,6 +87,11 @@ class ExportFiles(unittest.TestCase):
         self.assertEqual(export.plan(self.repo, [PART], [export.MODEL], export.WORKING).files,
                          ["cad/HCR-00001-001_B.SLDPRT"])
 
+    def test_a_revision_picked_by_its_letter(self):
+        chosen = export.plan(self.repo, [PART], [export.MODEL, export.DRAWING], "A")
+        self.assertEqual(chosen.files, ["cad/HCR-00001-001_A.SLDDRW", "cad/HCR-00001-001_A.SLDPRT"])
+        self.assertEqual((chosen.revisions, chosen.notes), ({PART: "A"}, []))
+
     def test_a_part_never_released_gives_its_working_revision_and_says_so(self):
         chosen = export.plan(self.repo, [ASM], [export.MODEL])
         self.assertEqual(chosen.files, ["cad/HCR-00002-001_A.SLDASM"])
