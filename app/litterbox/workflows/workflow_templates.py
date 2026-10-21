@@ -1,7 +1,11 @@
 """
 workflow_templates.py - what a sign-off template is: the actions that can have one (Release, Unrelease,
-Void, Make COTS), its rows of roles (a row may accept one of several roles), checking a set of templates is valid,
-and the standard ones offered to new vaults.
+Void, Make COTS and Remove document link for parts; Release, Unrelease and Void for documents, with templates of
+their own), its rows of roles (a row may accept one of several roles), checking a set of templates is valid, and the
+standard ones offered to new vaults.
+
+A document's action is the part action of the same name with "_document" after it (base_action() gives the part
+action, so the same checks and changes apply). for_targets() picks the right one for what is selected.
 """
 
 from dataclasses import dataclass, field
@@ -13,16 +17,44 @@ from litterbox.errors import LitterboxError
 RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
 
 
-ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)          # the actions that can have templates
+REMOVE_DOC = "remove_document"     # take a document's link off a released part revision (always needs sign-offs)
 
 
-ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS: "Make COTS"}
+RELEASE_DOC, REOPEN_DOC, VOID_DOC = "release_document", "reopen_document", "void_document"
 
 
-AUTO_COMPLETE = {RELEASE, REOPEN, VOID}                # done as soon as the last person signs
+DOC_ACTION = {RELEASE: RELEASE_DOC, REOPEN: REOPEN_DOC, VOID: VOID_DOC}     # a part action -> a document's
 
 
-NEEDS_REASON = {REOPEN, VOID}                          # the request carries a reason
+ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC, VOID_DOC)   # can have templates
+
+
+ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS: "Make COTS",
+                REMOVE_DOC: "Remove document link", RELEASE_DOC: "Release document",
+                REOPEN_DOC: "Unrelease document", VOID_DOC: "Void document"}
+
+
+AUTO_COMPLETE = {RELEASE, REOPEN, VOID, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC, VOID_DOC}  # done when the last person signs
+
+
+NEEDS_REASON = {REOPEN, VOID, REMOVE_DOC, REOPEN_DOC, VOID_DOC}                        # the request carries a reason
+
+
+def base_action(action):
+    """The part action a document's action works like: 'release_document' -> 'release'. Others are themselves."""
+    return {doc: part for part, doc in DOC_ACTION.items()}.get(action, action)
+
+
+def for_targets(action, numbers):
+    """The action to use for these targets: a document's own when every one is a document (core/doc_number.py),
+    else `action`. Raises WorkflowError for parts and documents together."""
+    from litterbox.core.doc_number import DocNumber
+    documents = [isinstance(n, DocNumber) for n in numbers]
+    if documents and all(documents) and action in DOC_ACTION:
+        return DOC_ACTION[action]
+    if any(documents) and not all(documents):
+        raise WorkflowError("Select parts or documents, not both at once.")
+    return action
 
 
 MAX_NAME = 40
@@ -30,6 +62,7 @@ MAX_NAME = 40
 
 MIN_VERSION = "0.3.0"      # the first Litterbox that understands this format; a vault with a workflow requires it
 ECO_MIN_VERSION = "0.4.0"  # the first that understands "Require ECO" (change_orders/); a vault using it requires it
+DOC_MIN_VERSION = "0.5.1"  # the first that knows the document actions and Remove document link
 
 
 # Offered by "Add standard workflows" in the Workflows window. Those in STANDARD_REQUIRE_ECO ask for an ECO.
@@ -40,6 +73,10 @@ STANDARD_WORKFLOWS = {
     REOPEN: [("T1", [["Manager", "Chief"]])],
     VOID: [("T1", [["Manager", "Chief"]])],
     MAKE_COTS: [("T1", [["Responsible Engineer"]])],
+    REMOVE_DOC: [("T1", [["Manager", "Chief"]])],
+    RELEASE_DOC: [("T1", [["Responsible Engineer"], ["Manager"]])],
+    REOPEN_DOC: [("T1", [["Manager", "Chief"]])],
+    VOID_DOC: [("T1", [["Manager", "Chief"]])],
 }
 STANDARD_REQUIRE_ECO = {(RELEASE, "T1")}
 
@@ -107,7 +144,8 @@ def min_version_for(templates, running):
     """The oldest Litterbox a vault with these templates needs (`templates` is {action: {name: Template}}), but
     never newer than the one running (`running`, version.VERSION), which must still be able to open the vault."""
     uses_eco = any(t.require_eco for named in templates.values() for t in named.values())
-    wanted = ECO_MIN_VERSION if uses_eco else MIN_VERSION
+    uses_docs = any(named and action in (REMOVE_DOC, *DOC_ACTION.values()) for action, named in templates.items())
+    wanted = DOC_MIN_VERSION if uses_docs else ECO_MIN_VERSION if uses_eco else MIN_VERSION
     return running if version.parse(wanted) > version.parse(running) else wanted
 
 

@@ -5,9 +5,12 @@ layout.py - where everything lives inside a vault. One place for every fixed fol
     cad/HCR-00042-001_A.SLDPRT        CAD files (Git LFS, lockable)       CAD_DIR_NAME
     cancelled-revs/CANCELLED_...      revisions cancelled before release  CANCELLED_DIR_NAME, CANCELLED_PREFIX
     ECO/ECO-0001.yaml                 engineering change orders           ECO_DIR_NAME
+    DOC-logs/PROP-0001.yaml           the document records                DOC_LOG_DIR_NAME
+    documents/PROP-0001_A.docx        documents' files (Git LFS, lockable) DOC_DIR_NAME
     .litterbox/config.yaml            shared vault settings               CONFIG_DIR, CONFIG_FILE
     .litterbox/people.yaml            the team                            PEOPLE_FILE
     .litterbox/workflows.yaml         sign-off templates                  WORKFLOWS_FILE
+    .litterbox/document_types.yaml    the org's document types            DOC_TYPES_FILE
     .litterbox/allowed_signers        generated from people.yaml          ALLOWED_SIGNERS_FILE
     .litterbox/whoami                 a lock used to learn who you are    WHOAMI_FILE
 
@@ -19,6 +22,8 @@ CAD_DIR_NAME = "cad"
 CANCELLED_DIR_NAME = "cancelled-revs"       # revisions that were cancelled before release are kept here
 CANCELLED_PREFIX = "CANCELLED_"
 ECO_DIR_NAME = "ECO"                         # engineering change orders (change_orders/)
+DOC_LOG_DIR_NAME = "DOC-logs"                # document records (documents/), like PN-logs for parts
+DOC_DIR_NAME = "documents"                   # documents' files, like cad for parts
 
 CONFIG_DIR = ".litterbox"
 CONFIG_FILE = "config.yaml"                 # a file name inside CONFIG_DIR (the others below are paths)
@@ -26,3 +31,4 @@ PEOPLE_FILE = f"{CONFIG_DIR}/people.yaml"
 WHOAMI_FILE = f"{CONFIG_DIR}/whoami"
 ALLOWED_SIGNERS_FILE = f"{CONFIG_DIR}/allowed_signers"
 WORKFLOWS_FILE = f"{CONFIG_DIR}/workflows.yaml"
+DOC_TYPES_FILE = f"{CONFIG_DIR}/document_types.yaml"

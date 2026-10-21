@@ -22,6 +22,20 @@ def check_permission(repo, user, action):
     team_permissions.require(repo, action)
 
 
+def uses_solidworks(repo, pns):
+    """True if any of these is a CAD part (non-CAD parts never open SolidWorks). A record that can't be read
+    counts as CAD, so the check still happens."""
+    from litterbox.records import record_model
+    from litterbox.records import record_store
+    for pn in pns:
+        try:
+            if record_store.load(repo, pn).uses_cad:
+                return True
+        except record_model.RegistryError:
+            return True
+    return False
+
+
 def check_solidworks_version(repo, action):
     """Stop the action if this computer's SolidWorks is newer than the version the org works in: whatever it
     saved could not be opened by anyone else. `action` is like 'check out HCR-00042-001'. A vault with no version

@@ -44,6 +44,10 @@ def mark_revised(record, by, reason, files):
             record.references_outdated.append(record.revision)
     if previous in record.quantities:
         record.quantities[record.revision] = dict(record.quantities[previous])
+    if previous in record.bom_items:                    # lines added by hand to the BOM carry on too
+        record.bom_items[record.revision] = dict(record.bom_items[previous])
+    if previous in record.documents:                    # and so do linked documents
+        record.documents[record.revision] = list(record.documents[previous])
     record.status = record_model.STATUS_IN_WORK
     return record_lifecycle.add_event(record, record_model.EVENT_REVISED, by, from_revision=previous, reason=reason, files=list(files))
 
@@ -70,6 +74,8 @@ def mark_revision_cancelled(record, by, reason, files):
     cancelled = record.revision
     record.references.pop(cancelled, None)
     record.quantities.pop(cancelled, None)
+    record.bom_items.pop(cancelled, None)
+    record.documents.pop(cancelled, None)
     if cancelled in record.references_outdated:
         record.references_outdated.remove(cancelled)
     record.revision = record.released_revision

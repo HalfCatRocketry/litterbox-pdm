@@ -33,7 +33,8 @@ def watch_files(repo, revisions):
     Pass the result to checkin_many(snapshot=...) so a part saved after you pressed Check In is not uploaded.
     Cheap: one look at the cad folder and one metadata lookup per file; nothing is read."""
     index = record_files.cad_index(repo)
-    return file_snapshot.FileSnapshot(repo, {pn: index.get(pn, {}).get(rev, []) for pn, rev in revisions.items()})
+    return file_snapshot.FileSnapshot(repo, {pn: index.get(pn, {}).get(rev, []) + part_changes.gone_files(repo, pn, rev)
+                                             for pn, rev in revisions.items()})
 
 
 @dataclass
@@ -72,7 +73,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
         try:
             record_path = record_store.record_relpath(pn)
             record = record_store.load(repo, pn)
-            cad = index.get(pn, {}).get(record.revision, [])
+            cad = index.get(pn, {}).get(record.revision, []) + part_changes.gone_files(repo, pn, record.revision)
             group = cad + [record_path]
             if not any(lfs_locks.is_mine(locks, p) for p in group):
                 raise LitterboxError(f"You don't have {pn} checked out.")

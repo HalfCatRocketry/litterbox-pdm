@@ -152,6 +152,8 @@ class TeamScreen(ctk.CTkFrame):
         entries = (("Roles...", lambda: self.app.edit_roles(self), lambda: self._why_not("manage_people")),
                    ("Workflows...", lambda: self.app.edit_workflow(self), lambda: self._why_not("manage_workflows")),
                    ("Projects...", lambda: self.app.manage_projects(self), lambda: self._why_not("manage_settings", team=False)),
+                   ("Document Types...", lambda: self.app.manage_doc_types(self),
+                    lambda: self._why_not("manage_doc_types", team=False)),
                    ("Vault Settings...", lambda: self.app.edit_vault_settings(self),
                     lambda: self._why_not("manage_settings", team=False)))
         for row, (text, command, why_not) in enumerate(entries, start=1):

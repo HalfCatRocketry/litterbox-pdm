@@ -1,8 +1,9 @@
 """
-bom_text.py - the BOM tab's table and the line above it (see references/bom.py), and the status line after a BOM
-is exported.
+bom_text.py - the BOM tab's table and the line above it (see references/bom.py), the lines you may take off it and
+the parts Add item... offers (parts/bom_items.py), and the status line after a BOM is exported.
 """
 
+from litterbox.core.filenames import file_stem
 from litterbox.records import purchasing_info
 from litterbox.references import bom
 
@@ -23,11 +24,25 @@ def table(found, mode):
     for number, line in enumerate(found):
         part = (INDENT * (line.level - 1) if mode == bom.INDENTED and line.level else "") + line.pn.short
         lead = line.field(purchasing_info.LEAD_TIME_DAYS)
-        state = line.state_text + (" (loops back)" if line.loop else "")
+        state = line.state_text + (" (loops back)" if line.loop else "") + (" (added by hand)" if line.added else "")
         rows.append((f"line{number}", (part, line.revision, quantity(line), line.name, line.field(purchasing_info.SUPPLIER),
                                        line.field(purchasing_info.UNIT_COST), f"{lead} days" if lead else "",
                                        state)))
     return rows
+
+
+def removable(found):
+    """{iid: stem} of the lines Remove can take off: those added by hand to the assembly itself (level 1)."""
+    return {f"line{number}": file_stem(line.pn, line.revision) for number, line in enumerate(found)
+            if line.added and line.level == 1}
+
+
+def item_choices(rows, assembly_row):
+    """The parts Add item... offers for an assembly (PartStatus rows): never itself or a void part, and for a CAD
+    assembly only non-CAD parts (its CAD parts come from the model)."""
+    kit = getattr(assembly_row, "noncad", False)
+    return [row for row in rows if row.pn != assembly_row.pn and row.kind not in ("void", "error", "missing")
+            and (kit or getattr(row, "noncad", False))]
 
 
 def note(found, is_assembly, outdated=False, counts_outdated=False):

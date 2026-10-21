@@ -56,7 +56,8 @@ def set_aside_broken_checkouts(repo):
             return []
         modified = repository.get_modified(repo)
         clash = [path for path in incoming if path.lower() in modified
-                 and path.split("/", 1)[0] in (layout.LOG_DIR_NAME, layout.CAD_DIR_NAME)]
+                 and path.split("/", 1)[0] in (layout.LOG_DIR_NAME, layout.CAD_DIR_NAME,
+                                               layout.DOC_LOG_DIR_NAME, layout.DOC_DIR_NAME)]
         if not clash:
             return []
         locks = lfs_locks.get_locks(repo, strict=True)
@@ -65,7 +66,8 @@ def set_aside_broken_checkouts(repo):
     stale = [path for path in clash if not lfs_locks.is_mine(locks, path)]
     if not stale:
         return []
-    saved = [path for path in stale if not path.startswith(layout.LOG_DIR_NAME + "/") and (Path(repo) / path).is_file()]
+    saved = [path for path in stale if not path.startswith((layout.LOG_DIR_NAME + "/", layout.DOC_LOG_DIR_NAME + "/"))
+             and (Path(repo) / path).is_file()]
     folder = recovered_folder(repo) if saved else None
     try:
         for path in saved:

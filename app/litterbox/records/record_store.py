@@ -1,5 +1,7 @@
 """
-record_store.py - reading and writing records in PN-logs/, and which part numbers are taken.
+record_store.py - reading and writing records in PN-logs/, and which part numbers are taken. Documents' records
+(numbered like PROP-0001, core/doc_number.py) are the same kind of record, kept in DOC-logs/: every function here
+takes either number.
 
 A record is never deleted, and a record can only be created once (create_record refuses a number that exists).
 """
@@ -11,6 +13,8 @@ from pathlib import Path
 import yaml
 
 from litterbox import layout
+from litterbox.core import doc_number
+from litterbox.core.doc_number import DocNumber
 from litterbox.core.numbering import next_base, next_variant
 from litterbox.core.part_number import try_parse
 from litterbox.records import record_lifecycle
@@ -30,13 +34,18 @@ def cancelled_dir(repo):
     return Path(repo) / layout.CANCELLED_DIR_NAME
 
 
+def doc_log_dir(repo):
+    return Path(repo) / layout.DOC_LOG_DIR_NAME
+
+
 def record_path(repo, pn):
-    return log_dir(repo) / f"{pn}.yaml"
+    return Path(repo) / record_relpath(pn)
 
 
 def record_relpath(pn):
-    """Where a PN's record lives, relative to the repo, with forward slashes."""
-    return f"{layout.LOG_DIR_NAME}/{pn}.yaml"
+    """Where a PN's (or a document's) record lives, relative to the repo, with forward slashes."""
+    folder = layout.DOC_LOG_DIR_NAME if isinstance(pn, DocNumber) else layout.LOG_DIR_NAME
+    return f"{folder}/{pn}.yaml"
 
 
 def _read(path, expected_pn):
@@ -68,7 +77,7 @@ def exists(repo, pn):
 
 
 def create_record(repo, pn, name, created_by, description="", cots=False, imported=False, import_path="",
-                  project=""):
+                  project="", kind=record_model.KIND_CAD, doc_type=""):
     """Create the record file for a brand-new PN and return the Record.
 
     The name is required. The description is optional. import_path is only kept
@@ -87,7 +96,8 @@ def create_record(repo, pn, name, created_by, description="", cots=False, import
     record = record_model.Record(pn=pn, name=name, description=description, created_by=str(created_by),
                     created_by_id=created_by.id, created_at=record_model.now_utc(),
                     cots=bool(cots), imported=bool(imported),
-                    import_path=(str(import_path).strip() if imported else ""), project=(project or "").strip())
+                    import_path=(str(import_path).strip() if imported else ""), project=(project or "").strip(),
+                    kind=kind, doc_type=doc_type)
     record_lifecycle.add_event(record, record_model.EVENT_CREATED, created_by)
     record.history[-1]["at"] = record.created_at    # created event and created_at match exactly
 
@@ -147,6 +157,15 @@ def list_pns(repo, org=None):
             if pn and (org is None or pn.org == str(org).upper()):
                 found.add(pn)
     return sorted(found)
+
+
+def list_docs(repo):
+    """Every document number that has a record, sorted."""
+    folder = doc_log_dir(repo)
+    if not folder.is_dir():
+        return []
+    return sorted({number for path in folder.iterdir() if path.is_file() and path.suffix.lower() == ".yaml"
+                   for number in [doc_number.try_parse(path.stem)] if number})
 
 
 def used_bases(repo, org=None):

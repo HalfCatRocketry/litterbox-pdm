@@ -11,6 +11,7 @@ from litterbox.gui import theme
 from litterbox.gui.logic import list_view
 from litterbox.gui.logic import ui_scale
 from litterbox.gui.screens import eco_screen
+from litterbox.gui.screens import documents_screen
 from litterbox.gui.screens import tasks_screen
 from litterbox.gui.screens import team_screen
 from litterbox.gui.widgets import nav_item
@@ -22,7 +23,7 @@ VIEW_ICONS = {"All": "list", "Mine": "pencil", "Checked out": "padlock", "Releas
               "Not downloaded": "cloud", "Void": "ban"}
 
 
-SCREENS = (("tasks", "Workflows", "tasks"), ("ecos", "ECO", "document"))
+SCREENS = (("tasks", "Workflows", "tasks"), ("ecos", "ECO", "document"), ("documents", "Documents", "list"))
 
 
 NAV_ICON = 18                   # the sidebar's icons, at 100%
@@ -89,7 +90,7 @@ class Sidebar:
         counts = list_view.view_counts(self.rows)
         for view in list_view.VIEWS:
             nav[("parts", view)].set_count(counts[view] if self.rows else "")
-        mine = workflow_tasks.count_for_me(workflow_tasks.tasks_from_rows(self.rows, self.identity))
+        mine = workflow_tasks.count_for_me(workflow_tasks.tasks_from_rows(self.rows + list(self.doc_rows), self.identity))
         nav[("tasks", None)].set_count(mine or "")
 
     def set_view(self, view):
@@ -101,7 +102,7 @@ class Sidebar:
 
     # -- screens -----------------------------------------------------------------------------------------------
     def show_screen(self, name):
-        """Show the parts list ("parts") or one of the other screens ("tasks", "ecos", "team")."""
+        """Show the parts list ("parts") or one of the other screens ("tasks", "ecos", "documents", "team")."""
         screen = self.screens.get(name)
         if screen is None:
             screen = self.screens[name] = self._make_screen(name)
@@ -114,7 +115,7 @@ class Sidebar:
             screen.reload()
         elif name == "ecos":
             self._load_ecos()
-        elif name == "team":
+        elif name in ("team", "documents"):
             screen.reload()
         self._mark_nav()
 
@@ -125,6 +126,8 @@ class Sidebar:
             return eco_screen.EcoScreen(self.content, self._view_eco_object)
         if name == "team":
             return team_screen.TeamScreen(self.content, self)
+        if name == "documents":
+            return documents_screen.DocumentsScreen(self.content, self)
         raise KeyError(name)
 
     def _load_ecos(self):

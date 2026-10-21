@@ -33,7 +33,7 @@ class ListAndFilenameWiring(unittest.TestCase):
         app = self.app([self.row])
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
-                         ["00007-001", "Bracket", "", "", "B", "PRT", "", "Available (Rev A released)", "", "A", ""])
+                         ["00007-001", "Bracket", "", "", "B", "PRT", "CAD", "", "Available (Rev A released)", "", "A", ""])
         self.assertIn("image", app.tree.rows["HCR-00007-001"])          # the tick box and status icon
 
     def test_long_names_are_cut_to_the_column_width(self):

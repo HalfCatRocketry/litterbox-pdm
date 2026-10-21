@@ -90,6 +90,14 @@ def in_head(repo, rel):
     return bool(quiet_output(repo, "ls-tree", "HEAD", "--", rel))
 
 
+def tracked(repo, pattern):
+    """The files git tracks that match a path pattern (like 'documents/PROP-0001_A.*'), as git spells them."""
+    try:
+        return runner.run(["git", "ls-files", "--", pattern], repo, quiet=True).splitlines()
+    except LitterboxError:
+        return []
+
+
 def in_index(repo, rel):
     """True if git tracks this file (it is in the index: committed, or added)."""
     try:

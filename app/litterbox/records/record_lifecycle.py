@@ -137,7 +137,8 @@ def mark_released(record, by, files, **details):
         raise record_model.RegistryError(f"Cannot release {record.pn}: it is a COTS (purchased) part.")
     record.status = record_model.STATUS_RELEASED
     record.released_revision = record.revision
-    record.exports[record.revision] = {"wanted": True}     # its STEP and PDF are made again (record_exports.py)
+    if record.uses_cad:
+        record.exports[record.revision] = {"wanted": True}     # its STEP and PDF are made again (record_exports.py)
     return add_event(record, record_model.EVENT_RELEASED, by, files=list(files), **details)
 
 
@@ -160,6 +161,46 @@ def edit_details(record, by, name, description):
         return None
     record.name, record.description = name, description
     return add_event(record, record_model.EVENT_EDITED, by, changes=changes)
+
+
+def set_bom_item(record, by, stem, quantity):
+    """Add a BOM line by hand to the working revision (or change its quantity), or with quantity None take it off.
+    Returns the history entry, or None if nothing changed. The caller must hold the record's lock."""
+    require_status(record, record_model.STATUS_IN_WORK, "change the BOM of")
+    items = record.bom_items.setdefault(record.revision, {})
+    before = items.get(stem)
+    if before == quantity:
+        return None
+    if quantity is None:
+        del items[stem]
+        change = f"BOM: removed {stem}"
+    else:
+        items[stem] = quantity
+        change = f"BOM: {stem} x {quantity}" + (f" (was {before})" if before is not None else " added")
+    if not items:
+        del record.bom_items[record.revision]
+    return add_event(record, record_model.EVENT_EDITED, by, changes=[change])
+
+
+def change_kind(record, by, kind, has_cad_files):
+    """CAD <-> non-CAD. Only for a part never released, with no SolidWorks files in any revision
+    (`has_cad_files`). Returns the history entry, or None if it was that kind already. The caller must hold the
+    record's lock."""
+    if kind not in record_model.ALL_KINDS:
+        raise record_model.RegistryError(f"Unknown kind '{kind}'.")
+    if kind == record.kind:
+        return None
+    label = record_model.KIND_LABEL
+    if record.released_revision or record.status != record_model.STATUS_IN_WORK:
+        raise record_model.RegistryError(f"{record.pn} has been released, so it stays {label[record.kind]}.")
+    if record.cots:
+        raise record_model.RegistryError(f"{record.pn} is a COTS part, which has a CAD model.")
+    if has_cad_files:
+        raise record_model.RegistryError(f"{record.pn} has SolidWorks files, so it stays {label[record.kind]}.")
+    entry = add_event(record, record_model.EVENT_EDITED, by,
+                      changes=[f"kind: {label[record.kind]} -> {label[kind]}"])
+    record.kind = kind
+    return entry
 
 
 def edit_purchasing(record, by, fields):

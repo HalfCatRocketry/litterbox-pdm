@@ -54,7 +54,7 @@ class OrgSwitching:
         self.settings["last_org"] = org
         self.settings["repo"] = self.repo()
         settings.save(self.settings)
-        self.rows, self.rows_by_pn, self.note = [], {}, ""
+        self.rows, self.rows_by_pn, self.note, self.doc_rows = [], {}, "", ()
         self._render()                              # clear the list straight away
         self._update_counts()
         self._selection_changed()

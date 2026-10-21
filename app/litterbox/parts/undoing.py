@@ -11,6 +11,7 @@ from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
+from litterbox.parts import part_changes
 from litterbox.parts import permission_check
 from litterbox.records import record_files
 from litterbox.records import record_model
@@ -33,7 +34,8 @@ def _undo_batch(repo, pns):
     for pn in pns:
         try:
             record_path = record_store.record_relpath(pn)
-            group = index.get(pn, {}).get(record_store.load(repo, pn).revision, []) + [record_path]
+            revision = record_store.load(repo, pn).revision
+            group = index.get(pn, {}).get(revision, []) + part_changes.gone_files(repo, pn, revision) + [record_path]
             if not any(lfs_locks.is_mine(locks, p) for p in group):
                 raise LitterboxError(f"You don't have {pn} checked out.")
             if (repository.count(repo, "@{u}..HEAD", group) or 0) > 0:

@@ -41,8 +41,9 @@ def _checkout_batch(repo, pns):
     pns = batch_core.unique_pns(pns)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "checkout")
-    permission_check.check_solidworks_version(
-        repo, f"check out {pns[0]}" if len(pns) == 1 else f"check out these {len(pns)} parts")
+    if permission_check.uses_solidworks(repo, pns):
+        permission_check.check_solidworks_version(
+            repo, f"check out {pns[0]}" if len(pns) == 1 else f"check out these {len(pns)} parts")
     batch = batch_core.Batch()
     wanted = []
     for pn in pns:

@@ -66,7 +66,8 @@ def revise(repo, pn, reason, backend=None, log=print):
     pn = batch_core.as_pn(pn)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "revise")
-    permission_check.check_solidworks_version(repo, f"revise {pn}")
+    if permission_check.uses_solidworks(repo, [pn]):
+        permission_check.check_solidworks_version(repo, f"revise {pn}")
     reason = " ".join((reason or "").split())
     if not reason:
         raise revision_files.RevisionFailed("A reason is required to revise a part.")

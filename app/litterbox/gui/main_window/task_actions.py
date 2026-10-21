@@ -121,6 +121,7 @@ class TaskActions:
         request that has all its sign-offs) and return True. Return False when it should just happen."""
         repo = self.repo()
         try:
+            action = workflow_templates.for_targets(action, plan.targets)       # documents have their own
             templates = workflow_store.templates_for(repo, action)
         except LitterboxError as e:
             messagebox.showerror("Litterbox", error_text.shorten(str(e)))

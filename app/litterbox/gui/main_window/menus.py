@@ -131,7 +131,8 @@ class Menus:
         screen = tk.StringVar(master=self, value=self.screen)
         self._menu_flags_keep(screen)
         for name, label, keys in (("parts", "Parts", "Ctrl+1"), ("tasks", "Workflows", "Ctrl+2"),
-                                  ("ecos", "ECOs", "Ctrl+3"), ("team", "Team", "Ctrl+4")):
+                                  ("ecos", "ECOs", "Ctrl+3"), ("documents", "Documents", "Ctrl+5"),
+                                  ("team", "Team", "Ctrl+4")):
             menu.add_radiobutton(label=label, value=name, variable=screen, accelerator=keys,
                                  command=lambda name=name: self.show_screen(name))
         menu.add_separator()

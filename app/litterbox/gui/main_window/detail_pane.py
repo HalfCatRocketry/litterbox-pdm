@@ -11,6 +11,8 @@ from litterbox.gui.logic import bom_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import status_icons
 from litterbox.gui.logic import ui_scale
+from litterbox.parts import bom_items
+from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.references import bom
@@ -136,6 +138,8 @@ class DetailPane:
         rev, mode = view.bom_choice()
         view.show_bom(None, "Reading...")
         repo = self.repo()
+        row = self.rows_by_pn.get(pn)
+        mine = row is not None and row.kind == "mine"
 
         def load():
             try:
@@ -144,15 +148,19 @@ class DetailPane:
                 if record is None:
                     return None, f"There is no record for {pn}."
                 found = bom.lines(records, pn, rev, mode)
+                files = record_files.cad_files(repo, pn, rev)
+                assembly = bom_items.takes_items(repo, record, files) or bool(reference_model.stems_of(record, rev))
+                editable = mine and rev == record.revision and bom_items.takes_items(repo, record, files)
+                removable = bom_text.removable(found) if mode != bom.FLAT else {}
                 outdated = rev in record.references_outdated or rev in reference_queries.needs_update(repo, record)
                 counts_outdated = rev in reference_queries.bom_needs_update(repo, record)
                 if not (outdated or counts_outdated):
-                    return bom_text.table(found, mode), bom_text.note(found, bool(record.references.get(rev)))
+                    return bom_text.table(found, mode), bom_text.note(found, assembly), False, editable, removable
                 installed = reference_reader.can_start_solidworks()
                 note = bom_text.note(found, True, outdated, counts_outdated)
                 if not installed:
                     note += " " + bom_text.update_button_text(False)
-                return bom_text.table(found, mode), note, installed
+                return bom_text.table(found, mode), note, installed, editable, removable
             except LitterboxError as e:
                 return None, f"Couldn't work out the BOM: {e}"
 

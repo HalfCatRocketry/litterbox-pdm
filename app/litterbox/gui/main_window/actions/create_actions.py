@@ -34,7 +34,8 @@ class CreateActions:
         def work():
             pn = create.new_part(repo, request["name"], request["description"],
                                  base=request["base"], variant=request["variant"], org=org,
-                                 project=request.get("project"), kind=request.get("kind", create.PART))
+                                 project=request.get("project"), kind=request.get("kind", create.PART),
+                                 noncad=request.get("noncad", False))
             try:
                 checkout.checkout(repo, pn)            # a new part starts out checked out to its creator
             except LitterboxError as e:
@@ -46,7 +47,8 @@ class CreateActions:
             self.note = f"Created {pn}" + (f" (could not check it out: {problem})" if problem else " and checked it out to you")
             self.pending_select = str(pn)
             self.search.delete(0, "end")            # make sure the new row isn't filtered out
-            filename_dialog.FilenameDialog(self, pn)
+            if not request.get("noncad"):
+                filename_dialog.FilenameDialog(self, pn)            # where to save its CAD file
 
         self.run_task(work, "Created", on_success=created)
 

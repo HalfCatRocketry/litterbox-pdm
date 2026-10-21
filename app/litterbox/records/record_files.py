@@ -1,34 +1,43 @@
 """
-record_files.py - which CAD files in the cad folder belong to which part and revision (by their
-Litterbox names, e.g. HCR-00042-001_A.SLDPRT).
+record_files.py - which files belong to which part and revision, by their Litterbox names: CAD files in the cad
+folder (HCR-00042-001_A.SLDPRT), and documents' files in the documents folder (PROP-0001_A.docx).
 """
 
 from litterbox import layout
+from litterbox.core import doc_number
+from litterbox.core.doc_number import DocNumber
 from litterbox.core.filenames import parse_filename
 from litterbox.core.part_number import PNError
 from litterbox.core.revision_letters import check_revision
 from litterbox.records import record_store
 
 
+def folder_name(pn):
+    """The folder a number's files live in: 'cad' for a part, 'documents' for a document."""
+    return layout.DOC_DIR_NAME if isinstance(pn, DocNumber) else layout.CAD_DIR_NAME
+
+
 def cad_index(repo):
-    """Scan the cad folder once. Returns {PN: {revision: [relative paths]}} for every file in it.
+    """Scan the cad and documents folders once. Returns {number: {revision: [relative paths]}} for every file in
+    them, parts by PN and documents by DocNumber.
 
     Paths are relative to the repo with forward slashes, which is what git
     wants, for example {'A': ['cad/HCR-00042-001_A.SLDDRW', 'cad/HCR-00042-001_A.SLDPRT']}.
     Files that aren't named like Litterbox files (~$ temp files, notes) are ignored.
     """
     index = {}
-    folder = record_store.cad_dir(repo)
-    if not folder.is_dir():
-        return index
-    for path in folder.iterdir():
-        if not path.is_file():
+    for folder_text, parse in ((layout.CAD_DIR_NAME, parse_filename), (layout.DOC_DIR_NAME, doc_number.parse_filename)):
+        folder = record_store.cad_dir(repo).parent / folder_text
+        if not folder.is_dir():
             continue
-        try:
-            file_pn, revision, _ext = parse_filename(path.name)
-        except PNError:
-            continue
-        index.setdefault(file_pn, {}).setdefault(revision, []).append(f"{layout.CAD_DIR_NAME}/{path.name}")
+        for path in folder.iterdir():
+            if not path.is_file():
+                continue
+            try:
+                number, revision, _ext = parse(path.name)
+            except PNError:
+                continue
+            index.setdefault(number, {}).setdefault(revision, []).append(f"{folder_text}/{path.name}")
     for revisions in index.values():
         for files in revisions.values():
             files.sort()

@@ -1,6 +1,7 @@
 """
 bom.py - an assembly's bill of materials, worked out from the parts each revision uses (the record's
-`references`) and how many of each (its `quantities`, counted at check-in), so nothing is saved.
+`references`) and how many of each (its `quantities`, counted at check-in), plus the lines added to it by hand
+(`bom_items`, with their own quantities: a non-CAD part, or anything in a non-CAD kit), so nothing is saved.
 
 Three ways to list it:
     SINGLE     what the assembly itself uses
@@ -40,6 +41,7 @@ class BomLine:
     loop: bool = False              # it uses an assembly above it, so the tree stops here
     quantity: int = None            # how many its parent uses (None: not counted)
     total: int = None               # how many the whole assembly needs (None: not known)
+    added: bool = False             # added to the BOM by hand, not read from the model
 
     @property
     def state_text(self):
@@ -62,7 +64,7 @@ def _line(records, stem, level):
     if record is None:
         return BomLine(level, pn, revision, state=state)
     return BomLine(level, pn, revision, record.name, record.description, record.status, state, latest, record.cots,
-                   dict(record.purchasing), bool(record.references.get(revision)))
+                   dict(record.purchasing), bool(reference_model.stems_of(record, revision)))
 
 
 def quantities_of(record, revision):
@@ -72,14 +74,17 @@ def quantities_of(record, revision):
 
 def _children(records, pn, revision, level, parent_total=1):
     record = records.get(pn)
-    stems = record.references.get(revision, []) if record is not None else []
     counts = quantities_of(record, revision)
     found = []
-    for stem in stems:
+    for stem in reference_model.stems_of(record, revision):
         line = _line(records, stem, level)
         if line is None:
             continue
-        line.quantity = None if counts is None else counts.get(stem)
+        line.added = reference_model.is_added(record, revision, stem)
+        if line.added:
+            line.quantity = record.bom_items[revision][stem]
+        else:
+            line.quantity = None if counts is None else counts.get(stem)
         line.total = None if line.quantity is None or parent_total is None else line.quantity * parent_total
         found.append(line)
     return sorted(found, key=lambda line: (str(line.pn), revision_letters.revision_number(line.revision)))

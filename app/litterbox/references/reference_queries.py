@@ -28,7 +28,8 @@ def _use(records, parent_record, revision, stem):
     editable = (revision == parent_record.revision and status == record_model.STATUS_IN_WORK
                 and not parent_record.cots)
     return reference_model.Use(parent_record.pn, revision, child, child_revision, state, latest,
-               parent_record.name, child_record.name if child_record else "", status, editable)
+               parent_record.name, child_record.name if child_record else "", status, editable,
+               reference_model.is_added(parent_record, revision, stem))
 
 
 def uses(repo, pn, revision=None, records=None):
@@ -39,7 +40,7 @@ def uses(repo, pn, revision=None, records=None):
     if record is None:
         raise reference_model.ReferencesError(f"There is no record for {pn}.")
     revision = revision or record.revision
-    found = [_use(records, record, revision, stem) for stem in record.references.get(revision, [])]
+    found = [_use(records, record, revision, stem) for stem in reference_model.stems_of(record, revision)]
     return sorted((u for u in found if u), key=lambda u: (str(u.child), u.child_revision))
 
 
@@ -49,8 +50,8 @@ def where_used(repo, pn, records=None):
     pn = batch_core.as_pn(pn)
     found = []
     for parent_record in records.values():
-        for revision, stems in parent_record.references.items():
-            for stem in stems:
+        for revision in set(parent_record.references) | set(parent_record.bom_items):
+            for stem in reference_model.stems_of(parent_record, revision):
                 parts = reference_model.split_stem(stem)
                 if parts and parts[0] == pn:
                     found.append(_use(records, parent_record, revision, stem))

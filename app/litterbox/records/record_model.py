@@ -8,6 +8,8 @@ from datetime import date, datetime, timezone
 
 import yaml
 
+from litterbox.core import doc_number
+from litterbox.core.doc_number import DocNumber
 from litterbox.core.part_number import PN, PNError, parse, parse_short
 from litterbox.core.revision_letters import FIRST_REVISION, check_revision, revision_number
 from litterbox.records import purchasing_info
@@ -23,6 +25,12 @@ STATUS_VOID = "void"
 
 
 ALL_STATUSES = (STATUS_IN_WORK, STATUS_RELEASED, STATUS_VOID)
+
+
+KIND_CAD = "cad"            # a part or assembly with SolidWorks files (every record before 0.5.1)
+KIND_NONCAD = "noncad"      # no CAD files: paint, raw stock, a kit put together in its BOM (bom_items)
+ALL_KINDS = (KIND_CAD, KIND_NONCAD)
+KIND_LABEL = {KIND_CAD: "CAD", KIND_NONCAD: "Non-CAD"}
 
 
 EVENT_CREATED = "created"
@@ -124,7 +132,7 @@ RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
-    "purchasing", "quantities", "exports",
+    "purchasing", "quantities", "exports", "kind", "bom_items", "documents", "number", "doc_type",
 }
 
 
@@ -149,6 +157,7 @@ class Record:
     released_revision: str = ""      # the latest released revision; empty until the first release
     status: str = STATUS_IN_WORK    # the status of the working revision
     cots: bool = False          # a purchased part: can never be checked out
+    kind: str = KIND_CAD        # KIND_CAD or KIND_NONCAD (a record without CAD files)
     imported: bool = False      # came in through the importer rather than New Part / New Variant
     import_path: str = ""       # where the file was imported from (only for imported parts)
     approvals: list = field(default_factory=list)   # one entry per completed workflow (see workflow.py): who signed, when, and how it ended
@@ -156,21 +165,36 @@ class Record:
     references_outdated: list = field(default_factory=list)  # revisions whose assembly changed but whose list of parts could not be read
     references: dict = field(default_factory=dict)  # revision -> the parts that revision's assembly uses, e.g. {'A': ['HCR-00005-001_A']}
     quantities: dict = field(default_factory=dict)  # revision -> how many of each it uses, e.g. {'A': {'HCR-00005-001_A': 4}}
+    bom_items: dict = field(default_factory=dict)   # revision -> BOM lines added by hand, not in a model, as quantities
     history: list = field(default_factory=list)     # list of event dicts
     purchasing: dict = field(default_factory=dict)  # supplier, cost, lead time (records/purchasing_info.py); {} for none
     exports: dict = field(default_factory=dict)     # revision -> the STEP and PDF Litterbox made (records/record_exports.py)
+    documents: dict = field(default_factory=dict)   # revision -> the documents linked to it, e.g. {'A': ['PROP-0001']}
+    doc_type: str = ""          # a document's type key (documents/doc_types.py); "" for a part
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
 
+    @property
+    def is_document(self):
+        """True for a document's record (numbered like PROP-0001, in DOC-logs/), False for a part's."""
+        return isinstance(self.pn, DocNumber)
+
+    @property
+    def uses_cad(self):
+        """True for a CAD part (it should have SolidWorks files); False for a non-CAD part or a document."""
+        return self.kind == KIND_CAD and not self.is_document
+
     def to_dict(self):
-        data = {
-            "format": RECORD_FORMAT,
-            "org": self.pn.org,
-            "pn": _Quoted(self.pn.short),   # without the org: it is the line above
+        if self.is_document:
+            data = {"format": RECORD_FORMAT, "number": str(self.pn), "doc_type": self.doc_type}
+        else:
+            data = {"format": RECORD_FORMAT, "org": self.pn.org,
+                    "pn": _Quoted(self.pn.short)}   # without the org: it is the line above
+        data.update({
             "revision": self.revision,
             "released_revision": self.released_revision,
             "name": self.name,
             "description": self.description,
-        }
+        })
         if self.project:
             data["project"] = self.project
         data.update({
@@ -178,6 +202,8 @@ class Record:
             "cots": self.cots,
             "imported": self.imported,
         })
+        if self.kind != KIND_CAD:
+            data["kind"] = self.kind
         if self.import_path:
             data["import_path"] = self.import_path
         if self.purchasing:
@@ -199,6 +225,13 @@ class Record:
             data["quantities"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
                                   for rev, counts in sorted(self.quantities.items(),
                                                             key=lambda item: revision_number(item[0]))}
+        if self.bom_items:
+            data["bom_items"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
+                                 for rev, counts in sorted(self.bom_items.items(),
+                                                           key=lambda item: revision_number(item[0]))}
+        if self.documents:
+            data["documents"] = {rev: list(numbers) for rev, numbers in sorted(
+                self.documents.items(), key=lambda item: revision_number(item[0]))}
         if self.exports:
             data["exports"] = {rev: dict(made) for rev, made in sorted(
                 self.exports.items(), key=lambda item: revision_number(item[0]))}
@@ -210,8 +243,10 @@ class Record:
 
     @classmethod
     def from_dict(cls, data):
-        if "pn" not in data:
+        if "pn" not in data and "number" not in data:
             raise RegistryError("The record has no 'pn' field.")
+        if "pn" not in data:
+            data = dict(data, pn=data["number"])
         record_format = data.get("format", 1)               # records written before 0.4.2 have none: format 1
         if isinstance(record_format, bool) or not isinstance(record_format, int) or record_format < 1:
             raise RegistryError(f"{data['pn']}: 'format' must be a whole number, 1 or higher.")
@@ -219,7 +254,9 @@ class Record:
             raise RegistryError(f"{data['pn']}: this record was written by a newer Litterbox (record format "
                                 f"{record_format}). Update Litterbox to read it.")
         try:
-            if data.get("org") is not None:
+            if "number" in data:
+                pn = doc_number.parse(str(data["number"]))
+            elif data.get("org") is not None:
                 pn = parse_short(str(data["pn"]), str(data["org"]))
             else:
                 pn = parse(str(data["pn"]))
@@ -263,6 +300,10 @@ class Record:
             pending["signoffs"] = [dict(e, at=_as_text(e.get("at"))) if isinstance(e, dict) else e
                                    for e in pending["signoffs"]]
 
+        kind = _as_text(data.get("kind", KIND_CAD)) or KIND_CAD
+        if kind not in ALL_KINDS:
+            raise RegistryError(f"{pn}: unknown kind '{kind}'. Update Litterbox to read it.")
+
         for key in ("cots", "imported"):
             if not isinstance(data.get(key, False), bool):
                 raise RegistryError(f"{pn}: '{key}' must be true or false.")
@@ -280,20 +321,8 @@ class Record:
                 raise RegistryError(f"{pn}: 'references' for Rev {rev} must be a list of part numbers.")
             clean_refs[rev] = list(stems)
 
-        quantities = data.get("quantities") or {}
-        if not isinstance(quantities, dict):
-            raise RegistryError(f"{pn}: 'quantities' must give how many of each part each revision uses.")
-        clean_quantities = {}
-        for rev, counts in quantities.items():
-            try:
-                rev = check_revision(str(rev))
-            except PNError as e:
-                raise RegistryError(f"{pn}: bad revision in 'quantities'. {e}")
-            if not isinstance(counts, dict) or not all(
-                    isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v >= 0
-                    for k, v in counts.items()):
-                raise RegistryError(f"{pn}: 'quantities' for Rev {rev} must give a whole number for each part.")
-            clean_quantities[rev] = dict(counts)
+        clean_quantities = _counts(pn, data.get("quantities"), "quantities")
+        clean_bom_items = _counts(pn, data.get("bom_items"), "bom_items")
 
         outdated = data.get("references_outdated") or []
         if not isinstance(outdated, list):
@@ -310,6 +339,17 @@ class Record:
             exports = {check_revision(str(rev)): dict(made) for rev, made in exports.items()}
         except PNError as e:
             raise RegistryError(f"{pn}: bad revision in 'exports'. {e}")
+
+        documents = data.get("documents") or {}
+        if not isinstance(documents, dict) or not all(
+                isinstance(numbers, list) and all(doc_number.try_parse(n) for n in numbers)
+                for numbers in documents.values()):
+            raise RegistryError(f"{pn}: 'documents' must list document numbers for each revision.")
+        try:
+            documents = {check_revision(str(rev)): [str(doc_number.parse(n)) for n in numbers]
+                         for rev, numbers in documents.items()}
+        except PNError as e:
+            raise RegistryError(f"{pn}: bad revision in 'documents'. {e}")
 
         try:
             purchasing = purchasing_info.clean(data.get("purchasing"))
@@ -333,6 +373,7 @@ class Record:
             released_revision=released_revision,
             status=status,
             cots=bool(data.get("cots", False)),
+            kind=kind,
             imported=bool(data.get("imported", False)),
             import_path=_as_text(data.get("import_path")),
             approvals=list(approvals),
@@ -340,11 +381,33 @@ class Record:
             references=clean_refs,
             references_outdated=outdated,
             quantities=clean_quantities,
+            bom_items=clean_bom_items,
             history=[_clean_event(e) for e in history],
             purchasing=purchasing,
             exports=exports,
+            documents=documents,
+            doc_type=_as_text(data.get("doc_type")),
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},
         )
+
+
+def _counts(pn, counts_by_rev, key):
+    """{revision: {stem: whole number}} from a record's quantities or bom_items, checked."""
+    counts_by_rev = counts_by_rev or {}
+    if not isinstance(counts_by_rev, dict):
+        raise RegistryError(f"{pn}: '{key}' must give how many of each part each revision uses.")
+    clean = {}
+    for rev, counts in counts_by_rev.items():
+        try:
+            rev = check_revision(str(rev))
+        except PNError as e:
+            raise RegistryError(f"{pn}: bad revision in '{key}'. {e}")
+        if not isinstance(counts, dict) or not all(
+                isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v >= 0
+                for k, v in counts.items()):
+            raise RegistryError(f"{pn}: '{key}' for Rev {rev} must give a whole number for each part.")
+        clean[rev] = dict(counts)
+    return clean
 
 
 def dump(record):

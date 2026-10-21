@@ -10,6 +10,7 @@ from pathlib import Path
 
 from litterbox import layout
 from litterbox.cad import file_types
+from litterbox.core import doc_number
 from litterbox.core import filenames
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
@@ -60,13 +61,13 @@ def read_journal(repo):
     except (OSError, ValueError, KeyError, TypeError) as e:
         raise RevisionFailed(f"The note about an unfinished revise ({path}) can't be read ({e}). "
                              "Delete it by hand if you are sure nothing is running, then try again.") from None
-    folders = (f"{layout.CAD_DIR_NAME}/", f"{layout.CANCELLED_DIR_NAME}/")
+    folders = (f"{layout.CAD_DIR_NAME}/", f"{layout.DOC_DIR_NAME}/", f"{layout.CANCELLED_DIR_NAME}/")
     for rel in journal["added"] + journal["removed"]:
         if not str(rel).startswith(folders) or ".." in str(rel):
             raise RevisionFailed(f"The note about an unfinished revise lists a file outside the cad and "
                                  f"cancelled-revs folders ({rel}). Litterbox will not touch it. "
                                  f"Check {path} by hand.")
-    if not journal["record"].startswith(f"{layout.LOG_DIR_NAME}/") or ".." in journal["record"]:
+    if not journal["record"].startswith((f"{layout.LOG_DIR_NAME}/", f"{layout.DOC_LOG_DIR_NAME}/"))             or ".." in journal["record"]:
         raise RevisionFailed(f"The note about an unfinished revise lists a record outside PN-logs. Check {path}.")
     return journal
 
@@ -135,23 +136,29 @@ def recover(repo, log=print):
 
 
 def revised_name(rel, new_revision):
+    """The name of a file of the next revision: cad/HCR-00042-001_B.SLDPRT, or documents/PROP-0001_B.docx."""
+    if rel.startswith(f"{layout.DOC_DIR_NAME}/"):
+        number, _rev, _ext = doc_number.parse_filename(rel)
+        return f"{layout.DOC_DIR_NAME}/{doc_number.filename(number, new_revision, rel.rsplit('.', 1)[1])}"
     file_pn, _rev, ext = filenames.parse_filename(rel)
     return f"{layout.CAD_DIR_NAME}/{filenames.filename(file_pn, new_revision, ext)}"
 
 
 def copy_list(repo, record, files):
-    """([(old, new)], kept, problems) for revising the given files to the next letter."""
+    """([(old, new)], kept, problems) for revising the given files to the next letter. A part's SolidWorks files
+    are copied and the rest (its STEP and PDF) stay with the old revision; every file of a document is copied."""
     new_revision = record_revisions.next_free_revision(record)
     copies, kept, problems = [], [], []
     for rel in files:
-        if file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS:
+        if record.is_document or file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS:
             new = revised_name(rel, new_revision)
             copies.append((rel, new))
             if (Path(repo) / new).exists():
                 problems.append(f"{new} already exists in the cad folder.")
         else:
             kept.append(rel)
-    if not any(file_types.extension(old) in file_types.MODEL_EXTENSIONS for old, _new in copies):
+    if record.uses_cad and not any(
+            file_types.extension(old) in file_types.MODEL_EXTENSIONS for old, _new in copies):
         problems.append("There is no SolidWorks part or assembly file to copy.")
     return copies, kept, problems
 

@@ -17,6 +17,7 @@ from litterbox.git import runner
 from litterbox.parts import batch_core
 from litterbox.parts import planning
 from litterbox.records import record_lifecycle
+from litterbox.records import record_links
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
@@ -85,8 +86,11 @@ def as_pns(pns):
     return [batch_core.as_pn(p) for p in pns]
 
 
-def _problems(repo, pn, action, reason, fetch, ctx=None):
-    """(problems, files) for starting `action` on this part."""
+def _problems(repo, pn, action, reason, fetch, ctx=None, document=None):
+    """(problems, files) for starting `action` on this part (or document)."""
+    if action == workflow_templates.REMOVE_DOC:
+        return _remove_problems(repo, pn, document), []
+    action = workflow_templates.base_action(action)
     if action == workflow_templates.RELEASE:
         plan = planning.release_plan(repo, pn, fetch=fetch, ctx=ctx)
         return list(plan.problems), list(plan.files)
@@ -107,10 +111,23 @@ def _problems(repo, pn, action, reason, fetch, ctx=None):
     return [], []
 
 
+def _remove_problems(repo, pn, document):
+    """Why a document's link can't be taken off this part by a Remove document link request."""
+    record = record_store.load(repo, pn)
+    if record.pending:
+        return ["It is already waiting for sign-offs."]
+    if not document or str(document) not in record_links.linked(record):
+        return [f"{document or 'That document'} isn't linked to Rev {record.revision}."]
+    if record.status != record_model.STATUS_RELEASED:
+        return ["It isn't released: check it out and remove the link yourself."]
+    return []
+
+
 @converts_errors
-def request(repo, pns, action, template_name, assignments, extras=(), reason="", eco=None):
-    """Start a workflow on one or more parts: check every part first (nothing happens if any can't go ahead),
-    then record the request in each. Returns the new request's id.
+def request(repo, pns, action, template_name, assignments, extras=(), reason="", eco=None, document=None):
+    """Start a workflow on one or more parts (or documents): check every one first (nothing happens if any can't
+    go ahead), then record the request in each. Returns the new request's id. `document` is the document whose link
+    a Remove document link request takes off.
 
     If the template requires an ECO, `eco` is {"name", "description"}: the ECO file is written in the same commit
     (see workflow_ecos.py and change_orders/), and each part's request names it.
@@ -118,6 +135,10 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="",
     pns = as_pns(pns)
     if action not in workflow_templates.ACTIONS:
         raise workflow_templates.WorkflowError(f"'{action}' can't have a workflow.")
+    if action != workflow_templates.REMOVE_DOC and             workflow_templates.for_targets(workflow_templates.base_action(action), pns) != action:
+        raise workflow_templates.WorkflowError(f"{workflow_templates.label_of(action)} is for "
+                                               + ("documents." if action in workflow_templates.DOC_ACTION.values()
+                                                  else "parts."))
     me = current_member(repo, action)
     template = workflow_store.templates_for(repo, action).get(template_name)
     if template is None:
@@ -133,7 +154,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="",
 
     problems, files, ctx = {}, {}, planning.PlanContext(repo)         # the vault is looked at once for all the parts
     for pn in pns:
-        found, cad = _problems(repo, pn, action, reason, True, ctx)
+        found, cad = _problems(repo, pn, action, reason, True, ctx, document)
         if found:
             problems[pn] = found
         files[pn] = cad
@@ -151,7 +172,8 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="",
         def edit(record, user, pn=pn):
             if record.pending:
                 raise record_model.RegistryError(f"{record.pn} already has a request waiting for sign-offs.")
-            if action == workflow_templates.RELEASE and (record.status != record_model.STATUS_IN_WORK or record.cots):
+            if workflow_templates.base_action(action) == workflow_templates.RELEASE and (
+                    record.status != record_model.STATUS_IN_WORK or record.cots):
                 raise record_model.RegistryError(f"Cannot release {record.pn}: its status is '{record.status}'.")
             record.pending = {
                 "id": batch_id, "action": action, "revision": record.revision, "requested_by": user,
@@ -160,6 +182,7 @@ def request(repo, pns, action, template_name, assignments, extras=(), reason="",
                 "files": dict(hashes[pn]), "signoffs": [],
                 **({"reason": reason} if reason else {}),
                 **({"eco": made["eco"]} if made.get("eco") else {}),
+                **({"document": str(document)} if action == workflow_templates.REMOVE_DOC else {}),
             }
             record_lifecycle.add_event(record, record_model.EVENT_RELEASE_REQUESTED, user, action=action,
                                waiting_on=signoff_slots.waiting_on(record.pending), files=list(files[pn]) or None,

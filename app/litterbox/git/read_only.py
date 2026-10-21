@@ -48,7 +48,7 @@ def enforce_read_only(repo):
         diagnostics.LOG("WARNING: skipped the read-only check because locks could not be read.")
         return
     index = record_files.cad_index(repo)
-    for pn in record_store.list_pns(repo):
+    for pn in record_store.list_pns(repo) + record_store.list_docs(repo):
         every_file = [f for files in index.get(pn, {}).values() for f in files]
         for rel in every_file + [record_store.record_relpath(pn)]:
             if not lfs_locks.is_mine(locks, rel):

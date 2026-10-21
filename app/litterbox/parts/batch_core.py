@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox import diagnostics
+from litterbox.core import doc_number
+from litterbox.core.doc_number import DocNumber
 from litterbox.core.part_number import PN
+from litterbox.core.part_number import PNError
 from litterbox.core.part_number import parse as parse_pn
 from litterbox.errors import LitterboxError
 from litterbox.git import committing
@@ -28,7 +31,16 @@ from litterbox.team import guarded_push
 
 
 def as_pn(value):
-    return value if isinstance(value, PN) else parse_pn(value)
+    """A PN, or a document's DocNumber (documents go through the same actions as parts), from either or its text."""
+    if isinstance(value, (PN, DocNumber)):
+        return value
+    try:
+        return parse_pn(value)
+    except PNError:
+        number = doc_number.try_parse(value)
+        if number is None:
+            raise
+        return number
 
 
 @dataclass

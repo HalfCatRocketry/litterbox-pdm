@@ -2,7 +2,9 @@
 part_status.py - the status of every part: one row per record in
 PN-logs, with its lock, its files and whether they are modified.
 
-Rows come from records, not files: a CAD file with no record has no row.
+Rows come from records, not files: a CAD file with no record has no row. get_status(repo, documents=True) gives
+the same rows for documents (DOC-logs/, their files in documents/), which are checked out, released and so on in
+the same way.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -44,6 +46,8 @@ class PartStatus:
     bom_outdated: bool = False          # an assembly whose part counts are missing or out of date
     released_revisions: tuple = ()      # every revision that has been released, oldest first
     files_needed: tuple = ()            # the STEP and/or PDF its released revision still needs (record_exports.py)
+    noncad: bool = False                # a non-CAD part: no CAD files (record_model.KIND_NONCAD)
+    doc_type: str = ""                  # a document's type key (documents/doc_types.py); "" for a part
 
 
 def released_revisions(record):
@@ -53,8 +57,8 @@ def released_revisions(record):
     return tuple(sorted(released, key=revision_letters.revision_number))
 
 
-def get_status(repo):
-    """One PartStatus per part number that has a record."""
+def get_status(repo, documents=False):
+    """One PartStatus per part number that has a record (or with documents=True, per document)."""
     repository.validate_repo(repo)
     index = record_files.cad_index(repo)
     with ThreadPoolExecutor(max_workers=2) as pool:      # two independent git calls: do them at the same time
@@ -63,7 +67,7 @@ def get_status(repo):
         locks, modified = locks_job.result(), modified_job.result()
 
     rows = []
-    for pn in record_store.list_pns(repo):
+    for pn in (record_store.list_docs(repo) if documents else record_store.list_pns(repo)):
         revisions = index.get(pn, {})
         try:
             record = record_store.load(repo, pn)
@@ -100,11 +104,13 @@ def get_status(repo):
             state, kind = "Modified but not checked out", "unclaimed"
         elif record.cots:
             state, kind = "COTS part", "cots"
+        elif record.kind == record_model.KIND_NONCAD:
+            state, kind = "Available (non-CAD)", "ok"
         elif not files and every_file:
             others = ", ".join(sorted(revisions, key=revision_letters.revision_number))
             state, kind = f"No files for Rev {record.revision} (found Rev {others})", "stray"
         elif not files:
-            state, kind = "Created, no CAD files yet", "ok"
+            state, kind = ("Created, no files yet" if documents else "Created, no CAD files yet"), "ok"
         else:
             state, kind = "Available", "ok"
 
@@ -126,5 +132,6 @@ def get_status(repo):
                                record.description, record.cots, record.import_path,
                                record.revision, record.released_revision, revisions, outdated, record.pending,
                                not_downloaded, project=record.project, bom_outdated=bom_outdated,
-                               released_revisions=released_revisions(record), files_needed=needed))
+                               released_revisions=released_revisions(record), files_needed=needed,
+                               noncad=record.kind == record_model.KIND_NONCAD, doc_type=record.doc_type))
     return rows

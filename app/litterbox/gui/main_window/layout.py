@@ -265,7 +265,13 @@ class WindowLayout:
             parent, on_open=self._pane_open, on_view_eco=self.view_eco,
             on_tab=lambda name: self._pane_tab_changed(name), on_manage_references=self.show_references,
             on_bom=lambda rev, mode: self._load_pane_bom(), on_export_bom=self.export_bom,
-            on_update_bom=self.update_bom, on_generate=lambda pn: self.generate_step_pdf([pn]))
+            on_update_bom=self.update_bom, on_generate=lambda pn: self.generate_step_pdf([pn]),
+            on_add_bom_item=lambda: self.add_bom_item(self.pane_pn),
+            on_remove_bom_item=lambda stem: self.remove_bom_item(self.pane_pn, stem),
+            document_rows=self.document_link_rows, on_open_document=self._open_document_text,
+            on_link_document=lambda rev: self.link_document(self.pane_pn, rev, then=self._reshow_pane),
+            on_unlink_document=lambda rev, number: self.unlink_document(self.pane_pn, rev, self._doc_number(number),
+                                                                        then=self._reshow_pane))
         self.pane_view.grid(row=2, column=0, sticky="nsew", padx=(6, 10), pady=(0, 6))
         parent.bind("<Configure>", lambda event: self._wrap_pane(event.width), add="+")
 

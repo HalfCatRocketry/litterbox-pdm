@@ -31,6 +31,26 @@ ALLOWED_KINDS = {
 }
 
 
+# Actions that need CAD files: never for a non-CAD part (PartStatus.noncad), whatever its state
+CAD_ONLY = {"open", "open_drawing", "generate_step_pdf", "make_cots"}
+
+
+def usable(action, row):
+    """True if the action may be used on this part (a PartStatus row) as it is now."""
+    if row is None or row.kind not in ALLOWED_KINDS[action]:
+        return False
+    return not (action in CAD_ONLY and getattr(row, "noncad", False))
+
+
+def unusable_reason(action, row):
+    """Why the action can't be used on this part, for messages."""
+    if row is None:
+        return "not in the list"
+    if action in CAD_ONLY and getattr(row, "noncad", False) and row.kind in ALLOWED_KINDS[action]:
+        return "it is a non-CAD part"
+    return row.state
+
+
 # These can be done to several parts at once; the rest need exactly one part selected.
 MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots", "export_files",
          "generate_step_pdf"}
@@ -71,16 +91,15 @@ def plan_action(action, selected, rows_by_pn, pending=None):
     if action not in MULTI and len(selected) > 1:
         return ActionPlan(message=f"Select just one part to {NAME[action]}.")
 
-    allowed = ALLOWED_KINDS[action]
     targets, skipped = [], []
     for pn in selected:
         row = rows_by_pn.get(pn)
         if pending and action not in LOOKS and str(pn) in pending:
             skipped.append((pn, f"busy: {pending[str(pn)].lower()}"))
-        elif row is not None and row.kind in allowed:
+        elif usable(action, row):
             targets.append(pn)
         else:
-            skipped.append((pn, row.state if row is not None else "not in the list"))
+            skipped.append((pn, unusable_reason(action, row)))
 
     plan = ActionPlan(targets, skipped)
     if not targets:
@@ -139,12 +158,7 @@ def action_available(action, ticked, highlighted, rows_by_pn, pending=None):
         return len(targets) == 1
     if action not in MULTI and len(targets) > 1:
         return False
-    allowed = ALLOWED_KINDS[action]
-    for pn in targets:
-        row = rows_by_pn.get(pn)
-        if row is None or row.kind not in allowed:
-            return False
-    return True
+    return all(usable(action, rows_by_pn.get(pn)) for pn in targets)
 
 
 def why_not(action, ticked, highlighted, rows_by_pn, pending=None):
@@ -166,8 +180,8 @@ def why_not(action, ticked, highlighted, rows_by_pn, pending=None):
         row = rows_by_pn.get(pn)
         if row is None:
             return f"{pn.short} is not in the list."
-        if row.kind not in ALLOWED_KINDS.get(action, ()):
-            return f"Can't {name} {pn.short}: {row.state}."
+        if not usable(action, row):
+            return f"Can't {name} {pn.short}: {unusable_reason(action, row)}."
     return ""
 
 

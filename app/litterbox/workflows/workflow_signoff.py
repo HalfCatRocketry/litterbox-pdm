@@ -12,6 +12,7 @@ from litterbox.errors import LitterboxError
 from litterbox.parts import batch_core
 from litterbox.parts import planning
 from litterbox.records import record_lifecycle
+from litterbox.records import record_links
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
@@ -162,7 +163,7 @@ def _finish_edit(repo, action, plan, override_reason, ecos=None):
             if not signoff_slots.is_complete(pending):
                 raise record_model.RegistryError("Still waiting for: " + ", ".join(signoff_slots.waiting_on(pending)) + ".")
             workflow_request.check_files_unchanged(repo, pending)
-        act = pending["action"] if pending else action
+        act = workflow_templates.base_action(pending["action"] if pending else action)
         reason = (pending or {}).get("reason") or override_reason
         signed = [e.get("by") for e in (pending or {}).get("signoffs", [])]
         signed_ids = [e.get("id") for e in (pending or {}).get("signoffs", []) if e.get("id")]
@@ -178,7 +179,10 @@ def _finish_edit(repo, action, plan, override_reason, ecos=None):
         if ecos is not None:
             ecos.note(pending)                                 # its ECO is closed too
         record.pending = {}                                    # the checks in mark_* refuse a pending part
-        if act == workflow_templates.RELEASE:
+        if act == workflow_templates.REMOVE_DOC:
+            record_links.unlink(record, user, (pending or {}).get("document"), reason=reason,
+                                signoffs=details["signoffs"], override=details.get("override"))
+        elif act == workflow_templates.RELEASE:
             record_lifecycle.mark_released(record, user, plan.files, **details)
         elif act == workflow_templates.MAKE_COTS:
             record_lifecycle.mark_cots(record, user, plan.files)
@@ -202,6 +206,10 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
             if action not in workflow_templates.ACTIONS:
                 raise workflow_templates.WorkflowError(f"{pn} has no request to complete.")
             plan = None
+            if action == workflow_templates.REMOVE_DOC and not (record0.pending or {}).get("document"):
+                raise workflow_templates.WorkflowError(f"{pn} has no Remove document link request to complete.")
+            label = workflow_templates.label_of(action)
+            action = workflow_templates.base_action(action)
             if action == workflow_templates.RELEASE:
                 plan = planning.release_plan(repo, pn, allow_pending=True, ctx=ctx)
             elif action == workflow_templates.MAKE_COTS:
@@ -212,7 +220,7 @@ def _finish_many(repo, pns, override_reason=None, override_action=None):
         except (LitterboxError, record_model.RegistryError) as e:
             failed[pn] = e
             continue
-        message = f"{pn}: {workflow_templates.label_of(action)} done" + (" (Admin override)" if override_reason is not None
+        message = f"{pn}: {label} done" + (" (Admin override)" if override_reason is not None
                                                       else " after sign-offs")
         items.append((pn, action, _finish_edit(repo, action, plan, override_reason, ecos), message))
         files[pn] = list(plan.files) if plan is not None else []

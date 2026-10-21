@@ -67,6 +67,19 @@ def stem_of_path(path):
     return filenames.file_stem(parsed[0], parsed[1])
 
 
+def stems_of(record, revision):
+    """Every part revision one revision of a record uses: what its model uses (`references`), then the lines added
+    to its BOM by hand (`bom_items`), each once."""
+    if record is None:
+        return []
+    return list(dict.fromkeys(list(record.references.get(revision, [])) + list(record.bom_items.get(revision, {}))))
+
+
+def is_added(record, revision, stem):
+    """True if the use is a BOM line added by hand rather than one read from the model."""
+    return record is not None and stem in record.bom_items.get(revision, {}) and         stem not in record.references.get(revision, [])
+
+
 class LazyRecords:
     """Looks records up by PN as they are needed (None for a missing or unreadable one)."""
 
@@ -106,6 +119,7 @@ class Use:
     child_name: str = ""
     parent_status: str = ""         # status of THAT revision of the parent: in_work / released
     editable: bool = False          # the parent revision is in work, so it can be pointed at a newer part
+    added: bool = False             # a BOM line added by hand (bom_items), not read from the model
 
     @property
     def state_text(self):
@@ -117,7 +131,7 @@ class Use:
     @property
     def replaceable(self):
         """Can Litterbox point this reference at the child's latest released revision?"""
-        return (self.editable and bool(self.latest_released)
+        return (self.editable and not self.added and bool(self.latest_released)
                 and self.state in (STALE, CANCELLED)
                 and self.latest_released != self.child_revision)
 

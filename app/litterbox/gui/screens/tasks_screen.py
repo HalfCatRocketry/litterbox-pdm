@@ -113,7 +113,8 @@ class TaskList(ctk.CTkFrame):
 
     def reload(self):
         keep = self.tree.selection()
-        tasks = workflow_tasks.tasks_from_rows(self.app.rows, self.app.identity, everything=self.everything)
+        tasks = workflow_tasks.tasks_from_rows(self.app.rows + list(self.app.doc_rows), self.app.identity,
+                                               everything=self.everything)
         self.tasks = {t.id: t for t in tasks}
         self.tree.delete(*self.tree.get_children())
         for iid, values in task_text.tasks_table(tasks):

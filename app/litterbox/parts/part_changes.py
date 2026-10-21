@@ -4,9 +4,12 @@ part_changes.py - what has changed in a checked-out part
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import yaml
 
+from litterbox import layout
+from litterbox.core.doc_number import DocNumber
 from litterbox.errors import LitterboxError
 from litterbox.git import repository
 from litterbox.git import runner
@@ -41,6 +44,15 @@ def _record_edited_by_hand(repo, pn, user):
         history = history[:-1]                        # the entry added by checkout() is expected
     current.history = history
     return current.to_dict() != committed.to_dict()
+
+
+def gone_files(repo, pn, revision):
+    """A document revision's files that are in the vault but were removed from your copy (Remove File): Check In
+    uploads their removal and Undo Checkout puts them back. Parts' files are never removed this way: []."""
+    if not isinstance(pn, DocNumber):
+        return []
+    return [rel for rel in repository.tracked(repo, f"{layout.DOC_DIR_NAME}/{pn}_{revision}.*")
+            if not (Path(repo) / rel).exists()]
 
 
 @dataclass

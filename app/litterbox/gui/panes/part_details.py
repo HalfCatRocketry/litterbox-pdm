@@ -14,6 +14,7 @@ import customtkinter as ctk
 from litterbox.gui import scaling
 from litterbox.gui import theme
 from litterbox.gui.logic import bom_text
+from litterbox.gui.logic import document_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import part_details_text
 from litterbox.gui.logic import reference_text
@@ -60,23 +61,32 @@ class PartDetailsView(ctk.CTkFrame):
     are filled by show_references(), and the BOM tab by show_bom(): on_bom(rev, mode) asks for it to be read,
     on_export_bom(rev, mode) exports it and on_update_bom() counts its parts again (the Update BOM button, shown only
     when its quantities need it). on_tab(name) says which tab was chosen. on_generate(pn) makes a released part's
-    STEP and PDF (the Generate STEP/PDF... button, shown only while they need updating)."""
+    STEP and PDF (the Generate STEP/PDF... button, shown only while they need updating). on_add_bom_item() and
+    on_remove_bom_item(stem) add and take off BOM lines by hand (the buttons show while you may). The Documents tab
+    lists the documents linked to the revision picked on the Details tab (document_rows(record, rev) gives its
+    rows); on_open_document(number), on_link_document(rev) and on_unlink_document(rev, number) are its buttons."""
 
     def __init__(self, master, on_open=None, on_view_eco=None, on_tab=None,
-                 on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None, on_generate=None):
+                 on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None, on_generate=None,
+                 on_add_bom_item=None, on_remove_bom_item=None, document_rows=None, on_open_document=None,
+                 on_link_document=None, on_unlink_document=None):
         super().__init__(master, fg_color="transparent")
         self.scale = scaling.scale_of(self)
         self.on_open, self.on_view_eco, self.on_tab = on_open, on_view_eco, on_tab
         self.on_manage_references = on_manage_references
         self.on_bom, self.on_export_bom, self.on_update_bom = on_bom, on_export_bom, on_update_bom
         self.on_generate = on_generate
+        self.on_add_bom_item, self.on_remove_bom_item = on_add_bom_item, on_remove_bom_item
+        self.bom_removable = {}
+        self.document_rows, self.on_open_document = document_rows, on_open_document
+        self.on_link_document, self.on_unlink_document = on_link_document, on_unlink_document
         self.record, self.revisions = None, {}
         self.eco_number, self.shown = None, []
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         self.tabs = ctk.CTkTabview(self, fg_color=theme.BG_PANEL, command=self._tab_changed)
         self.tabs.grid(row=0, column=0, sticky="nsew")
-        for name in ("Details", "History", "Uses", "Where used", "BOM"):
+        for name in ("Details", "History", "Uses", "Where used", "BOM", "Documents"):
             self.tabs.add(name)
             self.tabs.tab(name).columnconfigure(0, weight=1)
         self._details_tab(self.tabs.tab("Details"))
@@ -85,6 +95,7 @@ class PartDetailsView(ctk.CTkFrame):
         for name, columns in (("Uses", USES_COLUMNS), ("Where used", USED_IN_COLUMNS)):
             self._references_tab(self.tabs.tab(name), name, columns)
         self._bom_tab(self.tabs.tab("BOM"))
+        self._documents_tab(self.tabs.tab("Documents"))
         self.tabs.set("Details")
 
     def current_tab(self):
@@ -150,6 +161,7 @@ class PartDetailsView(ctk.CTkFrame):
             self.eco_button.grid()
         else:
             self.eco_button.grid_remove()
+        self._show_documents(rev)
         if self.on_generate and part_details_text.files_flagged(self.record, rev, self.revisions):
             self.generate_button.grid()
         else:
@@ -162,6 +174,51 @@ class PartDetailsView(ctk.CTkFrame):
     def _view_eco(self):
         if self.eco_number and self.on_view_eco:
             self.on_view_eco(self.eco_number)
+
+    # -- Documents -------------------------------------------------------------
+    def _documents_tab(self, tab):
+        tab.rowconfigure(1, weight=1)
+        bar = ctk.CTkFrame(tab, fg_color="transparent")
+        bar.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 4))
+        self.documents_label = ctk.CTkLabel(bar, text="", text_color=theme.MUTED, anchor="w")
+        self.documents_label.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 4))
+        for column, (text, command) in enumerate((("Open", self._open_document), ("Add...", self._link_document),
+                                                  ("Remove", self._unlink_document))):
+            release_button.ReleaseButton(bar, text=text, width=80, height=28,
+                                         fg_color=theme.TEAL if column == 0 else theme.GRAY,
+                                         hover_color=theme.TEAL_HOVER if column == 0 else theme.GRAY_HOVER,
+                                         command=command).grid(row=1, column=column, padx=(0, 6))
+        frame, self.documents_tree, _sorter = _table(tab, document_text.LINK_COLUMNS, scale=self.scale)
+        frame.grid(row=1, column=0, sticky="nsew")
+        self.documents_tree.bind("<Double-1>", lambda event: self._open_document())
+
+    def _show_documents(self, rev):
+        self.documents_tree.delete(*self.documents_tree.get_children())
+        rows = self.document_rows(self.record, rev) if self.document_rows and self.record is not None else []
+        for number, values in rows:
+            self.documents_tree.insert("", "end", iid=number, values=values)
+        linked = f"{len(rows)} linked document{'s' if len(rows) != 1 else ''}" if rows else "no documents linked"
+        self.documents_label.configure(text=f"Rev {rev}: {linked}")
+
+    def _chosen_document(self):
+        chosen = self.documents_tree.selection()
+        return chosen[0] if chosen else None
+
+    def _open_document(self):
+        number = self._chosen_document()
+        if number and self.on_open_document:
+            self.on_open_document(number)
+
+    def _link_document(self):
+        if self.on_link_document and self.record is not None:
+            self.on_link_document(self.rev_var.get())
+
+    def _unlink_document(self):
+        number = self._chosen_document()
+        if number and self.on_unlink_document:
+            self.on_unlink_document(self.rev_var.get(), number)
+        elif self.on_unlink_document:
+            self.documents_label.configure(text="Click a document first.")
 
     # -- History ---------------------------------------------------------------
     def _history_tab(self, tab):
@@ -248,6 +305,16 @@ class PartDetailsView(ctk.CTkFrame):
         self.bom_update.grid(row=0, column=1, padx=(8, 0))
         self.bom_update.grid_remove()
         tooltip.Tooltip(self.bom_update, bom_text.update_button_text(True))
+        self.bom_add = release_button.ReleaseButton(buttons, text="Add item...", width=90, height=28,
+                                                    fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
+                                                    command=self._add_bom_item)
+        self.bom_add.grid(row=0, column=2, padx=(8, 0))
+        self.bom_remove = release_button.ReleaseButton(buttons, text="Remove", width=80, height=28,
+                                                       fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
+                                                       command=self._remove_bom_item)
+        self.bom_remove.grid(row=0, column=3, padx=(8, 0))
+        for button in (self.bom_add, self.bom_remove):
+            button.grid_remove()
         self.bom_note = ctk.CTkLabel(tab, text="", text_color=theme.MUTED, anchor="w", justify="left",
                                      wraplength=320)
         self.bom_note.grid(row=1, column=0, sticky="ew", padx=4, pady=(2, 4))
@@ -277,13 +344,31 @@ class PartDetailsView(ctk.CTkFrame):
         if self.on_update_bom and self.record is not None:
             self.on_update_bom()
 
-    def show_bom(self, rows=None, note="", can_update=False):
+    def _add_bom_item(self):
+        if self.on_add_bom_item and self.record is not None:
+            self.on_add_bom_item()
+
+    def _remove_bom_item(self):
+        stems = [self.bom_removable[iid] for iid in self.bom_tree.selection() if iid in self.bom_removable]
+        if stems and self.on_remove_bom_item:
+            self.on_remove_bom_item(stems[0])
+        elif self.on_remove_bom_item:
+            self.bom_note.configure(text="Select a line added by hand first.")
+
+    def show_bom(self, rows=None, note="", can_update=False, editable=False, removable=None):
         """Fill the BOM tab with bom_text.table rows (None: not read yet, and `note` says why). `can_update` shows
-        the Update BOM button."""
+        the Update BOM button; `editable` shows Add item... and Remove, which can take off the lines in
+        `removable` ({iid: stem}, bom_text.removable)."""
         if can_update and self.on_update_bom:
             self.bom_update.grid()
         else:
             self.bom_update.grid_remove()
+        self.bom_removable = dict(removable or {}) if editable else {}
+        for button, callback in ((self.bom_add, self.on_add_bom_item), (self.bom_remove, self.on_remove_bom_item)):
+            if editable and callback:
+                button.grid()
+            else:
+                button.grid_remove()
         self.bom_tree.delete(*self.bom_tree.get_children())
         for iid, values in rows or []:
             self.bom_tree.insert("", "end", iid=iid, values=values)

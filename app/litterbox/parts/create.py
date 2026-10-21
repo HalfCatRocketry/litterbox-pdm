@@ -8,6 +8,10 @@ again (ATTEMPTS times). Creating many parts at once (the importer) is in create_
 New Part and New Assembly differ only in their variants: an assembly's start at the org's assembly_variant_start
 (500 unless the org chose another), a part's stay below it. A variant typed by hand may be any free one.
 
+A non-CAD part (noncad=True: paint, raw stock, a kit put together in its BOM) is created the same way. The first
+one in a vault raises its min_litterbox_version to NONCAD_MIN_VERSION in the same commit, so an older Litterbox,
+which would take it for a CAD part with no files yet, is told to update.
+
 Projects (core/projects.py): New Part with a project takes a number in that project's block; with no project, it
 never takes (or accepts) a number inside a block. Every record is given the project its number's block belongs to,
 so a new variant of a project's part is in that project too.
@@ -18,6 +22,8 @@ from functools import wraps
 from pathlib import Path
 
 from litterbox import diagnostics
+from litterbox import layout
+from litterbox import version
 from litterbox.core import numbering
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
@@ -31,6 +37,7 @@ from litterbox.parts import permission_check
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.vault import config
+from litterbox.vault import config_write
 
 
 MAX_NAME = 100
@@ -40,6 +47,9 @@ MAX_DESCRIPTION = 500
 
 
 ATTEMPTS = 5            # how many times to pick a number again if someone else got there first
+
+
+NONCAD_MIN_VERSION = "0.5.1"    # the first Litterbox that knows non-CAD parts
 
 
 ANY = "*any project*"   # new_part(project=ANY): a new variant, whose base decides its project
@@ -159,7 +169,7 @@ def describe_number(repo, org, base, variant=None):
     return f" ({shown})" if shown else ""
 
 
-def _undo_creation(repo, record_path, committed):
+def _undo_creation(repo, record_path, committed, config_rel=None):
     """Take back a creation that did not get pushed: our commit, and the file. Never raises.
 
     Only our one commit and our one new file are touched. Anything else in the
@@ -169,6 +179,12 @@ def _undo_creation(repo, record_path, committed):
         if committed:
             runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
         runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", record_path], repo)
+        if config_rel:
+            if repository.in_head(repo, config_rel):
+                runner.run(["git", "restore", "--staged", "--worktree", "--", config_rel], repo, quiet=True)
+            else:
+                runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", config_rel], repo, quiet=True)
+                (Path(repo) / config_rel).unlink(missing_ok=True)
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: could not fully undo the creation of {record_path}: {e}")
     path = Path(repo) / record_path
@@ -180,7 +196,7 @@ def _undo_creation(repo, record_path, committed):
         diagnostics.LOG(f"WARNING: could not delete {record_path}: {e}")
 
 
-def _create(repo, name, description, org, choose):
+def _create(repo, name, description, org, choose, noncad=False):
     """Create, commit and push one record. `choose(org)` returns the PN to try.
 
     choose() is called again after every rejected push, so it always works from
@@ -202,20 +218,26 @@ def _create(repo, name, description, org, choose):
     for _attempt in range(ATTEMPTS):
         pn = choose(org)
         record_path = record_store.record_relpath(pn)
+        kind = record_model.KIND_NONCAD if noncad else record_model.KIND_CAD
         try:
             record_store.create_record(repo, pn, name, user, description=description,
-                                       project=project_name(config.get_projects(repo), pn.base))
+                                       project=project_name(config.get_projects(repo), pn.base), kind=kind)
         except record_model.PNExistsError:
             raise CreateError(f"{pn} already exists in your copy of the vault.") from None
+        paths, config_rel = [record_path], None
+        if noncad and _needs_newer(repo):
+            config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
+            config_write.stamp(repo, NONCAD_MIN_VERSION)
+            paths.append(config_rel)
 
         committed = False
         try:
-            runner.run(["git", "add", "--", record_path], repo)
-            runner.run(["git", "commit", "-m", f"{pn}: Created - {name}", "--", record_path], repo)
+            runner.run(["git", "add", "--", *paths], repo)
+            runner.run(["git", "commit", "-m", f"{pn}: Created - {name}", "--", *paths], repo)
             committed = True
             runner.run(["git", "push"], repo)
         except LitterboxError as e:
-            _undo_creation(repo, record_path, committed)
+            _undo_creation(repo, record_path, committed, config_rel)
             if not committed:
                 raise
             last_error = e
@@ -228,7 +250,7 @@ def _create(repo, name, description, org, choose):
                     f"Nothing was changed. Are you online?\n\n{sync_error}") from e
             continue
         except BaseException:
-            _undo_creation(repo, record_path, committed)
+            _undo_creation(repo, record_path, committed, config_rel)
             raise
 
         read_only.enforce_read_only(repo)          # the new record is read-only until someone checks it out
@@ -237,8 +259,17 @@ def _create(repo, name, description, org, choose):
     raise CreateError(f"Could not create a number after {ATTEMPTS} tries. The last error was:\n\n{last_error}")
 
 
+def _needs_newer(repo):
+    """True if the vault doesn't yet need a Litterbox that knows non-CAD parts."""
+    wanted = config.load(repo).get("min_litterbox_version")
+    try:
+        return not wanted or version.parse(str(wanted)) < version.parse(NONCAD_MIN_VERSION)
+    except ValueError:
+        return True
+
+
 @friendly
-def new_part(repo, name, description="", base=None, variant=None, org=None, project=None, kind=PART):
+def new_part(repo, name, description="", base=None, variant=None, org=None, project=None, kind=PART, noncad=False):
     """Create a new part number and return the PN.
 
     Leave `base` empty to take the lowest unused part number, or give a number
@@ -249,7 +280,8 @@ def new_part(repo, name, description="", base=None, variant=None, org=None, proj
     assembly's), or give a number (1 to 999) to ask for that one. The part number does not have to
     exist yet: asking for 12345-501 is fine even if 12345-001 was never made.
 
-    Numbers you ask for by name that are already taken give an error saying by what.
+    Numbers you ask for by name that are already taken give an error saying by what. noncad=True makes a non-CAD
+    part (or assembly, with kind=ASSEMBLY).
     """
     manual_base = check_new_base(base) if base is not None else None
     manual_variant = check_variant(variant) if variant is not None else None
@@ -273,10 +305,11 @@ def new_part(repo, name, description="", base=None, variant=None, org=None, proj
                 "Pick a different variant number, or leave it blank for the next free one.")
         return PN(org, number, manual_variant)
 
-    return _create(repo, name, description, org, choose)
+    return _create(repo, name, description, org, choose, noncad)
 
 
-def new_variant(repo, base, name, description="", variant=None, org=None, kind=PART):
+def new_variant(repo, base, name, description="", variant=None, org=None, kind=PART, noncad=False):
     """Create a new variant of a part number. The same as new_part with a part number given; it is in the same
     project as the part number's other variants."""
-    return new_part(repo, name, description, base=base, variant=variant, org=org, project=ANY, kind=kind)
+    return new_part(repo, name, description, base=base, variant=variant, org=org, project=ANY, kind=kind,
+                    noncad=noncad)

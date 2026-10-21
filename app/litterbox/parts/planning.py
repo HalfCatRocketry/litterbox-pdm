@@ -81,7 +81,7 @@ def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK
         problems.append(f"Its status is '{record.status}'. Only {required_label} parts can be {verb}.")
     if record.pending and not allow_pending:
         problems.append("It is waiting for sign-offs.")
-    if not cad:
+    if not cad and record.uses_cad:
         problems.append("There are no CAD files for it in the cad folder.")
 
     if fetch:   # look at the vault's current state without changing any of your files
@@ -139,6 +139,8 @@ def make_cots_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     record = record_store.load(repo, pn)
     cad, problems = blockers(repo, pn, record, "made COTS", fetch, allow_pending=allow_pending,
                               ctx=ctx or PlanContext(repo))
+    if not record.uses_cad:
+        problems.insert(0, "It is non-CAD: it has no CAD model. Release it instead.")
     if record.cots:
         problems.insert(0, "It is already a COTS part.")
     elif record.released_revision or record.revision != revision_letters.FIRST_REVISION:

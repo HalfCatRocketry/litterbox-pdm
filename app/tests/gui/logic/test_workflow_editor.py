@@ -77,7 +77,8 @@ class TestWorkflowEditor(unittest.TestCase):
     def test_standard_workflows_skip_what_lacks_roles(self):
         editor = workflow_editor.WorkflowEditor({})
         added, skipped = editor.add_standard(["Responsible Engineer", "Manager", "Chief"])
-        self.assertEqual(added, ["Release T3", "Unrelease T1", "Void T1", "Make COTS T1"])
+        self.assertEqual(added, ["Release T3", "Unrelease T1", "Void T1", "Make COTS T1", "Remove document link T1",
+                                 "Release document T1", "Unrelease document T1", "Void document T1"])
         self.assertEqual([n for n, _ in skipped], ["Release T1", "Release T2"])
         self.assertEqual(editor.add_standard(["Responsible Engineer", "Manager", "Chief"])[0], [])
 

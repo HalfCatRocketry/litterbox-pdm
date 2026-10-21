@@ -10,10 +10,12 @@ from litterbox.records import record_lifecycle
 from litterbox.records.error_conversion import converts_errors
 
 
-def _refuse_if_workflow(repo, action):
-    """An action that has workflow templates must go through them, so it can't be done directly."""
+def _refuse_if_workflow(repo, action, pns):
+    """An action that has workflow templates must go through them, so it can't be done directly. Documents have
+    templates of their own (workflow_templates.for_targets)."""
     from litterbox.workflows import workflow_store
     from litterbox.workflows import workflow_templates
+    action = workflow_templates.for_targets(action, pns)
     if workflow_store.has_templates(repo, action):
         raise LitterboxError(f"{workflow_templates.label_of(action)} in this vault needs sign-offs. Use the Workflow window "
                              "to ask for them; it happens when everyone required has signed.")
@@ -26,7 +28,7 @@ def release(repo, pn):
     Returns the list of files that were released.
     """
     pn = batch_core.as_pn(pn)
-    _refuse_if_workflow(repo, "release")
+    _refuse_if_workflow(repo, "release", [pn])
     plan = planning.release_plan(repo, pn)
     if not plan.ok:
         raise LitterboxError(f"{pn} can't be released yet:\n- " + "\n- ".join(plan.problems))
@@ -43,7 +45,7 @@ def make_cots(repo, pn):
     """Record an existing part as COTS (purchased): it can no longer be checked out.
     Call make_cots_plan() first and get the user to confirm. Returns the files it covers."""
     pn = batch_core.as_pn(pn)
-    _refuse_if_workflow(repo, "make_cots")
+    _refuse_if_workflow(repo, "make_cots", [pn])
     plan = planning.make_cots_plan(repo, pn)
     if not plan.ok:
         raise LitterboxError(f"{pn} can't be made COTS yet:\n- " + "\n- ".join(plan.problems))
@@ -59,7 +61,7 @@ def make_cots(repo, pn):
 def reopen(repo, pn, reason):
     """Make a released part editable again. A reason is required."""
     pn = batch_core.as_pn(pn)
-    _refuse_if_workflow(repo, "reopen")
+    _refuse_if_workflow(repo, "reopen", [pn])
     batch_core.edit_record(
         repo, pn, "reopen",
         lambda record, user: record_lifecycle.mark_reopened(record, user, reason),
@@ -71,7 +73,7 @@ def reopen(repo, pn, reason):
 def void(repo, pn, reason):
     """Abandon a part. Its number is never reused. A reason is required."""
     pn = batch_core.as_pn(pn)
-    _refuse_if_workflow(repo, "void")
+    _refuse_if_workflow(repo, "void", [pn])
     batch_core.edit_record(
         repo, pn, "void",
         lambda record, user: record_lifecycle.mark_void(record, user, reason),
@@ -102,7 +104,7 @@ def release_many(repo, pns):
     """release() for several parts with one download and one upload. Call release_plans() first and get the user
     to confirm. Returns (done, failed): done is [(pn, released files)]."""
     pns = batch_core.unique_pns(pns)
-    _refuse_if_workflow(repo, "release")
+    _refuse_if_workflow(repo, "release", pns)
     return _plan_batch(repo, planning.release_plans(repo, pns), "release", "released",
                        lambda record, user, plan: record_lifecycle.mark_released(record, user, plan.files), "{pn}: Released")
 
@@ -111,7 +113,7 @@ def release_many(repo, pns):
 def make_cots_many(repo, pns):
     """make_cots() for several parts with one download and one upload."""
     pns = batch_core.unique_pns(pns)
-    _refuse_if_workflow(repo, "make_cots")
+    _refuse_if_workflow(repo, "make_cots", pns)
     return _plan_batch(repo, planning.make_cots_plans(repo, pns), "make_cots", "made COTS",
                        lambda record, user, plan: record_lifecycle.mark_cots(record, user, plan.files), "{pn}: Made COTS")
 
@@ -127,7 +129,7 @@ def _reason_batch(repo, pns, action, change, message):
 def reopen_many(repo, pns, reason):
     """reopen() (Unrelease) for several parts with one download and one upload; one reason for all of them."""
     pns = batch_core.unique_pns(pns)
-    _refuse_if_workflow(repo, "reopen")
+    _refuse_if_workflow(repo, "reopen", pns)
     return _reason_batch(repo, pns, "reopen", lambda record, user: record_lifecycle.mark_reopened(record, user, reason),
                          lambda pn: f"{pn}: Unreleased - {batch_core.one_line(reason)}")
 
@@ -136,6 +138,6 @@ def reopen_many(repo, pns, reason):
 def void_many(repo, pns, reason):
     """void() for several parts with one download and one upload; one reason for all of them."""
     pns = batch_core.unique_pns(pns)
-    _refuse_if_workflow(repo, "void")
+    _refuse_if_workflow(repo, "void", pns)
     return _reason_batch(repo, pns, "void", lambda record, user: record_lifecycle.mark_void(record, user, reason),
                          lambda pn: f"{pn}: Voided - {batch_core.one_line(reason)}")

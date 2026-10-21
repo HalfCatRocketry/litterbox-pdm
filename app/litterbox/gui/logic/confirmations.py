@@ -84,6 +84,19 @@ def edit_details_result(old_name, old_description, name, description):
     return "", (clean(name), clean(description)) != (clean(old_name), clean(old_description))
 
 
+def kind_note(row):
+    """Why Edit Details can't switch a part between CAD and non-CAD ("" if it can): once released, a COTS part, or
+    one with SolidWorks files."""
+    if getattr(row, "released_revision", "") or getattr(row, "record_status", "in_work") != "in_work":
+        return "It has been released, so its kind can't change."
+    if getattr(row, "cots", False):
+        return "A COTS part has a CAD model, so it stays CAD."
+    if any(str(f).lower().endswith((".sldprt", ".sldasm", ".slddrw"))
+           for files in (getattr(row, "revisions", None) or {}).values() for f in files):
+        return "It has SolidWorks files, so it stays CAD."
+    return ""
+
+
 def void_problem(row):
     """Why a part can't be voided (empty if it can). Once a revision is released a part can't disappear."""
     released = getattr(row, "released_revision", "")

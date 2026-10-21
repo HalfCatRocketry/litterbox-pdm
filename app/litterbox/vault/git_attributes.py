@@ -75,6 +75,16 @@ LFS_EXTENSIONS = (
 )
 
 
+# Version 2 (0.5.1): documents. Other files people keep as documents, stored with Git LFS wherever they are.
+DOCUMENT_EXTENSIONS = (
+    "odt", "ods", "odp", "odg", "rtf", "vsd", "vsdx", "mpp", "pub", "one",     # office documents
+    "key", "pages", "numbers",                                                 # Apple's office documents
+    "psd", "ai", "indd", "eps", "afdesign", "xcf",                             # design files
+    "tar", "gz", "tgz", "bz2", "xz",                                           # more archives
+    "mp3", "wav", "m4a", "mkv", "wmv", "webm", "m4v",                          # audio and video
+)
+
+
 # The block's rules. Add to the end (never remove or narrow a rule), and raise VERSION when you do.
 RULES = (
     [f"{any_case(ext)} {LFS} lockable" for ext in LOCKABLE_EXTENSIONS]
@@ -84,13 +94,18 @@ RULES = (
         "PN-logs/*.yaml lockable",
         f"cancelled-revs/** {LFS}",
     ]
+    + [                                                     # version 2
+        f"documents/** {LFS} lockable",                     # every file of a document, whatever its type
+        "DOC-logs/*.yaml lockable",
+    ]
+    + [f"{any_case(ext)} {LFS}" for ext in DOCUMENT_EXTENSIONS]
 )
 
 
-VERSION = 1
+VERSION = 2
 
 
-MIN_LITTERBOX = "0.4.2"         # the oldest Litterbox that knows every lockable rule in RULES
+MIN_LITTERBOX = "0.5.1"         # the oldest Litterbox that knows every lockable rule in RULES
 
 
 BEGIN = "# >>> Litterbox rules, version {version}. Litterbox updates the lines down to '# <<< Litterbox'; don't " \

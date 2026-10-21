@@ -35,6 +35,9 @@ FIRST_COLUMN = "#0"             # the tick box and status icon
 class PartsList:
     """the parts list (a part of the main window, App)."""
 
+    doc_rows = ()           # every document's PartStatus (they share rows_by_pn with the parts, see _index_rows)
+    _acting_on = None       # the parts or documents act_on() points the actions at, while it runs
+
     # -- columns -----------------------------------------------------------------------------------------------
     def _set_up_columns(self):
         """Show the chosen columns at their widths for this display scaling, with sortable headings."""
@@ -178,8 +181,23 @@ class PartsList:
         ticked = getattr(self, "ticked", set())
         return [parse_pn(iid) for iid in self.tree.get_children() if iid in ticked]
 
+    def _index_rows(self):
+        """rows_by_pn: every part's row and every document's (the Documents screen uses the same actions)."""
+        self.rows_by_pn = {row.pn: row for row in list(self.rows) + list(self.doc_rows)}
+
+    def act_on(self, numbers, method, *args):
+        """Run an action (an App method such as self.check_out) on these parts or documents rather than on what is
+        ticked in the parts list: the Documents screen's buttons do this."""
+        self._acting_on = list(numbers)
+        try:
+            return method(*args)
+        finally:
+            self._acting_on = None
+
     def _selected_pns(self, action=None):
-        """The parts an action applies to: see action_rules.choose_targets."""
+        """The parts an action applies to: see action_rules.choose_targets (or what act_on gave)."""
+        if self._acting_on is not None:
+            return list(self._acting_on)
         highlighted = [parse_pn(iid) for iid in self.tree.selection()]
         if action is None:
             return highlighted
@@ -264,13 +282,15 @@ class PartsList:
                 who_job = pool.submit(find_out_who)
                 behind_job = pool.submit(remote.commits_behind, repo)
                 rows = part_status.get_status(repo)
+                docs = part_status.get_status(repo, documents=True)
                 who, behind = who_job.result(), behind_job.result()
             if diagnostics.DEBUG:
                 diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
-            return rows, who, behind
+            return rows, who, behind, docs
 
         def show(result):
-            rows, who, behind = result
+            rows, who, behind, docs = result
+            self.doc_rows = docs
             self.identity = who
             self._show_identity()
             self._show_behind(behind)
@@ -297,8 +317,9 @@ class PartsList:
 
     def _show_rows(self, rows):
         self.rows = rows
-        self.rows_by_pn = {row.pn: row for row in rows}
+        self._index_rows()
         self._refresh_tasks()
+        self._refresh_documents()
         shown = self._render()
         if self.pending_select:
             if self.tree.exists(self.pending_select):
@@ -324,7 +345,7 @@ class PartsList:
         self.ticked &= {str(row.pn) for row in self.rows}                     # parts that no longer exist lose their tick
         if self.view.get() != "Void":                                         # so do void parts that are now hidden
             self.ticked -= {str(row.pn) for row in self.rows if row.kind == "void"}
-        self.rows_by_pn = {row.pn: row for row in self.rows}
+        self._index_rows()
         previous = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
         busy = self.jobs.pending_parts()                                    # parts with a job queued or running

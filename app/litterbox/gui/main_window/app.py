@@ -29,6 +29,7 @@ from litterbox.gui.main_window.actions.checkin_actions import CheckinActions
 from litterbox.gui.main_window.actions.checkout_actions import CheckoutActions
 from litterbox.gui.main_window.actions.create_actions import CreateActions
 from litterbox.gui.main_window.actions.details_actions import DetailsActions
+from litterbox.gui.main_window.actions.document_actions import DocumentActions
 from litterbox.gui.main_window.actions.export_actions import ExportActions
 from litterbox.gui.main_window.actions.generate_actions import GenerateActions
 from litterbox.gui.main_window.actions.open_actions import OpenActions
@@ -64,8 +65,8 @@ AUTO_GET_LATEST_ON_START = False
 
 class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateChecks, OrgSwitching, BackgroundJobs,
           PartsList, TaskActions, TeamAdmin, CreateActions, CheckoutActions, CheckinActions, ReleaseActions,
-          ReviseActions, OpenActions, ReferenceActions, DetailsActions, ExportActions, GenerateActions, SolidWorksWatch,
-          FileRules, ctk.CTk):
+          ReviseActions, OpenActions, ReferenceActions, DetailsActions, ExportActions, GenerateActions, DocumentActions,
+          SolidWorksWatch, FileRules, ctk.CTk):
     """The main Litterbox window. Each area lives in its own file (the classes above); this file starts the window
     and holds the small helpers every area uses."""
 
@@ -118,7 +119,7 @@ class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateC
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.bind("<F5>", lambda event: self.refresh())
-        for number, name in enumerate(("parts", "tasks", "ecos", "team"), 1):
+        for number, name in enumerate(("parts", "tasks", "ecos", "team", "documents"), 1):
             self.bind(f"<Control-Key-{number}>", lambda event, name=name: self.show_screen(name))
         self._bind_text_size_keys()
         for title, key in menu_bar.ALT_KEYS.items():

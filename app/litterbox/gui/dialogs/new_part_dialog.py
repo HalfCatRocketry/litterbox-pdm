@@ -21,6 +21,7 @@ from litterbox.parts import number_suggestions
 from litterbox.vault import config
 
 NO_PROJECT = "None"
+KIND_CHOICES = ("CAD (SolidWorks files)", "Non-CAD (no CAD files: paint, stock, a kit built in its BOM)")
 BASE_BOX_WIDTH = 130            # the part number box when it holds every digit
 
 
@@ -29,7 +30,8 @@ class NewPartDialog(modal_dialog.ModalDialog):
 
         NewPartDialog(parent, repo, org, kind=create.PART).show()
         # None if cancelled, else {"name": ..., "description": ..., "base": int or None, "variant": int or None,
-        #                           "project": a project's name or None}
+        #                           "project": a project's name or None, "kind": create.PART or ASSEMBLY,
+        #                           "noncad": True for a non-CAD part or assembly}
 
     The part number is two boxes, [base]-[variant]. Their grey placeholder text
     shows the number Litterbox will use if the box is left empty: the next free
@@ -60,7 +62,7 @@ class NewPartDialog(modal_dialog.ModalDialog):
         self.result = None
         self.projects, self.project = [], None
         self.variants = (part_number.MIN_VARIANT, part_number.MAX_VARIANT)    # the kind's range, read from the vault
-        width, height = 500, 550
+        width, height = 500, 620
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title("New Assembly" if kind == create.ASSEMBLY else "New Part")
@@ -83,16 +85,22 @@ class NewPartDialog(modal_dialog.ModalDialog):
         self.desc_entry = ctk.CTkEntry(self, textvariable=self.desc_var, height=34)
         self.desc_entry.grid(row=3, column=0, sticky="ew", padx=20)
 
-        ctk.CTkLabel(self, text="Project", anchor="w").grid(row=4, column=0, sticky="ew", padx=20, pady=(10, 2))
+        ctk.CTkLabel(self, text="Kind", anchor="w").grid(row=4, column=0, sticky="ew", padx=20, pady=(10, 2))
+        self.kind_var = tk.StringVar(value=KIND_CHOICES[0])
+        ctk.CTkOptionMenu(self, variable=self.kind_var, values=list(KIND_CHOICES), width=260, height=34,
+                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
+            row=5, column=0, sticky="w", padx=20)
+
+        ctk.CTkLabel(self, text="Project", anchor="w").grid(row=6, column=0, sticky="ew", padx=20, pady=(10, 2))
         self.project_menu = ctk.CTkOptionMenu(self, variable=self.project_var, values=[NO_PROJECT], width=260,
                                               height=34, fg_color=theme.GRAY, button_color=theme.GRAY_HOVER,
                                               button_hover_color=theme.ACCENT, command=self._project_chosen)
-        self.project_menu.grid(row=5, column=0, sticky="w", padx=20)
+        self.project_menu.grid(row=7, column=0, sticky="w", padx=20)
 
         ctk.CTkLabel(self, text="Part number:", anchor="w").grid(
-            row=6, column=0, sticky="ew", padx=20, pady=(14, 2))
+            row=8, column=0, sticky="ew", padx=20, pady=(14, 2))
         numbers = ctk.CTkFrame(self, fg_color="transparent")
-        numbers.grid(row=7, column=0, sticky="w", padx=20)
+        numbers.grid(row=9, column=0, sticky="w", padx=20)
         self.prefix_label = ctk.CTkLabel(numbers, text="", font=ctk.CTkFont(size=14, weight="bold"))
         # No textvariable here: CustomTkinter only shows placeholder text without one.
         self.base_entry = ctk.CTkEntry(numbers, width=BASE_BOX_WIDTH, height=34, placeholder_text="")
@@ -106,16 +114,16 @@ class NewPartDialog(modal_dialog.ModalDialog):
         # Under the boxes: "PN available" / "PN in use:" and, when in use, the name of the part that has it.
         self.verdict = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=width - 40,
                                     font=ctk.CTkFont(size=13, weight="bold"))
-        self.verdict.grid(row=8, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.verdict.grid(row=10, column=0, sticky="ew", padx=20, pady=(8, 0))
         self.verdict_detail = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=width - 40,
                                            text_color=theme.ERROR)
-        self.verdict_detail.grid(row=9, column=0, sticky="ew", padx=20)
+        self.verdict_detail.grid(row=11, column=0, sticky="ew", padx=20)
         self.variant_note = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=width - 40,
                                          text_color=theme.WARN)
-        self.variant_note.grid(row=10, column=0, sticky="ew", padx=20)
+        self.variant_note.grid(row=12, column=0, sticky="ew", padx=20)
 
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=11, column=0, sticky="ew", padx=20, pady=20)
+        buttons.grid(row=13, column=0, sticky="ew", padx=20, pady=20)
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         release_button.ReleaseButton(buttons, text="Cancel", height=38, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                       command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -268,5 +276,6 @@ class NewPartDialog(modal_dialog.ModalDialog):
         if unusual and not messagebox.askokcancel(self.title(), f"{unusual}\n\nCreate {check.pn} anyway?", parent=self):
             return
         self.result = {"name": name, "description": self.desc_var.get().strip(),
-                       "base": base, "variant": variant, "project": self._project_name(), "kind": self.kind}
+                       "base": base, "variant": variant, "project": self._project_name(), "kind": self.kind,
+                       "noncad": self.kind_var.get() == KIND_CHOICES[1]}
         self.destroy()
