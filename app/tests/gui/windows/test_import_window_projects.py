@@ -7,7 +7,7 @@ import unittest
 from litterbox.core.projects import Project
 from litterbox.importing import manifest as manifest_module
 from litterbox.records import record_store
-from litterbox.vault import config_write
+from litterbox.vault import config, config_write
 from tests.gui.windows import test_import_window as window_tests
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, git
 
@@ -17,7 +17,8 @@ class ProjectsAndSavedScans(window_tests.ImportWindowHarness, unittest.TestCase)
     def add_project(self):
         with self.user("Alex"):
             config_write.set_values(self.a, projects=[Project("Rover", "12")])
-            git(self.a, "commit", "-am", "Add project Rover")
+            git(self.a, "add", "--", str(config.config_path(self.a)))   # the test vault has no config file yet
+            git(self.a, "commit", "-m", "Add project Rover")
             git(self.a, "push")
 
     def choose(self, label):
