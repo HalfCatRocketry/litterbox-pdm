@@ -11,21 +11,25 @@ from litterbox.workflows import workflow_tasks
 from litterbox.workflows import workflow_templates
 
 
-def request_confirm_text(action, parts, template, slots, reason="", warnings=(), eco=None):
-    """The question asked at the end of the Workflow window, before the request is made. `eco` is the ECO's
-    {"name", "description"} when the workflow requires one."""
+CHANGE_HINT = "Tick what changed, and choose a Dispo for the parts already made."
+VOID_HINT = "Choose a Dispo: what to do with the parts already made to the revision being voided."
+
+
+def request_confirm_text(action, parts, template, slots, reason="", warnings=(), eco=None, resubmit=False):
+    """The question asked at the end of the Workflow window, before the request is made (or a rejected one is
+    resubmitted). `eco` is the ECO's {"name", "description"} when the request needs one."""
     label = workflow_templates.label_of(action)
     listing = "\n".join(f"  {pn}  {name}".rstrip() for pn, name in parts)
     signers = "\n".join(f"  {signoff_slots.slot_text(s)}: {s['name']}" for s in slots)
-    text = (f"Start the {label} workflow ({template.name}) on:\n\n{listing}\n\nThese people will be asked to "
-            f"sign off:\n{signers}\n\n")
+    text = (f"{'Resubmit' if resubmit else 'Start'} the {label} workflow ({template.name}) on:\n\n{listing}\n\n"
+            f"These people will be asked to sign off{' (everyone signs again)' if resubmit else ''}:\n{signers}\n\n")
     if reason:
         text += f"Reason: {reason}\n\n"
     if eco is not None:
-        text += f"An engineering change order (ECO) will be made: {eco['name']}\n\n"
-    text += ("While it waits, nobody can check these parts out. You can withdraw the request until it is done."
-             + (" It happens as soon as the last person signs." if action in workflow_templates.AUTO_COMPLETE else
-                " When everyone has signed, press the button again to finish it."))
+        text += (f"Its engineering change order (ECO) carries on: {eco['name']}\n\n" if resubmit else
+                 f"An engineering change order (ECO) will be made: {eco['name']}\n\n")
+    text += ("While it waits, nobody can check these parts out. You can withdraw the request until it is done. "
+             "It happens as soon as the last person signs.")
     if warnings:
         text += "\n\nNOTE:\n" + "\n".join("- " + w for w in warnings)
     return text
@@ -58,11 +62,12 @@ def tasks_summary(tasks, everything=False):
 
 
 def button_states(task):
-    """{button key: usable} for the selected task (None: nothing selected)."""
+    """{button key: usable} for the selected task (None: nothing selected). Review opens any task you are involved
+    in: to sign it, or (your own rejected request) to change it."""
     if task is None:
-        return dict.fromkeys(("sign", "reject", "complete", "withdraw", "reassign", "override", "override_reject",
+        return dict.fromkeys(("review", "complete", "withdraw", "reassign", "override", "override_reject",
                               "superuser"), False)
-    return {"sign": task.can_sign, "reject": task.can_reject, "complete": task.can_complete,
+    return {"review": task.involved, "complete": task.can_complete,
             "withdraw": task.can_withdraw, "reassign": task.can_reassign, "override": task.can_override,
             "override_reject": task.can_override, "superuser": bool(task.superuser_slots)}
 
@@ -86,11 +91,23 @@ def superuser_slot_text(slot):
     return f"{slot['text']} (named: {slot['name']})"
 
 
-def task_detail(task):
-    """Lines under the My Tasks table: who has signed and who is still to."""
+def rejection_text(rejected):
+    """'Rejected by Bea Jones on 2026-10-22 14:02: Wrong tolerance' (the time already as it should be shown)."""
+    when = f" on {rejected['at']}" if rejected.get("at") else ""
+    override = " (Admin override)" if rejected.get("override") else ""
+    return f"Rejected by {rejected.get('by', '')}{when}{override}: {rejected.get('comment', '')}"
+
+
+def task_detail(task, local=True):
+    """Lines under the My Tasks table: who has signed and who is still to, or why it was rejected."""
+    head = ", ".join(str(p[0]) for p in task.parts)
+    if task.draft:
+        rejected = dict(task.rejected, at=history_text.to_display_time(task.rejected.get("at", ""), local))
+        text = (f"{head}\n{rejection_text(rejected)}\nReview to change it and resubmit it, or withdraw it. Its parts "
+                "can be checked out meanwhile.")
+        return text + (f"\nECO: {task.eco}" if task.eco else "")
     lines = [f"{'✓' if s['done'] else '…'} {s['text']}: {s['name']}" + ("" if s["done"] else " (waiting)")
              for s in task.slots]
-    head = ", ".join(str(p[0]) for p in task.parts)
     text = f"{head}\n" + "   ".join(lines)
     if task.eco:
         text += f"\nECO: {task.eco}"

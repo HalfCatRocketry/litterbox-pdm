@@ -7,7 +7,7 @@
 ("tip", text)                              a shaded box for tips and warnings
 """
 
-VERSION = "0.5.3"
+VERSION = "0.5.4"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -204,8 +204,9 @@ BLOCKS = [
 ("code", ["open_with:", "  .pdf: C:\\Program Files\\Adobe\\Acrobat\\Acrobat.exe"]),
 ("h2", "The details pane"),
 ("table", ["Tab", "What it shows"], [
-    ["Details", "Pick a revision: its state, who released it and when, the workflow and who signed, its ECO, its "
-                "files, material, STEP/PDF, and the part's purchasing info."],
+    ["Details", "Pick a revision: its state, who released it and when, the workflow and who signed, its ECO, "
+                "what its release changed (form, fit, function), what to do with its parts once a later revision "
+                "was released (its disposition), its files, material, STEP/PDF, and the part's purchasing info."],
     ["History", "Every revision, with buttons to open older ones, and everything that ever happened to the part."],
     ["Uses / Where used", "What an assembly uses, and which assemblies use this part, with whether each use is "
                           "up to date."],
@@ -224,7 +225,8 @@ BLOCKS = [
     ["Cancel Revision", "Throws away a revision that was never released. Its files go to a cancelled-revs folder, "
                         "not the bin, and the letter isn't used again."],
     ["Unrelease", "Takes a part back to in work (with a reason), for when a release was a mistake."],
-    ["Void", "Retires a part that was never released. Its number is never used again."],
+    ["Void", "Retires a part that was never released. Its number is never used again. You say what to do with any "
+             "parts already made (the Dispo, see below)."],
     ["Make COTS", "Records a part as commercial off-the-shelf: something you bought and didn't modify. It's "
                   "frozen like a release."],
     ["Edit Details", "Changes a part's name and description, and switches it between CAD and non-CAD until it's "
@@ -235,6 +237,20 @@ BLOCKS = [
 ("p", "Release, Unrelease, Void and Make COTS work on several ticked parts at once, and each part's history "
       "records who did it. If your vault has a workflow for the action, pressing it starts a sign-off request "
       "instead (see Sign-off workflows)."),
+("h2", "What changed, and what to do with the old parts"),
+("p", "Releasing Rev B or later replaces a revision people may already have made parts to. So for each part, "
+      "Litterbox asks two things:"),
+("ul", [
+    "**Form, Fit and Function**: tick what the new revision changes. Leave all three clear for a change that "
+    "touches none of them, such as a drawing correction.",
+    "**Dispo** (disposition): what to do with the parts already made to the revision before. **Use As Is**, "
+    "**Rework**, **Scrap** or **Return To Supplier**. It starts blank and has to be chosen.",
+]),
+("p", "A first release (Rev A) asks neither, since nothing earlier exists. Voiding a part asks for a Dispo of its "
+      "own revision's parts. With a workflow these are columns of the Workflow window's parts list; without one, a "
+      "small window asks before the release or void happens. What changed is kept with the new revision, and the "
+      "Dispo with the old one: pick the old revision on the Details tab and it says, for example, \"Disposition: "
+      "Scrap (Rev B released)\"."),
 
 ("h1", "Assemblies, references and BOMs"),
 ("h2", "What a part uses, and where it's used"),
@@ -342,21 +358,56 @@ BLOCKS = [
 ("ol", [
     "Tick the parts and press the action (Release, say). With a workflow in place, the Workflow window opens "
     "instead.",
-    "Pick the workflow, choose a person for each sign-off, add parts or extra sign-offs if you need to, and "
-    "submit. Several parts go through one request together; people sign once for the lot.",
-    "The parts show as waiting for sign-offs. Everyone named sees the request under **Workflows > My Tasks**.",
-    "When the last person signs, the action happens: Release, Unrelease and Void at once, Make COTS when the "
-    "person who asked presses it again.",
+    "Check the parts list: Part, Name, Rev (\"A → B\" for a new revision), and for a release of Rev B or later "
+    "the **Form**, **Fit** and **Function** boxes and the **Dispo** (click a cell to tick it or pick from its "
+    "menu). Parts at Rev A show dashes. Add Parts and Remove Parts change the list.",
+    "Pick the workflow, choose a person for each sign-off, and add extra sign-offs if you need to. If the request "
+    "needs an ECO, fill in its title and description on the right.",
+    "Submit. Several parts go through one request together; people sign once for the lot. The parts show as "
+    "waiting for sign-offs, and everyone named sees the request under **Workflows > My Tasks**.",
+    "When the last person signs, the action happens straight away. (If that fails, for instance because you were "
+    "offline, the sign-offs are kept and **Complete** in My Tasks finishes it.)",
 ]),
-("p", "Signers can reject with a reason. The person who asked (or an Admin) can reassign a sign-off or withdraw "
-      "the request. An Admin can **Override Approve** or **Override Reject**, which is recorded as an override with "
-      "a reason."),
+("p", "The person who asked (or an Admin) can withdraw the request until it's done. An Admin can **Override "
+      "Approve** or **Override Reject**, recorded as an override with a reason, and in **All Workflows** can change "
+      "who signs (Change signer...)."),
+("h2", "Reviewing a request"),
+("p", "Select a request in **My Tasks** and press **Review** (or double-click it). The Review window shows the "
+      "request as it was asked, without letting you change it: the parts with what changed and their Dispo, the "
+      "workflow, every sign-off with who it's for and who has signed, and the ECO if there is one."),
+("ul", [
+    "**Open Drawing** and **Open PDF** open the selected part's files at the revision being released; **Previous "
+    "Drawing** and **Previous PDF** open the revision before, so you can compare them.",
+    "Each sign-off that's yours has a **Reassign** button: pick someone else with the role to give it to. "
+    "**Undo** takes it back. Nothing is saved until you press a button at the bottom.",
+    "The **Comment** box is optional when you approve and required when you reject. The person who asked sees it.",
+]),
+("table", ["Button", "What it does"], [
+    ["Approve", "Hands any sign-offs you reassigned to their new people, then approves the rest of yours. Greyed "
+                "out once you've reassigned all of them."],
+    ["Reject", "Sends the whole request back to the person who asked (any reassignments are dropped). Greyed out "
+               "once you've reassigned all your sign-offs."],
+    ["Reassign", "Only works once you've reassigned every one of your sign-offs: it hands them over and signs "
+                 "nothing."],
+], [1.3, 5.2]),
+("p", "Whoever you hand a sign-off to finds the request in their own My Tasks."),
+("h2", "When a request is rejected"),
+("p", "A rejected request isn't thrown away. It leaves the signers' My Tasks and appears in the asker's, marked "
+      "as rejected with who rejected it and why. Until it's dealt with it's a **draft**: its parts can be checked "
+      "out and in to fix whatever was wrong, but they can't go into any other workflow."),
+("p", "**Review** opens it in the Workflow window, filled in as it was asked. Change whatever needs changing (the "
+      "parts, the people, Form, Fit, Function, the Dispo, the ECO) and press **Resubmit workflow**: everyone signs "
+      "again from the start, and the same ECO carries on. Or press **Withdraw** to drop it for good."),
 ("p", "**Superusers.** An Admin can mark a role as a superuser role (Team > Roles...). Whoever holds it can give "
       "any sign-off on any request, recorded as \"as Quality for Bea Jones (superuser)\". It's meant for someone at "
       "the top of the org who can sign for anyone. Admins, the Owner and superusers also see **All Workflows**."),
 ("h2", "Engineering change orders"),
-("p", "A workflow that requires an ECO asks for a name and description when it starts, and Litterbox saves it as "
-      "ECO-0001, ECO-0002 ... in the vault. The ECO closes when the request ends (released, rejected or withdrawn), "
+("p", "A workflow that requires an ECO asks for a **title** and description when it starts, and Litterbox saves it "
+      "as ECO-0001, ECO-0002 ... in the vault, with each part's revision, what changed and its Dispo. A release "
+      "whose parts are all at Rev A needs no ECO, even when its workflow requires one: a first release changes "
+      "nothing. If any part is at Rev B or later, the ECO is asked for."),
+("p", "The ECO stays open while its request is waiting, and while a rejected request is being changed (the "
+      "rejection and the resubmission go in its history). It closes when the request is released or withdrawn, "
       "with the sign-offs and comments, and is never changed again. The **ECOs** screen lists and searches them, "
       "and a released revision's Details tab links to the ECO it was released with."),
 
@@ -467,6 +518,7 @@ BLOCKS = [
     ["Ctrl+= / Ctrl+- / Ctrl+0", "Text larger, smaller, reset"],
     ["Alt+F, Alt+A, Alt+V, Alt+H", "Open the File, Vault, View and Help menus"],
     ["Double-click a part", "Its details in a window of its own"],
+    ["Double-click a request in My Tasks", "Review it"],
     ["Shift-click a tick box", "Tick everything between the last click and this one"],
 ], [2.3, 4.2]),
 ]

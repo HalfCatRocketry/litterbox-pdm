@@ -84,8 +84,8 @@ class Menus:
                 continue
             label, method = entry
             usable = states.get(label, True)
-            menu.add_command(label=ENTRY_TEXT.get(label, label), command=getattr(self, method),
-                             state="normal" if usable else "disabled")
+            menu.add_command(label=ENTRY_TEXT.get(label, label),
+                             **menu_bar.entry_options(usable, getattr(self, method)))
             reasons.append("" if usable else self._why_greyed(label))
         menu.bind("<<MenuSelect>>", lambda event: self._say_why(menu, reasons, offset), add="+")
 
@@ -104,12 +104,11 @@ class Menus:
         orgs = org_menu.known_orgs(self.settings)
         for org in orgs:
             menu.add_radiobutton(label=org, value=org, variable=self._org_flag(),
-                                 command=lambda org=org: self.on_org_chosen(org),
-                                 state="disabled" if busy else "normal")
+                                 **menu_bar.entry_options(not busy, lambda org=org: self.on_org_chosen(org)))
         if orgs:
             menu.add_separator()
-        menu.add_command(label="Add org...", command=self.add_org, state="disabled" if busy else "normal")
-        menu.add_command(label="Create new org...", command=self.create_vault, state="disabled" if busy else "normal")
+        menu.add_command(label="Add org...", **menu_bar.entry_options(not busy, self.add_org))
+        menu.add_command(label="Create new org...", **menu_bar.entry_options(not busy, self.create_vault))
         menu.add_separator()
         menu.add_command(label="Exit", command=self._on_close)
 
@@ -123,8 +122,8 @@ class Menus:
         menu.add_command(label="Get Latest", command=self.get_latest)
         menu.add_command(label="Download All...", command=self.download_all)
         menu.add_command(label="Vault Size...", command=self.show_vault_size)
-        menu.add_command(label="Update file rules...", command=self.update_file_rules,
-                         state="normal" if self.file_rules_outdated else "disabled")
+        menu.add_command(label="Update file rules...",
+                         **menu_bar.entry_options(self.file_rules_outdated, self.update_file_rules))
         menu.add_separator()
         menu.add_command(label="New Part...", command=self.new_part)
         menu.add_command(label="New Assembly...", command=self.new_assembly)
@@ -196,7 +195,8 @@ class Menus:
             self._set_ticks([iid], True)
         menu = menu_bar.dark_menu(self)
         count = len(self._ticked_pns())
-        menu.add_command(label=f"Acting on {count} ticked part{'s' if count != 1 else ''}", state="disabled")
+        menu.add_command(label=f"Acting on {count} ticked part{'s' if count != 1 else ''}",
+                         **menu_bar.entry_options(False))
         menu.add_separator()
         self._fill_actions(menu, EVERYDAY_MENU + (None,) + PART_MENU + (None,) + self._lifecycle_entries())
         try:

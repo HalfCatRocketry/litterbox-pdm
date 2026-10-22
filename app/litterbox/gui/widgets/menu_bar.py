@@ -19,13 +19,26 @@ from litterbox.gui.widgets import release_button
 
 ALT_KEYS = {"File": "f", "Vault": "a", "View": "v", "Help": "h"}      # Alt+F opens File, and so on
 
+MENU_BG = "#2b2b2b"
+GREYED_FG = "#6f6f6f"
+
 
 def dark_menu(parent):
     """An empty Tk menu in the window's colours, with text at the window's scale."""
     scale = scaling.scale_of(parent)
-    return tk.Menu(parent, tearoff=0, bg="#2b2b2b", fg=theme.TEXT, activebackground=theme.ACCENT,
-                   activeforeground="#ffffff", disabledforeground="#6f6f6f", bd=0, relief="flat",
+    return tk.Menu(parent, tearoff=0, bg=MENU_BG, fg=theme.TEXT, activebackground=theme.ACCENT,
+                   activeforeground="#ffffff", disabledforeground=GREYED_FG, bd=0, relief="flat",
                    font=scaling.font(ui_scale.MENU_FONT, scale))
+
+
+def entry_options(usable, command=None):
+    """The options for a menu entry: its command when usable, else greyed out. Tk on Windows draws a disabled entry
+    etched (a white copy of the text under the grey one), which looks blurred on a dark menu, so a greyed-out entry
+    is left enabled but coloured grey, doesn't light up under the mouse, and does nothing."""
+    if usable:
+        return {} if command is None else {"command": command}
+    return {"foreground": GREYED_FG, "activeforeground": GREYED_FG, "activebackground": MENU_BG,
+            "command": lambda: None}
 
 
 def open_below(menu, widget):

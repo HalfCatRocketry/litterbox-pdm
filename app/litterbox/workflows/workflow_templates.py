@@ -40,7 +40,8 @@ ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS
                 REOPEN_DOC: "Unrelease document", VOID_DOC: "Void document"}
 
 
-AUTO_COMPLETE = {RELEASE, REOPEN, VOID, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC, VOID_DOC}  # done when the last person signs
+AUTO_COMPLETE = {RELEASE, REOPEN, VOID, MAKE_COTS, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC,
+                 VOID_DOC}                                       # done when the last person signs (all of them, since 0.5.4)
 
 
 NEEDS_REASON = {REOPEN, VOID, REMOVE_DOC, REOPEN_DOC, VOID_DOC}                        # the request carries a reason

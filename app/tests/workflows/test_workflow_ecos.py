@@ -10,17 +10,26 @@ from litterbox.change_orders import eco_store
 from litterbox.errors import LitterboxError
 from litterbox.git import remote
 from litterbox.records import record_model
+from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_responses
 from litterbox.workflows import workflow_signoff
-from tests.support.workflow_fixture import PART2, Fixture
+from litterbox.workflows import workflow_templates
+from tests.support.workflow_fixture import ENGINEER, PART2, Fixture
 
 ECO = {"name": "Thicker bracket", "description": "Wall from 2 mm to 3 mm"}
 
 
 class TestEcos(Fixture, unittest.TestCase):
+    """The part is at Rev B: a release of parts all at Rev A needs no ECO (TestFirstRelease)."""
+
     def setUp(self):
         super().setUp()
+        self.make_rev_b()
         self.set_template(eco=True)
+
+    def second_part(self):
+        super().second_part()
+        self.make_rev_b(PART2)
 
     def last_commit_files(self, repo):
         return git(repo, "show", "--name-only", "--format=", "HEAD").split()
@@ -43,7 +52,7 @@ class TestEcos(Fixture, unittest.TestCase):
         head = git(self.a, "rev-parse", "HEAD")
         with self.assertRaises(LitterboxError) as ctx:
             self.request(eco={"name": "  ", "description": "x"})
-        self.assertIn("needs a name", str(ctx.exception))
+        self.assertIn("needs a title", str(ctx.exception))
         self.assertEqual(git(self.a, "rev-parse", "HEAD"), head)
         self.assertFalse((self.a / "ECO").exists())
 
@@ -99,17 +108,19 @@ class TestEcos(Fixture, unittest.TestCase):
         eco = eco_store.load(self.a, "ECO-0001")
         self.assertEqual((eco.status, eco.history[-1].get("comment")), (eco_model.RELEASED, "Customer deadline"))
 
-    def test_rejecting_and_withdrawing_close_the_eco(self):
+    def test_rejecting_keeps_the_eco_open_and_withdrawing_closes_it(self):
         self.request(eco=ECO)
         self.get_latest("Bea")
         self.do("Bea", workflow_responses.reject, [PART], "Too thin")
         eco = eco_store.load(self.b, "ECO-0001")
-        self.assertEqual((eco.status, eco.history[-1]["comment"]), (eco_model.REJECTED, "Too thin"))
+        self.assertEqual((eco.status, eco.history[-1]["event"], eco.history[-1]["comment"]),
+                         (eco_model.OPEN, "rejected", "Too thin"))
         self.get_latest("Alex")
+        self.do("Alex", workflow_responses.withdraw, [PART], "Not needed")
+        self.assertEqual(eco_store.load(self.a, "ECO-0001").status, eco_model.WITHDRAWN)
         self.request(eco={"name": "Try again"})
         self.do("Alex", workflow_responses.withdraw, [PART], "Not needed")
         self.assertEqual(eco_store.load(self.a, "ECO-0002").status, eco_model.WITHDRAWN)
-        self.assertEqual(eco_store.load(self.a, "ECO-0001").status, eco_model.REJECTED)
 
     def test_a_closed_eco_stops_the_change_and_nothing_is_kept(self):
         self.request(eco=ECO)
@@ -124,6 +135,30 @@ class TestEcos(Fixture, unittest.TestCase):
         self.assertEqual(git(self.a, "rev-parse", "HEAD"), head)
         self.assertTrue(self.record().pending)
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
+
+
+class TestFirstRelease(Fixture, unittest.TestCase):
+    def test_a_release_of_parts_all_at_rev_a_needs_no_eco(self):
+        self.set_template(eco=True)
+        self.second_part()
+        self.request(pns=(PART, PART2))                              # no ECO given, and none needed
+        self.assertFalse((self.a / "ECO").exists())
+        self.assertNotIn("eco", self.record().pending)
+
+    def test_one_part_past_rev_a_brings_the_eco_back(self):
+        self.set_template(eco=True)
+        self.second_part()
+        self.make_rev_b(PART2)
+        with self.assertRaises(LitterboxError) as ctx:
+            self.request(pns=(PART, PART2))
+        self.assertIn("needs a title", str(ctx.exception))
+        self.request(pns=(PART, PART2), eco=ECO)
+        self.assertEqual(self.record().pending["eco"], "ECO-0001")
+
+    def test_other_actions_still_need_their_eco_at_rev_a(self):
+        self.set_template(workflow_templates.VOID, rows=((ENGINEER,),), eco=True)
+        with self.assertRaises(LitterboxError):
+            self.do("Alex", workflow_request.request, [PART], workflow_templates.VOID, "T", ["alex"], reason="Gone")
 
 
 if __name__ == "__main__":

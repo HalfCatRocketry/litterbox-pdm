@@ -30,10 +30,11 @@ class RequestWindow(Setup):
         directory = team_model.Directory(
             [team_model.Person("alex", "Alex", "", ["Alex"], "owner", ["Responsible Engineer"]),
              team_model.Person("bea", "Bea", "", ["Bea"], "member", ["Quality"])], ["Responsible Engineer", "Quality"])
-        self.offered = [SimpleNamespace(pn=P2, name="Arm"), SimpleNamespace(pn=P3, name="Plate")]
+        self.offered = [SimpleNamespace(pn=P2, name="Arm", revision="A", released_revision=""),
+                        SimpleNamespace(pn=P3, name="Plate", revision="C", released_revision="B")]
         self.asked_for = []
         self.dialog = self.gui.request_dialog.WorkflowRequestDialog(
-            FakeParent(), "release", [(P1, "Bracket")], self.templates, directory, "alex",
+            FakeParent(), "release", [(P1, "Bracket", "B", "A")], self.templates, directory, "alex",
             lambda current: self.asked_for.append(list(current)) or list(self.offered))
         self.dialog.reason_var.set("")                  # real text boxes start empty, the stand-ins at None
         self.dialog.eco_name_var.set("")
@@ -50,11 +51,11 @@ class RequestWindow(Setup):
         self.pick([P2, P3])
         self.dialog._add_parts()
         self.assertEqual(self.asked_for, [[P1]])
-        self.assertEqual(self.dialog.parts, [(P1, "Bracket"), (P2, "Arm"), (P3, "Plate")])
+        self.assertEqual(self.dialog.parts, [(P1, "Bracket", "B", "A"), (P2, "Arm", "A", ""), (P3, "Plate", "C", "B")])
         self.assertEqual(list(self.dialog.parts_tree.rows), ["HCR-00001-001", "HCR-00002-001", "HCR-00003-001"])
         self.dialog.parts_tree.selection_set("HCR-00001-001", "HCR-00003-001")
         self.dialog._remove_parts()
-        self.assertEqual(self.dialog.parts, [(P2, "Arm")])
+        self.assertEqual(self.dialog.parts, [(P2, "Arm", "A", "")])
         self.dialog.parts_tree.selection_set()
         self.dialog._remove_parts()
         self.assertIn("Select the parts", self.problems[-1])
@@ -62,11 +63,36 @@ class RequestWindow(Setup):
     def test_cancelling_add_parts_changes_nothing(self):
         self.pick(None)
         self.dialog._add_parts()
-        self.assertEqual(self.dialog.parts, [(P1, "Bracket")])
+        self.assertEqual(self.dialog.parts, [(P1, "Bracket", "B", "A")])
+
+    def test_a_rev_b_part_needs_a_dispo_and_its_changes_are_returned(self):
+        self.dialog.eco_name_var.set("Thicker wall")
+        self.dialog._submit()
+        self.assertIn("Choose a Dispo for HCR-00001-001", self.problems[-1])
+        self.assertIsNone(self.dialog.result)
+        rows = self.dialog.parts_tree.rows
+        self.assertEqual(rows["HCR-00001-001"]["values"][2:], ["A → B", "☐", "☐", "☐", "Choose...  ▾"])
+        self.dialog.table.toggle("HCR-00001-001", "fit")
+        self.dialog.table.toggle("HCR-00001-001", "form")
+        self.dialog.table.choose("HCR-00001-001", "scrap")
+        self.assertEqual(rows["HCR-00001-001"]["values"][3:], ["☑", "☑", "☐", "Scrap  ▾"])
+        self.dialog._submit()
+        self.assertEqual(self.dialog.result["changes"],
+                         {"HCR-00001-001": {"changed": ["form", "fit"], "disposition": "scrap"}})
+
+    def test_a_first_release_takes_no_changes_and_needs_no_eco(self):
+        self.dialog.table.set_parts([(P2, "Arm", "A", "")])
+        self.dialog._show_eco()
+        self.assertFalse(self.dialog.eco_needed())
+        self.assertEqual(self.dialog.parts_tree.rows["HCR-00002-001"]["values"][2:], ["A", "—", "—", "—", "—"])
+        self.dialog.table.toggle("HCR-00002-001", "form")              # dashes can't be ticked
+        self.dialog._submit()
+        self.assertEqual((self.dialog.result["eco"], self.dialog.result["changes"]), (None, {}))
 
     def test_a_workflow_that_requires_an_eco_needs_its_name(self):
+        self.dialog.table.choose("HCR-00001-001", "use_as_is")
         self.dialog._submit()
-        self.assertEqual(self.problems[-1], "The ECO needs a name.")
+        self.assertEqual(self.problems[-1], "The ECO needs a title.")
         self.assertIsNone(self.dialog.result)
         self.dialog.eco_name_var.set("  Thicker   wall ")
         self.dialog._submit()
@@ -78,12 +104,13 @@ class RequestWindow(Setup):
     def test_a_workflow_without_the_box_has_no_eco(self):
         self.dialog.template_var.set("T2")
         self.dialog._rebuild()
+        self.dialog.table.choose("HCR-00001-001", "use_as_is")
         self.dialog._submit()
         self.assertIsNone(self.dialog.result["eco"])
 
     def test_at_least_one_part_is_needed(self):
         self.dialog.template_var.set("T2")
-        self.dialog.parts = []
+        self.dialog.table.set_parts([])
         self.dialog._submit()
         self.assertIn("at least one part", self.problems[-1])
         self.assertIsNone(self.dialog.result)
@@ -154,7 +181,7 @@ class EcoWindows(Setup):
 
     def test_one_eco_window_lists_its_parts(self):
         window = self.gui.eco_view_window.EcoViewWindow(FakeParent(), self.ecos()[0])
-        self.assertEqual([r["values"] for r in window.parts.rows.values()], [["HCR-00002-001", "A"]])
+        self.assertEqual([r["values"] for r in window.parts.rows.values()], [["HCR-00002-001", "A", "", ""]])
 
     def test_the_main_window_opens_them(self):
         app = self.gui.app.App.__new__(self.gui.app.App)

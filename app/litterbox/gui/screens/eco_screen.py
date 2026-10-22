@@ -31,7 +31,7 @@ class EcoScreen(ctk.CTkFrame):
         bar.columnconfigure(0, weight=1)
         self.search_var = tk.StringVar()
         self.entry = ctk.CTkEntry(bar, textvariable=self.search_var, height=34,
-                                  placeholder_text="Search by ECO number, name, description, part or person")
+                                  placeholder_text="Search by ECO number, title, description, part or person")
         self.entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.search_var.trace_add("write", lambda *_: self._fill())
         self.status_var = tk.StringVar(value="All")

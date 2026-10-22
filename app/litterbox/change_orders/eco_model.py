@@ -37,9 +37,9 @@ def number_value(text):
 def clean_name(text):
     name = " ".join(str(text or "").split())
     if not name:
-        raise EcoError("The ECO needs a name.")
+        raise EcoError("The ECO needs a title.")
     if len(name) > MAX_NAME:
-        raise EcoError(f"The ECO's name can be up to {MAX_NAME} characters.")
+        raise EcoError(f"The ECO's title can be up to {MAX_NAME} characters.")
     return name
 
 
@@ -57,7 +57,7 @@ ECO_FIELDS = {"number", "name", "description", "status", "action", "template_nam
 @dataclass
 class Eco:
     number: str                         # ECO-0001
-    name: str
+    name: str                           # its title (the field keeps its first name, so older files still read)
     description: str = ""
     status: str = OPEN
     action: str = ""                    # what the workflow does: release, reopen, void, make_cots

@@ -166,10 +166,10 @@ class TeamScreen(ctk.CTkFrame):
 
     def _fill_more(self, menu):
         why = self._why_not("transfer_owner", needs_person=True)
-        menu.add_command(label="Transfer Ownership...", state="disabled" if why else "normal",
-                         command=lambda: self.app.transfer_owner(self, self._selected()))
+        menu.add_command(label="Transfer Ownership...",
+                         **menu_bar.entry_options(not why, lambda: self.app.transfer_owner(self, self._selected())))
         if why:
-            menu.add_command(label=f"    ({why})", state="disabled")
+            menu.add_command(label=f"    ({why})", **menu_bar.entry_options(False))
 
     # -- state ---------------------------------------------------------------------------------------------------
     def _busy(self):

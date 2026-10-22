@@ -25,12 +25,19 @@ class TestWorkflowText(unittest.TestCase):
         self.assertIn("  Analysis (extra): Dee", text)
         self.assertIn("as soon as the last person signs", text)
 
-    def test_make_cots_waits_for_a_second_press_and_reasons_and_notes_show(self):
+    def test_make_cots_happens_at_the_last_sign_off_and_reasons_and_notes_show(self):
         text = task_text.request_confirm_text("make_cots", [("HCR-00001-001", "Upright")], self.template(), self.slots(),
                                           "Because", ["Nobody has Quality."])
-        self.assertIn("press the button again", text)
+        self.assertIn("as soon as the last person signs", text)
         self.assertIn("Reason: Because", text)
         self.assertIn("Nobody has Quality.", text)
+
+    def test_a_resubmitted_request_says_everyone_signs_again_and_its_eco_carries_on(self):
+        text = task_text.request_confirm_text("release", [("HCR-00001-001", "Upright")], self.template(), self.slots(),
+                                              eco={"name": "Thicker wall", "description": ""}, resubmit=True)
+        self.assertIn("Resubmit the Release workflow (T1)", text)
+        self.assertIn("(everyone signs again)", text)
+        self.assertIn("ECO) carries on: Thicker wall", text)
 
     def test_standard_actions_route_pending_parts_to_their_buttons(self):
         for action in ("open", "open_drawing", "references", "release", "reopen", "void", "make_cots"):
@@ -45,7 +52,7 @@ class TestWorkflowText(unittest.TestCase):
                                requested_by="Alex Smith", requested_at="2026-10-11T00:00:00Z",
                                summary="Unrelease pending 0/1: waiting on Cy", reason="Drawing error", eco="ECO-0003",
                                slots=[{"text": "Manager", "name": "Cy", "done": False},
-                                      {"text": "Quality", "name": "Bea", "done": True}])
+                                      {"text": "Quality", "name": "Bea", "done": True}], draft=False, involved=True)
         (iid, values), = task_text.tasks_table([task], local=False)
         self.assertEqual(iid, "ab12")
         self.assertEqual(values, ("HCR-00001-001 +1 more", "2 parts", "Unrelease", "Alex Smith", "2026-10-11 00:00",
@@ -56,6 +63,22 @@ class TestWorkflowText(unittest.TestCase):
         self.assertIn("✓ Quality: Bea", detail)
         self.assertIn("ECO: ECO-0003", detail)
         self.assertIn("Reason: Drawing error", detail)
+        from litterbox.workflows import workflow_tasks
+        mine = workflow_tasks.Task("ab12", "release", [], "", "", "", [], False, True, involved=True)
+        self.assertTrue(task_text.button_states(mine)["review"])
+        self.assertFalse(task_text.button_states(mine)["complete"])
+        self.assertFalse(any(task_text.button_states(None).values()))
+
+    def test_a_rejected_request_says_who_rejected_it_and_why(self):
+        from types import SimpleNamespace
+        task = SimpleNamespace(parts=[("HCR-00001-001", "Upright", "B")], draft=True, eco="ECO-0003",
+                               rejected={"by": "Bea Jones", "at": "2026-10-11T00:00:00Z", "comment": "Wrong tolerance"})
+        detail = task_text.task_detail(task, local=False)
+        self.assertIn("Rejected by Bea Jones on 2026-10-11 00:00: Wrong tolerance", detail)
+        self.assertIn("resubmit", detail)
+        self.assertIn("ECO: ECO-0003", detail)
+        self.assertEqual(task_text.rejection_text({"by": "Bea", "comment": "No", "override": True}),
+                         "Rejected by Bea (Admin override): No")
 
     def test_signoff_result_text_is_empty_unless_something_failed(self):
         from types import SimpleNamespace

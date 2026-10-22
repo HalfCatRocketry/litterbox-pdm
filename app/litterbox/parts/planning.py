@@ -37,8 +37,9 @@ class PlanContext:
     """What the checks on several parts share, so a batch looks at the vault once: one fetch, one lock list, one
     list of modified files, one set of records."""
 
-    def __init__(self, repo):
+    def __init__(self, repo, draft_ok=None):
         self.repo = repo
+        self.draft_ok = draft_ok        # the id of the draft being resubmitted: its parts may go ahead
         self._fetched = False
         self._locks = self._modified = self._records = None
 
@@ -81,6 +82,8 @@ def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK
         problems.append(f"Its status is '{record.status}'. Only {required_label} parts can be {verb}.")
     if record.pending and not allow_pending:
         problems.append("It is waiting for sign-offs.")
+    if record.draft and record.draft.get("id") != ctx.draft_ok:
+        problems.append(draft_problem(record))
     if not cad and record.uses_cad:
         problems.append("There are no CAD files for it in the cad folder.")
 
@@ -103,6 +106,12 @@ def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK
     if (repository.count(repo, "HEAD..@{u}", group) or 0) > 0:
         problems.append("A newer version is in the vault. Run Get Latest first.")
     return cad, problems
+
+
+def draft_problem(record):
+    """Why a part in a rejected workflow can't go into anything else."""
+    return (f"It is in a rejected workflow that {record.draft.get('requested_by') or 'someone'} is changing (a "
+            "draft). Resubmit or withdraw it first.")
 
 
 @converts_errors

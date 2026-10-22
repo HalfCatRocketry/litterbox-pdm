@@ -1,5 +1,6 @@
 """
-eco_view_window.py - one engineering change order: its name, description, parts, sign-offs and history. Read-only.
+eco_view_window.py - one engineering change order: its title, description, parts (with what changed and the Dispo),
+sign-offs and history. Read-only.
 """
 
 from tkinter import ttk
@@ -39,7 +40,7 @@ class EcoViewWindow(ctk.CTkToplevel):
         description.insert("1.0", eco.description or "(no description)")
         description.configure(state="disabled")
 
-        self.parts = self._table(2, (("pn", "Part", 200), ("rev", "Revision", 100)), eco_text.part_rows(eco), 4)
+        self.parts = self._table(2, eco_text.PART_COLUMNS, eco_text.part_rows(eco), 4)
         tabs = ctk.CTkTabview(self, fg_color=theme.BG_PANEL, height=200)
         tabs.grid(row=3, column=0, sticky="nsew", padx=20, pady=(0, 20))
         for name in ("Sign-offs", "History"):

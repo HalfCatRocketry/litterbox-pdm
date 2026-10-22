@@ -65,6 +65,28 @@ class Fixture(TwoUserVault):
             read_only.enforce_read_only(self.a)
         self.get_latest("Bea")
 
+    def make_rev_b(self, pn=PART):
+        """The part released at Rev A and now in work at Rev B, with Rev B's files: made by hand, as Revise would
+        leave it once checked in."""
+        with self.user("Alex"):
+            stem = f"cad/{pn}"
+            for ext in ("SLDPRT", "SLDDRW"):
+                old = self.a / f"{stem}_A.{ext}"
+                if old.exists():
+                    (self.a / f"{stem}_B.{ext}").write_bytes(old.read_bytes())
+            path = record_store.record_path(self.a, pn)
+            path.chmod(0o644)
+            record = record_store.load(self.a, pn)
+            record.history.append({"event": "released", "by": "Alex Smith", "at": "2026-10-01T00:00:00Z",
+                                   "revision": "A"})
+            record.revision, record.released_revision = "B", "A"
+            record_store.save(self.a, record)
+            git(self.a, "add", ".")
+            git(self.a, "commit", "-m", f"{pn} at Rev B")
+            git(self.a, "push")
+            read_only.enforce_read_only(self.a)
+        self.get_latest("Bea")
+
     def set_template(self, action=workflow_templates.RELEASE, name="T", rows=((QUALITY,), (ENGINEER,)), same=False, requester=True,
                      eco=False):
         with self.user("Alex"):

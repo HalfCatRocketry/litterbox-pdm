@@ -1,7 +1,9 @@
 """
 tasks_screen.py - Workflows: the sign-off requests waiting (a screen of the main window, chosen in the sidebar).
-My Tasks lists the requests you are named to sign or asked for. Admins and superusers also get All Workflows: every
-request, where an Admin can Override Approve or Override Reject, and a superuser can sign for anyone.
+My Tasks lists the requests you are named to sign or asked for, and your rejected requests waiting to be changed;
+Review opens one (review_dialog.py, or the Workflow window for a rejected one). Admins and superusers also get All
+Workflows: every request, where an Admin can Override Approve or Override Reject, and a superuser can sign for
+anyone.
 """
 
 from tkinter import ttk
@@ -18,10 +20,8 @@ MY_TASKS, ALL_WORKFLOWS = "My Tasks", "All Workflows"
 
 
 # (key, text, colour, hover colour, width) of each list's buttons
-MINE_BUTTONS = (("sign", "Approve", theme.GREEN, theme.GREEN_HOVER, 110),
-                ("reject", "Reject...", theme.RED, theme.RED_HOVER, 110),
+MINE_BUTTONS = (("review", "Review", theme.ACCENT, "#18527f", 110),
                 ("complete", "Complete", theme.PURPLE, theme.PURPLE_HOVER, 110),
-                ("reassign", "Change signer...", theme.GRAY, theme.GRAY_HOVER, 140),
                 ("withdraw", "Withdraw", theme.GRAY, theme.GRAY_HOVER, 100))
 
 
@@ -98,6 +98,8 @@ class TaskList(ctk.CTkFrame):
         scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 4))
         self.tree.configure(yscrollcommand=scroll.set)
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._update_buttons())
+        if not everything:
+            self.tree.bind("<Double-1>", lambda event: self._act("review"))
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.grid(row=2, column=0, sticky="ew", padx=8, pady=(14, 4))
         self.action_buttons = {}
@@ -154,7 +156,9 @@ class TaskList(ctk.CTkFrame):
         task = self._task()
         if task is None:
             return
-        {"sign": self.app.task_sign, "reject": self.app.task_reject, "complete": self.app.task_complete,
+        if not task_text.button_states(task).get(key, True):
+            return
+        {"review": self.app.task_review, "complete": self.app.task_complete,
          "withdraw": self.app.task_withdraw, "override": self.app.task_override,
          "override_reject": self.app.task_override_reject, "superuser": self.app.task_superuser_sign,
          "reassign": self.app.task_reassign}[key](task)

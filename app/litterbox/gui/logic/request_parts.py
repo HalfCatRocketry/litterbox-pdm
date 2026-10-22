@@ -8,10 +8,11 @@ from litterbox.gui.logic import list_view
 from litterbox.workflows import workflow_templates
 
 
-def addable_rows(action, rows, current=(), busy=None):
+def addable_rows(action, rows, current=(), busy=None, draft_id=None):
     """The part rows (PartStatus) that could join a request for `action`: the kinds the action accepts, without
-    parts already waiting for sign-offs, parts with a job in progress (`busy`, by part as text), or parts already
-    in the request (`current`, PNs). Sorted by part number."""
+    parts already waiting for sign-offs, parts in a rejected request being changed (but those of `draft_id`, the
+    one being changed here), parts with a job in progress (`busy`, by part as text), or parts already in the
+    request (`current`, PNs). Sorted by part number."""
     base = workflow_templates.base_action(action)
     if base not in action_rules.ALLOWED_KINDS:
         return []                                       # Remove document link: one part, chosen with its document
@@ -20,7 +21,8 @@ def addable_rows(action, rows, current=(), busy=None):
     taken = {str(pn) for pn in current}
     busy = busy or {}
     found = [row for row in rows if row.kind in kinds and str(row.pn) not in taken and str(row.pn) not in busy
-             and isinstance(row.pn, DocNumber) == documents]
+             and isinstance(row.pn, DocNumber) == documents
+             and (getattr(row, "draft", None) or {}).get("id", draft_id) == draft_id]
     return [found[i] for i in list_view.sort_order([str(row.pn) for row in found])]
 
 

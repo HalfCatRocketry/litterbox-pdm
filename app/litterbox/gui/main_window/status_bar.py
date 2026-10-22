@@ -91,9 +91,9 @@ class StatusBar:
         entries = self.jobs.snapshot()
         names = {"running": "Running", "queued": "Waiting", "finishing": "Finishing"}
         for label, state in entries:
-            menu.add_command(label=f"{names.get(state, state)}:  {label}", state="disabled")
+            menu.add_command(label=f"{names.get(state, state)}:  {label}", **menu_bar.entry_options(False))
         if not entries:
-            menu.add_command(label="Nothing is running.", state="disabled")
+            menu.add_command(label="Nothing is running.", **menu_bar.entry_options(False))
         menu_bar.open_below(menu, self.jobs_button)
 
     def _show_solidworks(self, snapshot):

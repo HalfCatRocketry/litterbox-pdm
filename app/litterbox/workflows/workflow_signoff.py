@@ -1,7 +1,7 @@
 """
-workflow_signoff.py - signing, and what happens when the last person signs: Release, Unrelease and
-Void happen at once; Make COTS waits for the button again (complete). A superuser can sign for anyone, and an Admin
-can override with a recorded reason.
+workflow_signoff.py - signing, and what happens when the last person signs: the action happens at once
+(complete() finishes one that failed then). A superuser can sign for anyone, and an Admin can override with a
+recorded reason.
 """
 
 from dataclasses import dataclass, field
@@ -11,6 +11,7 @@ from litterbox.change_orders import eco_model
 from litterbox.errors import LitterboxError
 from litterbox.parts import batch_core
 from litterbox.parts import planning
+from litterbox.records import record_changes
 from litterbox.records import record_lifecycle
 from litterbox.records import record_links
 from litterbox.records import record_model
@@ -167,8 +168,9 @@ def _finish_edit(repo, action, plan, override_reason, ecos=None):
         reason = (pending or {}).get("reason") or override_reason
         signed = [e.get("by") for e in (pending or {}).get("signoffs", [])]
         signed_ids = [e.get("id") for e in (pending or {}).get("signoffs", []) if e.get("id")]
+        change = (pending or {}).get("change") or {}
         details, override = {"signoffs": signed or None, "signoff_ids": signed_ids or None,
-                             "eco": (pending or {}).get("eco")}, None
+                             "eco": (pending or {}).get("eco"), "changed": change.get("changed")}, None
         if override_reason is not None:
             missing = signoff_slots.waiting_on(pending) if pending else ["every sign-off"]
             override = person_name.stamp({}, "by", user)
@@ -183,13 +185,19 @@ def _finish_edit(repo, action, plan, override_reason, ecos=None):
             record_links.unlink(record, user, (pending or {}).get("document"), reason=reason,
                                 signoffs=details["signoffs"], override=details.get("override"))
         elif act == workflow_templates.RELEASE:
+            earlier = record_changes.earlier_revision(record.revision, record.released_revision)
             record_lifecycle.mark_released(record, user, plan.files, **details)
+            if earlier and change.get("disposition"):
+                record_changes.record_disposition(record, user, change["disposition"], earlier,
+                                                  f"Rev {record.revision} released")
         elif act == workflow_templates.MAKE_COTS:
             record_lifecycle.mark_cots(record, user, plan.files)
         elif act == workflow_templates.REOPEN:
             record_lifecycle.mark_reopened(record, user, reason)
         else:
             record_lifecycle.mark_void(record, user, reason)
+            if change.get("disposition"):
+                record_changes.record_disposition(record, user, change["disposition"], record.revision, "voided")
         record.approvals.append(approval)
     return edit
 

@@ -8,6 +8,7 @@ from pathlib import PurePosixPath
 
 from litterbox.core import revision_letters
 from litterbox.gui.logic import list_view
+from litterbox.records import record_changes
 from litterbox.records import record_revisions
 from litterbox.workflows import workflow_templates
 
@@ -20,6 +21,7 @@ EVENT_LABELS = {
     "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
     "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",
     "checkout_broken": "Checkout broken", "purchasing_edited": "Purchasing info", "files_made": "STEP/PDF made",
+    "disposition": "Disposition",
 }
 
 
@@ -47,6 +49,9 @@ def format_history(record, local=True):
     rows = []
     for event in reversed(record.history):
         parts = []
+        if event.get("event") == record_changes.EVENT_DISPOSITION:
+            parts.append(f"Rev {event.get('revision', '')} parts: "
+                         + record_changes.DISPOSITION_LABEL.get(event.get("disposition"), str(event.get("disposition"))))
         if event.get("eco"):
             parts.append(str(event["eco"]))
         if event.get("event") == "checkout_broken" and event.get("of"):
@@ -82,14 +87,19 @@ def format_history(record, local=True):
             parts.append("had been signed by " + ", ".join(event["signed"]))
         if event.get("event") == "released" and event.get("signoffs"):
             parts.append("signed off by " + ", ".join(event["signoffs"]))
+        if "changed" in event and event.get("event") in ("released", "release_requested"):
+            parts.append("changed: " + record_changes.changes_text(event["changed"]))
+        if event.get("event") == "release_requested" and event.get("disposition"):
+            parts.append("Dispo: " + record_changes.DISPOSITION_LABEL.get(event["disposition"], event["disposition"]))
         files = event.get("files") or []
         if files:
             parts.append(", ".join(PurePosixPath(f).name for f in files))
         name = event.get("event", "")
         label = EVENT_LABELS.get(name, str(name))
         if name in REQUEST_EVENTS:
-            label = workflow_templates.label_of(event.get("action") or "release") + (" requested" if name == "release_requested"
-                                                                         else " rejected")
+            label = workflow_templates.label_of(event.get("action") or "release") + (
+                (" resubmitted" if event.get("resubmitted") else " requested") if name == "release_requested"
+                else " rejected")
         if name == "released" and event.get("override"):
             label = "Released (Admin override)"
         elif name == "release_rejected" and event.get("override"):

@@ -51,6 +51,7 @@ class PartStatus:
     doc_type: str = ""                  # a document's type key (documents/doc_types.py); "" for a part
     material: str = ""                  # the working revision's material from SolidWorks; "" for none (or not read)
     material_outdated: bool = False     # its part file's material hasn't been read (records/record_materials.py)
+    draft: dict = field(default_factory=dict)       # a rejected request whoever asked is changing (workflow_drafts.py)
 
 
 def released_revisions(record):
@@ -128,6 +129,8 @@ def get_status(repo, documents=False):
         needed = tuple(record_exports.needed(record, step_pdf.possible_kinds(files)))
         if needed and kind not in ("error", "missing"):
             state += " (STEP/PDF needs updating)"
+        if record.draft and kind not in ("void", "pending"):
+            state += " (rejected request being changed)"
         if not_downloaded and kind != "void":
             state += " (not downloaded)"         # Check Out and Open download it; nothing else needs the files
 
@@ -138,5 +141,6 @@ def get_status(repo, documents=False):
                                released_revisions=released_revisions(record), files_needed=needed,
                                noncad=record.kind == record_model.KIND_NONCAD, doc_type=record.doc_type,
                                material=record_materials.material(record),
-                               material_outdated=record_lifecycle.material_needs_update(record, record.revision, files)))
+                               material_outdated=record_lifecycle.material_needs_update(record, record.revision, files),
+                               draft=record.draft))
     return rows

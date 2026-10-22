@@ -1,5 +1,6 @@
 """
-reassign_dialog.py - giving a sign-off slot to someone else.
+reassign_dialog.py - giving a sign-off slot to someone else: any open one (All Workflows' Change signer...), or
+one of your own from the Review window.
 """
 
 import tkinter as tk
@@ -14,22 +15,24 @@ from litterbox.gui.widgets import release_button
 
 
 class ReassignDialog(modal_dialog.ModalDialog):
-    """Change who signs a sign-off that hasn't been given. show() gives (slot index, person id) or None."""
+    """Change who signs a sign-off that hasn't been given. show() gives (slot index, person id) or None.
+    With `only` (a slot index), it is that sign-off, and `exclude` (person ids) are left out of the choices."""
 
-    def __init__(self, parent, task, directory, requester_may_sign=True):
+    def __init__(self, parent, task, directory, requester_may_sign=True, only=None, exclude=()):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
-        self.result, self.task, self.directory = None, task, directory
-        self.open = [(i, s) for i, s in enumerate(task.slots) if not s["done"]]
+        self.result, self.task, self.directory, self.exclude = None, task, directory, set(exclude)
+        self.open = [(i, s) for i, s in enumerate(task.slots) if not s["done"] and (only is None or i == only)]
         width, height = 520, 260
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
-        self.title("Change who signs")
+        heading = "Reassign your sign-off" if only is not None else "Change who signs"
+        self.title(heading)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
-        ctk.CTkLabel(self, text="Change who signs", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
+        ctk.CTkLabel(self, text=heading, font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
         self.slot_labels = {f"{s['text']}  (now {s['name']})": i for i, s in self.open}
         self.slot_var = tk.StringVar(value=next(iter(self.slot_labels)))
@@ -56,7 +59,8 @@ class ReassignDialog(modal_dialog.ModalDialog):
 
     def _people(self):
         index = self.slot_labels[self.slot_var.get()]
-        choices = task_text.row_choices(self.directory, self.task.slots[index]["roles"])
+        choices = [(label, pid) for label, pid in task_text.row_choices(self.directory, self.task.slots[index]["roles"])
+                   if pid not in self.exclude]
         self.ids = {label: pid for label, pid in choices}
         self.person_menu.configure(values=[label for label, _ in choices] or ["(nobody holds the role)"])
         self.person_var.set(choices[0][0] if choices else "(nobody holds the role)")

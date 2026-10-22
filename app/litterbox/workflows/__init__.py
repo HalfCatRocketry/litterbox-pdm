@@ -30,13 +30,19 @@ THE REQUEST   One request can cover several parts (a batch). It is saved in each
     approved is what happens.
 
 THE STEPS     request -> sign_off (each named person) -> complete
-    The last sign-off completes the action straight away for release, reopen and void. Make COTS waits for
-    someone to press the button again. If completing fails (offline, behind the vault...) the sign-off is still
-    saved and the part shows "approved, ready".
-    reject      a named signer (or Admin) sends the whole batch back with a comment.
-    withdraw    the requester (or Admin) cancels the batch.
-    reassign    the requester (or Admin) swaps the person named for a sign-off that hasn't been given.
+    The last sign-off completes the action straight away. If completing fails (offline, behind the vault...) the
+    sign-off is still saved and the part shows "approved, ready" (Complete finishes it).
+    reject      a named signer (or Admin) sends the whole batch back with a comment. It becomes a DRAFT (the
+                record's `draft`, see workflow_drafts.py): the parts are free to check out and in, and whoever asked
+                changes it and resubmits it (every sign-off starts again, the same ECO carries on) or withdraws it.
+    withdraw    the requester (or Admin) cancels the batch, or its draft.
+    reassign    the requester (or Admin) swaps the person named for a sign-off that hasn't been given; the person
+                named may hand their own sign-offs to someone else (hand_over).
     override    an Admin does the action without the sign-offs. A reason is required and it is recorded.
+
+    A release of Rev B or later says, for each part, what changed (form, fit, function) and what to do with the
+    earlier revision's parts (the disposition); a void gives a disposition too (records/record_changes.py). The
+    request carries them (`change`) until it completes. A release whose parts are all at Rev A needs no ECO.
 
 THE TRAIL     A finished action adds an entry to the record's `approvals`: who asked, the template, who signed
     (with roles and times), the file hashes, and any override with its reason. Every step is in the history too.

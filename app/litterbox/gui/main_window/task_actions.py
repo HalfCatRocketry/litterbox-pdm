@@ -1,13 +1,17 @@
 """
-task_actions.py - My Tasks and sign-off workflows: signing, rejecting, completing, withdrawing,
-overriding and reassigning, and starting a workflow from a button.
+task_actions.py - My Tasks and sign-off workflows: reviewing (approving, rejecting, handing your sign-offs to
+someone else), changing and resubmitting a rejected request, completing, withdrawing, overriding and reassigning,
+and starting a workflow from a button.
 """
 
 from tkinter import messagebox
 
+from litterbox.change_orders import eco_model
+from litterbox.change_orders import eco_store
 from litterbox.errors import LitterboxError
 from litterbox.gui.dialogs.workflow import reassign_dialog
 from litterbox.gui.dialogs.workflow import request_dialog
+from litterbox.gui.dialogs.workflow import review_dialog
 from litterbox.gui.dialogs.workflow import superuser_sign_dialog
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import request_parts
@@ -21,7 +25,7 @@ from litterbox.workflows import workflow_templates
 
 
 class TaskActions:
-    """My Tasks and sign-off workflows: signing, rejecting, completing, withdrawing, (a part of the main window, App)."""
+    """My Tasks and sign-off workflows: reviewing, resubmitting, completing, withdrawing, (a part of the main window, App)."""
 
     def _task_windows(self):
         """The My Tasks screen, once it has been opened (a list, so callers can loop over it)."""
@@ -36,13 +40,48 @@ class TaskActions:
     def show_tasks(self):
         self.show_screen("tasks")
 
-    def task_sign(self, task):
-        comment = self._ask("Comment (optional):", f"Approve: {task.label}")
-        if comment is None:
+    def _eco_of(self, number):
+        """The ECO to show beside a request, or None (none, or it can't be read: that is only logged)."""
+        if not number:
+            return None
+        try:
+            return eco_store.load(self.repo(), number)
+        except eco_model.EcoError as e:
+            self._say(str(e), "warn")
+            return None
+
+    def task_review(self, task):
+        """My Tasks' Review: the request read-only, to approve, reject or hand your sign-offs to someone else. Your
+        own rejected request opens in the Workflow window instead, to change and resubmit."""
+        if task.draft:
+            self._change_draft(task)
             return
-        repo, pns = self.repo(), task.pns
-        self.run_releasing(lambda: workflow_signoff.sign_off(repo, pns, comment), pns, f"Signed off {task.label}",
-                           on_success=lambda result: self._signed(task, result))
+        directory, me = self.identity.directory, self.identity.person
+        if directory is None or me is None:
+            return
+        answer = review_dialog.ReviewDialog(self, task, directory, me.id, self._eco_of(task.eco),
+                                            on_open=self._open_for_review).show()
+        if not answer:
+            return
+        repo, pns, handed, comment = self.repo(), task.pns, answer["handed"], answer["comment"]
+        if answer["answer"] == "reject":
+            self.run_task(lambda: workflow_responses.reject(repo, pns, comment), f"Rejected {task.label}")
+        elif answer["answer"] == "reassign":
+            self.run_task(lambda: workflow_responses.hand_over(repo, pns, handed),
+                          f"Handed your sign-offs on {task.label} to someone else")
+        else:
+            def approve():
+                if handed:
+                    workflow_responses.hand_over(repo, pns, handed)
+                return workflow_signoff.sign_off(repo, pns, comment)
+            self.run_releasing(approve, pns, f"Signed off {task.label}",
+                               on_success=lambda result: self._signed(task, result))
+
+    def _open_for_review(self, pn, revision, kind):
+        if kind == "pdf":
+            self._open_pdf_revision(pn, revision)
+        else:
+            self._open_revision(pn, revision, drawing=True)
 
     def _signed(self, task, result):
         text, _warn = task_text.signoff_result_text(result)
@@ -52,13 +91,44 @@ class TaskActions:
             self.note = f"Signed off; {workflow_templates.label_of(task.action)} done on {len(result.completed)} part" \
                         f"{'s' if len(result.completed) != 1 else ''}"
 
-    def task_reject(self, task):
-        reason = self._ask_reason("Why are you rejecting it? The person who asked will see this.",
-                                  f"Reject: {task.label}")
-        if reason is None:
+    def _change_draft(self, task):
+        """Your rejected request in the Workflow window, filled in as it was: change it and resubmit, or withdraw."""
+        repo = self.repo()
+        try:
+            templates = workflow_store.templates_for(repo, task.action)
+        except LitterboxError as e:
+            messagebox.showerror("Litterbox", error_text.shorten(str(e)))
             return
-        repo, pns = self.repo(), task.pns
-        self.run_task(lambda: workflow_responses.reject(repo, pns, reason), f"Rejected {task.label}")
+        directory, me = self.identity.directory, self.identity.person
+        if not templates or directory is None or me is None:
+            self._say(f"This vault has no {workflow_templates.label_of(task.action)} workflow any more: withdraw the "
+                      "request.", "warn")
+            return
+        parts = [self._request_part(pn, name, rev) for pn, name, rev in task.parts]
+        addable = None
+        if task.action != workflow_templates.REMOVE_DOC:
+            addable = lambda current: request_parts.addable_rows(task.action, list(self.rows_by_pn.values()), current,
+                                                                 self.jobs.pending_parts(), draft_id=task.id)
+        chosen = request_dialog.WorkflowRequestDialog(
+            self, task.action, parts, templates, directory, me.id, addable,
+            draft=request_dialog.draft_of(task, self._eco_of(task.eco))).show()
+        if not chosen:
+            return
+        if chosen.get("withdraw"):
+            pns = task.pns
+            self.run_task(lambda: workflow_responses.withdraw(repo, pns), f"Withdrew the request for {task.label}")
+            return
+        pns = list(chosen["parts"])
+        self.run_task(lambda: workflow_request.resubmit(
+            repo, task.id, pns, task.action, chosen["template"], chosen["assignments"], chosen["extras"],
+            chosen["reason"], chosen["eco"], task.document or None, chosen.get("changes")),
+            f"Resubmitted the {workflow_templates.label_of(task.action)} workflow")
+
+    def _request_part(self, pn, name, revision=None):
+        """(PN, name, revision, released revision) for the Workflow window, from the parts list."""
+        row = self.rows_by_pn.get(pn)
+        return (pn, name or getattr(row, "name", ""), getattr(row, "revision", None) or revision or "A",
+                getattr(row, "released_revision", ""))
 
     def task_complete(self, task):
         repo, pns = self.repo(), task.pns
@@ -106,6 +176,7 @@ class TaskActions:
                                f"{label} done: {task.label} (Admin override)")
 
     def task_reassign(self, task):
+        """All Workflows' Change signer...: the person who asked, or an Admin, names someone else for a sign-off."""
         directory = self.identity.directory
         if directory is None:
             return
@@ -139,7 +210,7 @@ class TaskActions:
         if directory is None or me is None:
             self._say("Set up the team first (Team > Set Up Team): sign-offs are done by people on it.", "warn")
             return True
-        parts = [(pn, self.rows_by_pn[pn].name) for pn in plan.targets]
+        parts = [self._request_part(pn, self.rows_by_pn[pn].name) for pn in plan.targets]
         addable = lambda current: request_parts.addable_rows(action, list(self.rows_by_pn.values()), current,
                                                              self.jobs.pending_parts())
         chosen = request_dialog.WorkflowRequestDialog(self, action, parts, templates, directory, me.id,
@@ -147,8 +218,10 @@ class TaskActions:
         if not chosen:
             return True
         pns, label = list(chosen["parts"]), workflow_templates.label_of(action)
+        changes = chosen.get("changes")
         self.run_task(lambda: workflow_request.request(repo, pns, action, chosen["template"], chosen["assignments"],
-                                               chosen["extras"], chosen["reason"], chosen["eco"]),
+                                                       chosen["extras"], chosen["reason"], chosen["eco"],
+                                                       **({"changes": changes} if changes else {})),
                       f"Started the {label} workflow on {len(pns)} part{'s' if len(pns) != 1 else ''}")
         return True
 
@@ -160,13 +233,12 @@ class TaskActions:
         other = next((r for r in rows if r.pending.get("action") != action), None)
         if other is not None:
             messagebox.showinfo(label, f"{other.pn} has a {workflow_templates.label_of(other.pending.get('action'))} request "
-                                       "waiting for sign-offs. Open Workflows to approve, reject or withdraw it.")
+                                       "waiting for sign-offs. Open Workflows to review or withdraw it.")
             return
         waiting = next((r for r in rows if not signoff_slots.is_complete(r.pending)), None)
         if waiting is not None:
             messagebox.showinfo(label, f"{waiting.pn} is still waiting for: " + ", ".join(
-                signoff_slots.waiting_on(waiting.pending)) + ".\n\nOpen Workflows to approve, reject or withdraw the "
-                                                        "request.")
+                signoff_slots.waiting_on(waiting.pending)) + ".\n\nOpen Workflows to review or withdraw the request.")
             return
         if messagebox.askokcancel(f"{label} {len(pns)} part{'s' if len(pns) != 1 else ''}",
                                   f"Everyone needed has signed. {label} now?"):

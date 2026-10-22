@@ -6,6 +6,7 @@ part or many. Each only edits the part's record, under a short lock.
 from litterbox.errors import LitterboxError
 from litterbox.parts import batch_core
 from litterbox.parts import planning
+from litterbox.records import record_changes
 from litterbox.records import record_lifecycle
 from litterbox.records.error_conversion import converts_errors
 
@@ -99,14 +100,41 @@ def _plan_batch(repo, plans, action, verb, change, message):
     return batch_core.as_lists(batch, [plan.pn for plan in plans])
 
 
+def _released(record, user, files, change):
+    """Release, recording what changed and the earlier revision's disposition (records/record_changes.py)."""
+    earlier = record_changes.earlier_revision(record.revision, record.released_revision)
+    wanted = record_changes.wanted(record.pn, "release", record.revision, record.released_revision)
+    change = record_changes.clean(change, *wanted, where=f"{record.pn}: ") if change is not None else {}
+    record_lifecycle.mark_released(record, user, files, changed=change.get("changed"))
+    if earlier and change.get("disposition"):
+        record_changes.record_disposition(record, user, change["disposition"], earlier,
+                                          f"Rev {record.revision} released")
+
+
+def _voided(record, user, reason, change):
+    """Void, recording the voided revision's disposition."""
+    wanted = record_changes.wanted(record.pn, "void", record.revision, record.released_revision)
+    change = record_changes.clean(change, *wanted, where=f"{record.pn}: ") if change is not None else {}
+    record_lifecycle.mark_void(record, user, reason)
+    if change.get("disposition"):
+        record_changes.record_disposition(record, user, change["disposition"], record.revision, "voided")
+
+
 @converts_errors
-def release_many(repo, pns):
+def release_many(repo, pns, changes=None):
     """release() for several parts with one download and one upload. Call release_plans() first and get the user
-    to confirm. Returns (done, failed): done is [(pn, released files)]."""
+    to confirm. `changes` is {part number text: {"changed", "disposition"}} for parts at Rev B or later (see
+    records/record_changes.py); when given, every disposition asked for is required. Returns (done, failed): done
+    is [(pn, released files)]."""
     pns = batch_core.unique_pns(pns)
     _refuse_if_workflow(repo, "release", pns)
     return _plan_batch(repo, planning.release_plans(repo, pns), "release", "released",
-                       lambda record, user, plan: record_lifecycle.mark_released(record, user, plan.files), "{pn}: Released")
+                       lambda record, user, plan: _released(record, user, plan.files, _change(changes, record)),
+                       "{pn}: Released")
+
+
+def _change(changes, record):
+    return None if changes is None else (changes.get(str(record.pn)) or {})
 
 
 @converts_errors
@@ -135,9 +163,11 @@ def reopen_many(repo, pns, reason):
 
 
 @converts_errors
-def void_many(repo, pns, reason):
-    """void() for several parts with one download and one upload; one reason for all of them."""
+def void_many(repo, pns, reason, changes=None):
+    """void() for several parts with one download and one upload; one reason for all of them. `changes` is {part
+    number text: {"disposition"}}: what to do with the parts already made (required for each part when given)."""
     pns = batch_core.unique_pns(pns)
     _refuse_if_workflow(repo, "void", pns)
-    return _reason_batch(repo, pns, "void", lambda record, user: record_lifecycle.mark_void(record, user, reason),
+    return _reason_batch(repo, pns, "void",
+                         lambda record, user: _voided(record, user, reason, _change(changes, record)),
                          lambda pn: f"{pn}: Voided - {batch_core.one_line(reason)}")

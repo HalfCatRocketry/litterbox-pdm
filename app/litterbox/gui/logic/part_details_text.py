@@ -9,6 +9,7 @@ from litterbox.gui.logic import history_text
 from litterbox.gui.logic import list_view
 from litterbox.gui.logic import material_text
 from litterbox.gui.logic import purchasing_text
+from litterbox.records import record_changes
 from litterbox.records import record_exports
 from litterbox.workflows import workflow_templates
 
@@ -39,6 +40,21 @@ def eco_for(record, rev):
     if record.pending and record.pending.get("revision") == rev and record.pending.get("eco"):
         return record.pending["eco"], "waiting for sign-offs"
     return None, ""
+
+
+def change_rows(record, rev, local=True):
+    """[(label, text)]: what the release of `rev` said changed, and the disposition of `rev`'s parts (given when a
+    later revision was released, or when it was voided)."""
+    rows = []
+    changed = record_changes.changed_in(record, rev)
+    if changed is not None:
+        rows.append(("Changed", record_changes.changes_text(changed)))
+    event = record_changes.disposition_event(record, rev)
+    if event is not None:
+        label = record_changes.DISPOSITION_LABEL.get(event.get("disposition"), str(event.get("disposition")))
+        rows.append(("Disposition", f"{label} ({event.get('reason', '')}; by {event.get('by', '')} on "
+                                    f"{history_text.to_display_time(event.get('at', ''), local)})"))
+    return rows
 
 
 def files_flagged(record, rev, revisions):
@@ -93,6 +109,7 @@ def revision_details(record, rev, revisions, local=True, currency=None):
             fields.append(("Signed off by", ", ".join(signed)))
     number, how = eco_for(record, rev)
     fields.append(("ECO", f"{number} ({how})" if number else "None"))
+    fields += change_rows(record, rev, local)
     files = revisions.get(rev, [])
     fields.append(("Files", list_view.file_types(files) if files else "No files"))
     material = material_text.details_text(record, rev, files)

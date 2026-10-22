@@ -57,7 +57,9 @@ class TestEcoText(unittest.TestCase):
         self.assertEqual(fields["Status"], "Rejected")
         self.assertEqual(fields["Workflow"], "Release T1")
         self.assertEqual(fields["Rejected"], "by Bea Jones on 2026-10-11 09:30 - Too soft")
-        self.assertEqual(eco_text.part_rows(closed), [("HCR-00001-001", "A")])
+        self.assertEqual(eco_text.part_rows(closed), [("HCR-00001-001", "A", "", "")])
+        closed.parts = [{"pn": "HCR-00001-001", "revision": "B", "changed": ["fit", "form"], "disposition": "rework"}]
+        self.assertEqual(eco_text.part_rows(closed), [("HCR-00001-001", "B", "Form, Fit", "Rework")])
         self.assertEqual(eco_text.signoff_rows(closed, local=False), [("Bea Jones", "2026-10-11 09:30", "No")])
         self.assertEqual(eco_text.history_rows(closed, local=False)[1], ("2026-10-11 09:30", "Bea Jones", "Rejected: Too soft"))
         self.assertNotIn("Released", dict(eco_text.eco_fields(eco("ECO-0001", "x"), local=False)))

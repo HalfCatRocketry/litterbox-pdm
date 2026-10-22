@@ -132,7 +132,7 @@ RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration
 
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
-    "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
+    "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "draft", "references", "references_outdated", "history",
     "purchasing", "quantities", "exports", "kind", "bom_items", "documents", "number", "doc_type", "materials",
 }
 
@@ -163,6 +163,7 @@ class Record:
     import_path: str = ""       # where the file was imported from (only for imported parts)
     approvals: list = field(default_factory=list)   # one entry per completed workflow (see workflow.py): who signed, when, and how it ended
     pending: dict = field(default_factory=dict)     # a request waiting for sign-offs (see workflow.py); empty when there is none
+    draft: dict = field(default_factory=dict)       # a rejected request being changed by whoever asked (workflow_drafts.py)
     references_outdated: list = field(default_factory=list)  # revisions whose assembly changed but whose list of parts could not be read
     references: dict = field(default_factory=dict)  # revision -> the parts that revision's assembly uses, e.g. {'A': ['HCR-00005-001_A']}
     quantities: dict = field(default_factory=dict)  # revision -> how many of each it uses, e.g. {'A': {'HCR-00005-001_A': 4}}
@@ -218,6 +219,8 @@ class Record:
         })
         if self.pending:
             data["pending"] = self.pending
+        if self.draft:
+            data["draft"] = self.draft
         if self.references_outdated:
             data["references_outdated"] = sorted(self.references_outdated, key=revision_number)
         if self.references:
@@ -304,6 +307,10 @@ class Record:
             pending["signoffs"] = [dict(e, at=_as_text(e.get("at"))) if isinstance(e, dict) else e
                                    for e in pending["signoffs"]]
 
+        draft = data.get("draft") or {}
+        if not isinstance(draft, dict) or (draft and not draft.get("id")):
+            raise RegistryError(f"{pn}: 'draft' must be a rejected request with its id.")
+
         kind = _as_text(data.get("kind", KIND_CAD)) or KIND_CAD
         if kind not in ALL_KINDS:
             raise RegistryError(f"{pn}: unknown kind '{kind}'. Update Litterbox to read it.")
@@ -387,6 +394,7 @@ class Record:
             import_path=_as_text(data.get("import_path")),
             approvals=list(approvals),
             pending=pending,
+            draft=draft,
             references=clean_refs,
             references_outdated=outdated,
             quantities=clean_quantities,

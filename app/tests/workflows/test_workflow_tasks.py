@@ -1,8 +1,10 @@
 """Tests for My Tasks (workflow_tasks) and describing a pending request (signoff_slots). Uses the two-user vault (Alex is the Owner and a Responsible Engineer; Bea is a Member with the Quality role; Cy is listed with the Manager role). They need Linux, macOS or WSL."""
 
 import unittest
+from unittest import mock
 from types import SimpleNamespace
 from tests.support.vault_fixture import PART
+from litterbox.errors import LitterboxError
 from litterbox.team import team_identity
 from litterbox.team import team_store
 from litterbox.workflows import workflow_request
@@ -55,10 +57,11 @@ class TestTasks(Fixture, unittest.TestCase):
         self.assertTrue(t.can_sign)                                    # still something to sign on the other
         self.assertFalse(t.slots[1]["done"])
 
-    def test_an_approved_request_waits_on_its_requester_to_complete(self):
+    def test_an_approved_request_whose_finish_failed_waits_on_its_requester_to_complete(self):
         self.set_template(workflow_templates.MAKE_COTS, rows=((ENGINEER,),))
         self.do("Alex", workflow_request.request, [PART], workflow_templates.MAKE_COTS, "T", ["alex"])
-        self.do("Alex", workflow_signoff.sign_off, [PART])
+        with mock.patch.object(workflow_signoff, "_finish_many", side_effect=LitterboxError("offline")):
+            self.do("Alex", workflow_signoff.sign_off, [PART])
         (t,) = self.tasks("alex")
         self.assertEqual((t.ready, t.can_complete, workflow_tasks.count_for_me([t])), (True, True, 1))
 

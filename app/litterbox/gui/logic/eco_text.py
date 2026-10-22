@@ -4,11 +4,12 @@ eco_text.py - engineering change orders in words: the ECOs window's table and se
 
 from litterbox.change_orders import eco_model
 from litterbox.gui.logic import history_text
+from litterbox.records import record_changes
 from litterbox.workflows import workflow_templates
 
 STATUS_FILTERS = ("All",) + tuple(eco_model.STATUS_LABEL[s] for s in eco_model.STATUSES)
 
-TABLE_COLUMNS = (("number", "ECO", 90), ("name", "Name", 230), ("status", "Status", 90), ("parts", "Parts", 190),
+TABLE_COLUMNS = (("number", "ECO", 90), ("name", "Title", 230), ("status", "Status", 90), ("parts", "Parts", 190),
                  ("by", "Asked by", 120), ("when", "Asked", 130))
 
 
@@ -22,7 +23,7 @@ def parts_summary(eco):
 
 
 def matches(eco, search):
-    """True if `search` is in the ECO's number, name, description, a part number or who asked (any capitals)."""
+    """True if `search` is in the ECO's number, title, description, a part number or who asked (any capitals)."""
     needle = " ".join((search or "").split()).lower()
     if not needle:
         return True
@@ -65,9 +66,15 @@ def eco_fields(eco, local=True):
     return fields
 
 
+PART_COLUMNS = (("pn", "Part", 170), ("rev", "Revision", 80), ("changed", "Changed", 170), ("dispo", "Dispo", 150))
+
+
 def part_rows(eco):
-    """Rows of (part, revision) for an ECO's parts."""
-    return [(p["pn"], p.get("revision", "")) for p in eco.parts]
+    """Rows of (part, revision, what changed, disposition) for an ECO's parts ('' where the request didn't say)."""
+    return [(p["pn"], p.get("revision", ""),
+             record_changes.changes_text(p["changed"]) if "changed" in p else "",
+             record_changes.DISPOSITION_LABEL.get(p.get("disposition"), p.get("disposition") or ""))
+            for p in eco.parts]
 
 
 def signoff_rows(eco, local=True):

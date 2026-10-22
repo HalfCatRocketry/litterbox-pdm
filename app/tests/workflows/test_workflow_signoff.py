@@ -6,7 +6,6 @@ from tests.support.vault_fixture import DRW, PART, PRT, git
 from litterbox.records import record_model
 from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_signoff
-from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_templates
 from tests.support.workflow_fixture import CHIEF, ENGINEER, MANAGER, PART2, Fixture
 from litterbox.errors import LitterboxError
@@ -141,14 +140,11 @@ class TestSigning(Fixture, unittest.TestCase):
         self.assertEqual(r.completed, [PART])
         self.assertEqual(self.record().status, record_model.STATUS_VOID)
 
-    def test_make_cots_waits_for_someone_to_complete_it(self):
+    def test_make_cots_completes_automatically(self):
         self.set_template(workflow_templates.MAKE_COTS, rows=((ENGINEER,),))
         self.do("Alex", workflow_request.request, [PART], workflow_templates.MAKE_COTS, "T", ["alex"])
         r = self.do("Alex", workflow_signoff.sign_off, [PART])
-        self.assertEqual((r.signed, r.completed), ([PART], []))
-        self.assertTrue(signoff_slots.is_complete(self.record().pending))
-        self.assertFalse(self.record().cots)
-        self.do("Alex", workflow_signoff.complete, PART)
+        self.assertEqual((r.signed, r.completed), ([PART], [PART]))
         self.assertTrue(self.record().cots)
         self.assertEqual(self.record().pending, {})
 

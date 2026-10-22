@@ -18,6 +18,7 @@ from litterbox.gui.dialogs.team import person_dialog
 from litterbox.gui.dialogs.team import roles_dialog
 from litterbox.gui.dialogs.workflow import reassign_dialog
 from litterbox.gui.dialogs.workflow import request_dialog
+from litterbox.gui.dialogs.workflow import review_dialog
 from litterbox.gui.dialogs.workflow import superuser_sign_dialog
 from litterbox.gui.dialogs.workflow import workflows_dialog
 from litterbox.gui.logic import action_rules
@@ -171,8 +172,8 @@ class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateC
         except Exception:
             return self
         return top if isinstance(top, (workflows_dialog.WorkflowsDialog, request_dialog.WorkflowRequestDialog,
-                                       reassign_dialog.ReassignDialog, roles_dialog.RolesDialog,
-                                       superuser_sign_dialog.SuperuserSignDialog,
+                                       reassign_dialog.ReassignDialog, review_dialog.ReviewDialog,
+                                       roles_dialog.RolesDialog, superuser_sign_dialog.SuperuserSignDialog,
                                        person_dialog.PersonDialog)) else self
 
     def _on_close(self):

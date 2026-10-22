@@ -22,6 +22,7 @@ from litterbox.gui.logic import list_view
 from litterbox.gui.logic import status_icons
 from litterbox.gui.logic import text_fit
 from litterbox.gui.logic import ui_scale
+from litterbox.gui.widgets import menu_bar
 from litterbox.gui.widgets import table_sorting
 from litterbox.parts import downloads
 from litterbox.parts import get_latest
@@ -60,9 +61,9 @@ class PartsList:
         """The Columns menu: a tick for each column that is shown."""
         for column in list_columns.COLUMNS:
             menu.add_checkbutton(label=column.title, onvalue=True, offvalue=False,
-                                 state="disabled" if column.key == "pn" else "normal",
                                  variable=self._menu_flag(column.key in self.list_keys),
-                                 command=lambda key=column.key: self.toggle_column(key))
+                                 **menu_bar.entry_options(column.key != "pn",
+                                                          lambda key=column.key: self.toggle_column(key)))
 
     def toggle_column(self, key):
         self.list_keys = list_columns.toggled(self.list_keys, key)

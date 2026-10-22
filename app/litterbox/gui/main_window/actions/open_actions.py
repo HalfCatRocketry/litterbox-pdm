@@ -105,7 +105,17 @@ class OpenActions:
                 self, pn, [(history_text.revision_label(row, r), r) for r, _f in choices], "Open PDF of").show()
             if rev is None:
                 return
-        path = opener.pick_pdf(dict(choices)[rev])
+        self._open_pdf_revision(pn, rev)
+
+    def _open_pdf_revision(self, pn, rev):
+        """Open one revision's PDF (Open PDF, and the Review window of My Tasks)."""
+        row = self.rows_by_pn.get(pn)
+        files = history_text.row_revisions(row).get(rev, []) if row else []
+        path = opener.pick_pdf(files)
+        if path is None:
+            self._say(f"{pn.short} Rev {rev} has no PDF. Part > Generate STEP/PDF... makes one from its drawing.",
+                      "warn")
+            return
         repo = self.repo()
         if lfs_download.is_stub(repo, path):            # download on demand: just the PDF, not what the model uses
             self.run_task(lambda: downloads.download_files(repo, [path], f"the PDF of {pn} Rev {rev}"), "",
