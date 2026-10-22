@@ -19,6 +19,7 @@ from litterbox.references import bom
 from litterbox.references import reference_model
 from litterbox.references import reference_queries
 from litterbox.references import reference_reader
+from litterbox.vault import config
 
 REFERENCE_TABS = ("Uses", "Where used")
 
@@ -98,7 +99,7 @@ class DetailPane:
             self.pane_view.grid_remove()
             return
         self.pane_view.grid()
-        self.pane_view.show(record, history_text.row_revisions(row))
+        self.pane_view.show(record, history_text.row_revisions(row), config.currency_or_none(self.repo()))
         self._pane_refs_for = self._pane_bom_for = None     # show() emptied the Uses, Where used and BOM tabs
         if self.pane_view.current_tab() in REFERENCE_TABS:
             self._load_pane_references(pn)
@@ -155,14 +156,15 @@ class DetailPane:
                 outdated = rev in record.references_outdated or rev in reference_queries.needs_update(repo, record)
                 counts_outdated = rev in reference_queries.bom_needs_update(repo, record)
                 cost = bom.cost_summary(records, pn, rev) if found else None
+                money = config.currency_or_none(repo)
                 if not (outdated or counts_outdated):
-                    return (bom_text.table(found, mode), bom_text.note(found, assembly, cost=cost), False, editable,
-                            removable)
+                    return (bom_text.table(found, mode, money), bom_text.note(found, assembly, cost=cost, currency=money),
+                            False, editable, removable)
                 installed = reference_reader.can_start_solidworks()
-                note = bom_text.note(found, True, outdated, counts_outdated, cost)
+                note = bom_text.note(found, True, outdated, counts_outdated, cost, money)
                 if not installed:
                     note += " " + bom_text.update_button_text(False)
-                return bom_text.table(found, mode), note, installed, editable, removable
+                return bom_text.table(found, mode, money), note, installed, editable, removable
             except LitterboxError as e:
                 return None, f"Couldn't work out the BOM: {e}"
 

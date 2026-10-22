@@ -7,6 +7,7 @@ Uses tab.
 from litterbox.exporting import step_pdf
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import list_view
+from litterbox.gui.logic import material_text
 from litterbox.gui.logic import purchasing_text
 from litterbox.records import record_exports
 from litterbox.workflows import workflow_templates
@@ -64,8 +65,9 @@ def files_made_text(record, rev, revisions, local=True):
     return "; ".join(lines)
 
 
-def revision_details(record, rev, revisions, local=True):
-    """[(label, text)] for the Details tab with revision `rev` picked. `revisions` is {revision: [files]}."""
+def revision_details(record, rev, revisions, local=True, currency=None):
+    """[(label, text)] for the Details tab with revision `rev` picked. `revisions` is {revision: [files]};
+    `currency` is the team's (core/currency.py), for the unit cost."""
     rows = {row[0]: row for row in history_text.revision_rows(record, revisions)}
     state = rows[rev][1] if rev in rows else ""
     fields = [("Part", str(record.pn)), ("Name", record.name)]
@@ -93,13 +95,16 @@ def revision_details(record, rev, revisions, local=True):
     fields.append(("ECO", f"{number} ({how})" if number else "None"))
     files = revisions.get(rev, [])
     fields.append(("Files", list_view.file_types(files) if files else "No files"))
+    material = material_text.details_text(record, rev, files)
+    if material is not None:
+        fields.append(("Material", material))
     made = files_made_text(record, rev, revisions, local)
     if made:
         fields.append(("STEP/PDF", made))
     fields.append(("Created", f"by {record.created_by} on {history_text.to_display_time(record.created_at, local)}"))
     if record.cots:
         fields.append(("COTS", "Yes (a purchased part)"))
-    fields += purchasing_text.details_rows(record.purchasing)
+    fields += purchasing_text.details_rows(record.purchasing, currency)
     if record.import_path:
         fields.append(("Imported from", record.import_path))
     return fields

@@ -160,7 +160,8 @@ class TeamAdmin:
                        "commit_style": config.get_commit_style(repo), "release_rule": config.get_release_rule(repo),
                        "require_signatures": config.get_require_signatures(repo),
                        "assembly_variant_start": config.get_assembly_variant_start(repo),
-                       "solidworks_version": config.get_solidworks_version(repo)}
+                       "solidworks_version": config.get_solidworks_version(repo),
+                       "currency": config.get_currency(repo)}
         except config.ConfigError as e:
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return

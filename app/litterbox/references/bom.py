@@ -22,6 +22,7 @@ from decimal import Decimal, InvalidOperation
 
 from litterbox.core import revision_letters
 from litterbox.records import purchasing_info
+from litterbox.records import record_materials
 from litterbox.references import reference_model
 
 SINGLE, INDENTED, FLAT = "single", "indented", "flat"
@@ -47,6 +48,7 @@ class BomLine:
     quantity: int = None            # how many its parent uses (None: not counted)
     total: int = None               # how many the whole assembly needs (None: not known)
     added: bool = False             # added to the BOM by hand, not read from the model
+    material: str = ""              # that revision's material (records/record_materials.py), "" for none or not read
 
     @property
     def state_text(self):
@@ -69,7 +71,8 @@ def _line(records, stem, level):
     if record is None:
         return BomLine(level, pn, revision, state=state)
     return BomLine(level, pn, revision, record.name, record.description, record.status, state, latest, record.cots,
-                   dict(record.purchasing), bool(reference_model.stems_of(record, revision)))
+                   dict(record.purchasing), bool(reference_model.stems_of(record, revision)),
+                   material=record_materials.material(record, revision))
 
 
 def quantities_of(record, revision):

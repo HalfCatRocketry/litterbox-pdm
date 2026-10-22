@@ -1,6 +1,6 @@
 """
-details_actions.py - Edit Details, Purchasing Info, and the BOM lines added by hand (the BOM tab's Add item...
-and Remove).
+details_actions.py - Edit Details, Purchasing Info, Update Material, and the BOM lines added by hand (the BOM tab's
+Add item... and Remove).
 """
 
 from tkinter import messagebox
@@ -10,12 +10,15 @@ from litterbox.gui.dialogs import edit_details_dialog
 from litterbox.gui.dialogs import purchasing_dialog
 from litterbox.gui.logic import bom_text
 from litterbox.gui.logic import confirmations
+from litterbox.gui.logic import material_text
 from litterbox.gui.logic import purchasing_text
 from litterbox.parts import bom_items
 from litterbox.parts import part_details
+from litterbox.parts import part_materials
 from litterbox.parts import purchasing
 from litterbox.records import record_model
 from litterbox.records import record_store
+from litterbox.vault import config
 
 
 class DetailsActions:
@@ -67,7 +70,8 @@ class DetailsActions:
         mine = self.rows_by_pn[pn].kind == "mine"
         note = ("You have it checked out: the change goes up with your next Save Progress or Check In." if mine else
                 "It is uploaded as soon as you save. No check-out is needed.")
-        fields = purchasing_dialog.PurchasingDialog(self, pn, record.purchasing, note).show()
+        fields = purchasing_dialog.PurchasingDialog(self, pn, record.purchasing, note,
+                                                    config.currency_or_none(repo)).show()
         if fields is None:
             self._say("Nothing was changed.")
             return
@@ -78,6 +82,25 @@ class DetailsActions:
     def _purchasing_done(self, pn, outcome):
         self.note = purchasing_text.done_text(pn, outcome)          # kept on the status line after the refresh
         self._say(self.note)
+
+    def update_material(self):
+        """Part > Update Material: read the ticked parts' (or the highlighted one's) materials from their files
+        through SolidWorks (parts/part_materials.py): the one that's open, or one started out of sight and closed
+        afterwards."""
+        plan = self._plan("update_material")
+        if not plan:
+            return
+        repo, pns = self.repo(), list(plan.targets)
+
+        def done(results):
+            text, problems = material_text.summary(results)
+            self.note = text
+            self._say(text, "warn" if problems else "normal")
+            if problems:
+                messagebox.showwarning("Update Material", text + ":\n\n" + "\n".join(problems), parent=self)
+
+        self.run_task(lambda: part_materials.update_materials(repo, pns, log=lambda line: self.queue.put(("log", line))),
+                      "", on_success=done, label="Reading materials with SolidWorks", parts=pns)
 
     def edit_details(self):
         plan = self._plan("edit")

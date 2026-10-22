@@ -55,6 +55,12 @@ def set_values(repo, **values):
             else:
                 data[key] = year
                 _require_at_least(data, version.VERSION)     # older Litterbox wouldn't check it
+        elif key == "currency":
+            code = config.check_currency(value)
+            if code is None:
+                data.pop(key, None)
+            else:
+                data[key] = code                     # older Litterbox keeps it without using it
         elif key == "assembly_variant_start":
             data[key] = config.check_assembly_variant(value, config.get_digits(repo)[1])
         elif key == "projects":

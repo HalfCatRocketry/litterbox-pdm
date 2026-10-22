@@ -80,7 +80,7 @@ class PartDetailsView(ctk.CTkFrame):
         self.bom_removable = {}
         self.document_rows, self.on_open_document = document_rows, on_open_document
         self.on_link_document, self.on_unlink_document = on_link_document, on_unlink_document
-        self.record, self.revisions = None, {}
+        self.record, self.revisions, self.currency = None, {}, None
         self.eco_number, self.shown = None, []
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
@@ -149,7 +149,7 @@ class PartDetailsView(ctk.CTkFrame):
         if self.record is None:
             return
         rev = self.rev_var.get()
-        self.shown = part_details_text.revision_details(self.record, rev, self.revisions)
+        self.shown = part_details_text.revision_details(self.record, rev, self.revisions, currency=self.currency)
         for number, (label, text) in enumerate(self.shown):
             ctk.CTkLabel(self.fields, text=label + ":", text_color=theme.MUTED, anchor="nw").grid(
                 row=number, column=0, sticky="nw", padx=(4, 10), pady=2)
@@ -375,9 +375,10 @@ class PartDetailsView(ctk.CTkFrame):
         self.bom_note.configure(text=note)
 
     # -- filling it in -------------------------------------------------------------
-    def show(self, record, revisions=None):
-        """Show a part (a records Record); `revisions` is {revision: [files]}."""
-        self.record, self.revisions = record, revisions or {}
+    def show(self, record, revisions=None, currency=None):
+        """Show a part (a records Record); `revisions` is {revision: [files]}; `currency` the team's (USD), for
+        costs."""
+        self.record, self.revisions, self.currency = record, revisions or {}, currency
         choices = part_details_text.revision_choices(record, self.revisions) or [record.revision]
         self.rev_menu.configure(values=choices)
         self.rev_var.set(choices[0])

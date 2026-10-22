@@ -4,6 +4,7 @@ purchasing_dialog.py - Purchasing Info: a part's supplier, supplier part number,
 
 import customtkinter as ctk
 
+from litterbox.core import currency as currencies
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import purchasing_text
@@ -11,19 +12,21 @@ from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.records import purchasing_info
 
-HINTS = {purchasing_info.UNIT_COST: "a number, in your team's currency, like 12.50",
-         purchasing_info.LEAD_TIME_DAYS: "whole days"}
+HINTS = {purchasing_info.UNIT_COST: "a number, like 12.50", purchasing_info.LEAD_TIME_DAYS: "whole days"}
 
 
 class PurchasingDialog(modal_dialog.ModalDialog):
     """Change a part's purchasing fields.
 
-        PurchasingDialog(parent, pn, section, note).show()
+        PurchasingDialog(parent, pn, section, note, currency="USD").show()
         # None if cancelled or nothing changed, else {field: text}
+
+    The unit cost box has the team's currency symbol beside it ($ before it, kr after it); without a currency it
+    says the cost is in the team's own currency.
     """
     FOCUS = "first_entry"
 
-    def __init__(self, parent, pn, section, note=""):
+    def __init__(self, parent, pn, section, note="", currency=None):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result, self.old = None, dict(section or {})
@@ -46,9 +49,18 @@ class PurchasingDialog(modal_dialog.ModalDialog):
         self.entries = {}
         for key in purchasing_info.FIELDS:
             label = purchasing_info.LABELS[key] + (f" ({HINTS[key]})" if key in HINTS else "")
+            if key == purchasing_info.UNIT_COST and not currencies.symbol(currency):
+                label = purchasing_info.LABELS[key] + " (a number in your team's currency, like 12.50)"
             ctk.CTkLabel(self, text=label, anchor="w").grid(row=row, column=0, sticky="ew", padx=20, pady=(8, 0))
-            entry = ctk.CTkEntry(self, height=32)
-            entry.grid(row=row + 1, column=0, sticky="ew", padx=20)
+            holder = ctk.CTkFrame(self, fg_color="transparent")
+            holder.grid(row=row + 1, column=0, sticky="ew", padx=20)
+            holder.columnconfigure(1, weight=1)
+            entry = ctk.CTkEntry(holder, height=32)
+            entry.grid(row=0, column=1, sticky="ew")
+            if key == purchasing_info.UNIT_COST and currencies.symbol(currency):
+                after = currencies.symbol_after(currency)
+                ctk.CTkLabel(holder, text=currencies.symbol(currency), font=ctk.CTkFont(size=15)).grid(
+                    row=0, column=2 if after else 0, padx=(6, 0) if after else (0, 6))
             entry.insert(0, purchasing_info.shown(self.old, key))
             self.entries[key] = entry
             row += 2

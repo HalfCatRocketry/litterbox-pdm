@@ -3,6 +3,7 @@ purchasing_text.py - the Purchasing Info window's decisions and words: checking 
 tab shows, and what the status line says afterwards (see records/purchasing_info.py and parts/purchasing.py).
 """
 
+from litterbox.core import currency as currencies
 from litterbox.parts import purchasing
 from litterbox.records import purchasing_info
 
@@ -19,9 +20,12 @@ def dialog_result(old, typed):
     return "", {key: purchasing_info.shown(cleaned, key) for key in purchasing_info.FIELDS}
 
 
-def details_rows(section):
-    """[(label, text)] for the Details tab: every field, blank when it isn't filled in."""
-    return [(purchasing_info.LABELS[key], purchasing_info.shown(section, key)) for key in purchasing_info.FIELDS]
+def details_rows(section, currency=None):
+    """[(label, text)] for the Details tab: every field, blank when it isn't filled in. The unit cost carries the
+    team's currency symbol (core/currency.py; none when the org hasn't chosen one)."""
+    return [(purchasing_info.LABELS[key], currencies.money(purchasing_info.shown(section, key), currency)
+             if key == purchasing_info.UNIT_COST else purchasing_info.shown(section, key))
+            for key in purchasing_info.FIELDS]
 
 
 def done_text(pn, outcome):

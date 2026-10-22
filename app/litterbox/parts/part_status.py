@@ -20,6 +20,7 @@ from litterbox.git import repository
 from litterbox.records import record_exports
 from litterbox.records import record_files
 from litterbox.records import record_lifecycle
+from litterbox.records import record_materials
 from litterbox.records import record_model
 from litterbox.records import record_store
 
@@ -48,6 +49,8 @@ class PartStatus:
     files_needed: tuple = ()            # the STEP and/or PDF its released revision still needs (record_exports.py)
     noncad: bool = False                # a non-CAD part: no CAD files (record_model.KIND_NONCAD)
     doc_type: str = ""                  # a document's type key (documents/doc_types.py); "" for a part
+    material: str = ""                  # the working revision's material from SolidWorks; "" for none (or not read)
+    material_outdated: bool = False     # its part file's material hasn't been read (records/record_materials.py)
 
 
 def released_revisions(record):
@@ -133,5 +136,7 @@ def get_status(repo, documents=False):
                                record.revision, record.released_revision, revisions, outdated, record.pending,
                                not_downloaded, project=record.project, bom_outdated=bom_outdated,
                                released_revisions=released_revisions(record), files_needed=needed,
-                               noncad=record.kind == record_model.KIND_NONCAD, doc_type=record.doc_type))
+                               noncad=record.kind == record_model.KIND_NONCAD, doc_type=record.doc_type,
+                               material=record_materials.material(record),
+                               material_outdated=record_lifecycle.material_needs_update(record, record.revision, files)))
     return rows

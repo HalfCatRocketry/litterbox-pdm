@@ -1,6 +1,6 @@
 # Litterbox PDM
 
-A lightweight product data manager (PDM) for small teams using Solidworks. It uses Git and Git LFS locking to check CAD parts in and out, track revisions and references, and release parts, with a simple Windows app on top.
+A lightweight product data manager (PDM) for small teams using SolidWorks. It uses Git and Git LFS locking to check CAD parts in and out, track revisions and references, and release parts, with a simple Windows app on top. How to use it: `docs/Litterbox_User_Guide.docx`.
 
 ## Install (Windows)
 
@@ -30,7 +30,7 @@ The title bar says "(from source)" for a source copy, which never updates itself
 | Folder | What is in it |
 |---|---|
 | `app/` | The program: `main.py` starts it, `litterbox/` is the code (see `docs/ARCHITECTURE.md`), `tests/` the tests |
-| `docs/` | How the code is laid out (`ARCHITECTURE.md`) and the roadmap (`REMINDERS.md`) |
+| `docs/` | The user guide (`Litterbox_User_Guide.docx`), how the code is laid out (`ARCHITECTURE.md`) and the roadmap (`REMINDERS.md`) |
 | `tools/` | SolidWorks experiments and small developer scripts |
 | `packaging/` | Builds the installer and signs updates (PyInstaller, Inno Setup, scripts) |
 | `.github/workflows/` | The pipeline that builds and publishes a release when you push a version tag |

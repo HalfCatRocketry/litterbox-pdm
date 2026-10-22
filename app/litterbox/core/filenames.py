@@ -9,13 +9,20 @@ from litterbox.core import part_number
 from litterbox.core import revision_letters
 
 
+BOM_SUFFIX = "_BOM"         # the BOM a released assembly revision keeps: HCR-00042-001_A_BOM.csv (parts/release_bom.py)
+
+
 def parse_filename(filename):
     """Turn 'HCR-00042-001_A.SLDPRT' into (PN, 'A', 'SLDPRT'). Raises PNError if invalid.
 
     A folder path in front of the name is ignored, so 'cad/HCR-00042-001_A.SLDPRT'
-    and 'C:\\Litterbox\\hcr-litterbox\\cad\\HCR-00042-001_A.SLDPRT' both work.
+    and 'C:\\Litterbox\\hcr-litterbox\\cad\\HCR-00042-001_A.SLDPRT' both work. A revision's saved BOM,
+    'HCR-00042-001_A_BOM.csv', belongs to that revision too: (PN, 'A', 'CSV').
     """
     name = re.split(r"[\\/]", str(filename).strip())[-1]
+    stem, dot, ext = name.rpartition(".")
+    if dot and stem.upper().endswith(BOM_SUFFIX):
+        name = f"{stem[:-len(BOM_SUFFIX)]}.{ext}"
     match = part_number.FILE_RE.fullmatch(name)
     if not match:
         raise part_number.PNError(f"'{name}' is not a Litterbox file name. Expected something like "
@@ -35,6 +42,11 @@ def try_parse_filename(filename):
 def file_stem(pn, revision=revision_letters.FIRST_REVISION):
     """The file name without its extension: file_stem(PN('HCR', 42, 1), 'a') -> 'HCR-00042-001_A'"""
     return f"{pn}_{revision_letters.check_revision(revision)}"
+
+
+def bom_filename(pn, revision):
+    """bom_filename(PN('HCR', 42, 1), 'A') -> 'HCR-00042-001_A_BOM.csv'"""
+    return f"{file_stem(pn, revision)}{BOM_SUFFIX}.csv"
 
 
 def filename(pn, revision, extension):

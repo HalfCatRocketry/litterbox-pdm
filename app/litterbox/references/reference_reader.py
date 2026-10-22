@@ -1,6 +1,6 @@
 """
-reference_reader.py - reading which parts an assembly file uses, and how many of each, through SolidWorks.
-Check-in calls make_reader's reader for every assembly that changed.
+reference_reader.py - reading which parts an assembly file uses and how many of each, and a part's material,
+through SolidWorks. Check-in calls make_reader's reader for every part or assembly whose model changed.
 """
 
 import os
@@ -20,10 +20,12 @@ from litterbox.references import reference_model
 
 @dataclass
 class AssemblyRead:
-    """What check-in read from an assembly: the parts it uses, and how many of each (None if they couldn't be
-    counted, so its BOM shows that it needs updating)."""
-    references: list
+    """What check-in read from a changed model: for an assembly, the parts it uses and how many of each (None if
+    they couldn't be counted, so its BOM shows that it needs updating); for a part, its material (None if it couldn't
+    be read, so it shows that it needs updating; '' for none assigned). `references` is None for a part."""
+    references: list = None
     quantities: dict = None
+    material: str = None
 
 
 def can_start_solidworks():
@@ -81,9 +83,19 @@ def read_assembly_quantities(repo, pn, revision, backend, files=None, references
     return counts
 
 
+def read_part_material(repo, pn, revision, backend, files=None):
+    """The material of this revision's part file (.SLDPRT) as SolidWorks has it, '' for none assigned, or None
+    when the revision has no part file."""
+    parts = [rel for rel in (files if files is not None else record_files.cad_files(repo, pn, revision))
+             if file_types.extension(rel) == file_types.PART_EXTENSION]
+    if not parts:
+        return None
+    return backend.material(os.path.join(str(repo), parts[0]))
+
+
 def make_reader(backend=None, log=None):
-    """A function to hand to checkin.checkin(): reads an assembly's references and counts its parts when its
-    files changed.
+    """A function to hand to checkin.checkin(): reads an assembly's references and counts its parts, or a part's
+    material, when its model changed.
 
     reader(repo, pn, revision, changed_files) -> AssemblyRead, or None (nothing to update)
     A SolidWorks that can't be reached gives a warning and None: the check-in still goes ahead.
@@ -94,7 +106,9 @@ def make_reader(backend=None, log=None):
     log = log or (lambda text: None)
 
     def reader(repo, pn, revision, changed_files):
-        if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in changed_files):
+        assembly = any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in changed_files)
+        part = [f for f in changed_files if file_types.extension(f) == file_types.PART_EXTENSION]
+        if not (assembly or part):
             return None
         mine = None
         try:
@@ -103,6 +117,13 @@ def make_reader(backend=None, log=None):
                 if use is None:
                     use = mine = new_backend(attach_only=True)
                 try:
+                    if not assembly:
+                        try:
+                            return AssemblyRead(material=read_part_material(repo, pn, revision, use, part))
+                        except Exception as e:
+                            log(f"WARNING: could not read the material of {pn}, so it needs updating "
+                                f"(Part > Update Material). {e}")
+                            return None
                     found = AssemblyRead(read_assembly_references(repo, pn, revision, use))
                     try:
                         found.quantities = read_assembly_quantities(repo, pn, revision, use,
@@ -114,7 +135,8 @@ def make_reader(backend=None, log=None):
                     if mine is not None:
                         mine.close()
         except Exception as e:
-            log(f"WARNING: could not read what {pn} uses, so its references were not updated. {e}")
+            log(f"WARNING: could not read what {pn} uses, so its references were not updated. {e}" if assembly else
+                f"WARNING: could not read the material of {pn}, so it needs updating (Part > Update Material). {e}")
             return None
 
     return reader

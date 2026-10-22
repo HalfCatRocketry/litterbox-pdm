@@ -10,10 +10,10 @@ from litterbox.gui.panes import part_details
 
 
 class HistoryWindow(ctk.CTkToplevel):
-    """A pop-up about one part. `revisions` is {revision: [files]}; the callbacks are PartDetailsView's (on_open,
+    """A pop-up about one part. `revisions` is {revision: [files]}; `currency` the team's (for costs); the callbacks are PartDetailsView's (on_open,
     on_view_eco, on_tab, on_bom, ...). `loaded` holds what the window has asked to be read ("references", "bom")."""
 
-    def __init__(self, parent, record, revisions=None, **callbacks):
+    def __init__(self, parent, record, revisions=None, currency=None, **callbacks):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.loaded = set()
@@ -26,5 +26,5 @@ class HistoryWindow(ctk.CTkToplevel):
                      anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
         self.view = part_details.PartDetailsView(self, **callbacks)
         self.view.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
-        self.view.show(record, revisions)
+        self.view.show(record, revisions, currency)
         self.after(100, self.lift)

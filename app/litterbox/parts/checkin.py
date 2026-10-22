@@ -105,7 +105,8 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                 record_before = (Path(repo) / record_path).read_bytes()
                 record_lifecycle.record_checkin(record, user, changed, comment,
                                                 references=found.references if found is not None else None,
-                                                quantities=found.quantities if found is not None else None)
+                                                quantities=found.quantities if found is not None else None,
+                                                material=found.material if found is not None else None)
                 record_store.save(repo, record)
                 message = f"{pn}: {(comment or '').strip() or 'Update'}"
                 to_commit.append((pn, message, changed, record_path, record_before))

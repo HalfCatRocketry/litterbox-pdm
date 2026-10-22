@@ -21,7 +21,8 @@ from litterbox.gui.widgets import menu_bar
 # the entry depends on the ticked or highlighted parts. None is a line between entries.
 PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), ("Open PDF", "open_pdf"), None,
              ("References...", "show_references"), ("Details", "show_history"), None,
-             ("Generate STEP/PDF", "generate_step_pdf"), ("Export Files", "export_files"))
+             ("Generate STEP/PDF", "generate_step_pdf"), ("Update Material", "update_material"),
+             ("Export Files", "export_files"))
 
 
 LIFECYCLE_MENU = (("Edit Details", "edit_details"), ("Purchasing Info", "edit_purchasing"), None, ("Release", "release"), ("Revise", "revise"),

@@ -1,11 +1,12 @@
 """
 sw_backend.py - SolidWorks as the importer, Revise, Update references and Generate STEP/PDF use it: read a
-file's references, list an assembly's components (to count them), copy a file with its references updated (Pack
-and Go), point a file at a different one, save a STEP or PDF of it (sw_saving.py), close.
+file's references, list an assembly's components (to count them), read a part's material, copy a file with its
+references updated (Pack and Go), point a file at a different one, save a STEP or PDF of it (sw_saving.py), close.
 
 Through COM, so on one thread only (see importing/session.py and com.com_thread).
 """
 
+import contextlib
 import os
 import shutil
 
@@ -19,7 +20,7 @@ from litterbox.cad.solidworks import sw_saving
 COUNTED, SUPPRESSED, EXCLUDED = "counted", "suppressed", "excluded"
 
 
-DOC_ASSEMBLY = 2                    # swDocumentTypes_e
+DOC_PART, DOC_ASSEMBLY = 1, 2       # swDocumentTypes_e
 OPEN_SILENT, OPEN_READ_ONLY = 1, 2  # swOpenDocOptions_e
 
 
@@ -37,6 +38,19 @@ def component_state(suppressed, excluded, envelope):
     if excluded or envelope:
         return EXCLUDED
     return COUNTED
+
+
+def material_name(property_name, id_name):
+    """A part's material: what GetMaterialPropertyName2 gives, or else the older MaterialIdName ('SOLIDWORKS
+    Materials|Chrome Stainless Steel|7', or just 'Steel' in parts from much older versions), or '' for none.
+    (Both seen with SolidWorks 2024.)"""
+    if property_name and str(property_name).strip():
+        return str(property_name).strip()
+    text = str(id_name or "").strip()
+    if "|" in text:
+        fields = text.split("|")
+        return fields[1].strip() if len(fields) > 1 else ""
+    return text
 
 
 def pair_references(stored, found):
@@ -63,6 +77,7 @@ class SolidWorksBackend:
 
     references(path)         [(stored, found)] for the file's direct references
     components(path)         [(file, COUNTED / SUPPRESSED / EXCLUDED)] for an assembly's top-level components
+    material(path)           a part's material in its active configuration ('' for none)
     copy(src, dst)           copy a file on disk (nothing needs to be open)
     repoint(file, old, new)  change one reference inside the NEW file
     save_step(path, out)     save a part or assembly as an AP214 STEP file
@@ -103,10 +118,10 @@ class SolidWorksBackend:
     def references(self, path):
         return pair_references(self._dependencies(path, False), self._dependencies(path, True))
 
-    def components(self, path):
-        """One (file, state) per component at the top of an assembly, one entry for each copy. An assembly that
-        isn't open is opened read-only, out of sight, and closed again; one the person has open is read as it
-        is in SolidWorks and left open. A component whose file can't be found is reported as suppressed."""
+    @contextlib.contextmanager
+    def _opened(self, path, doc_type):
+        """The document at `path`: one the person has open is used as it is in SolidWorks and left open; any other
+        is opened read-only, out of sight, and closed again afterwards."""
         import pythoncom
         from litterbox.cad.solidworks import com
         from win32com.client import VARIANT
@@ -116,15 +131,28 @@ class SolidWorksBackend:
         if opened:
             errors = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
             warnings = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
-            sw.DocumentVisible(False, DOC_ASSEMBLY)                   # don't show it in the person's SolidWorks
+            sw.DocumentVisible(False, doc_type)                       # don't show it in the person's SolidWorks
             try:
-                model = sw.OpenDoc6(path, DOC_ASSEMBLY, OPEN_SILENT | OPEN_READ_ONLY, "", errors, warnings)
+                model = sw.OpenDoc6(path, doc_type, OPEN_SILENT | OPEN_READ_ONLY, "", errors, warnings)
             finally:
-                sw.DocumentVisible(True, DOC_ASSEMBLY)
+                sw.DocumentVisible(True, doc_type)
             if model is None:
                 raise sw_errors.SolidWorksError(f"SolidWorks could not open {os.path.basename(path)} "
                                                 f"(error {errors.value}).")
         try:
+            yield model
+        finally:
+            if opened:
+                try:
+                    sw.CloseDoc(com.call(model, "GetTitle"))
+                except Exception as e:
+                    diagnostics.LOG(f"Could not close {os.path.basename(path)} in SolidWorks: {e}")
+
+    def components(self, path):
+        """One (file, state) per component at the top of an assembly, one entry for each copy (see _opened). A
+        component whose file can't be found is reported as suppressed."""
+        from litterbox.cad.solidworks import com
+        with self._opened(path, DOC_ASSEMBLY) as model:
             found = []
             for component in com.call(model, "GetComponents", True) or []:
                 found.append((str(com.call(component, "GetPathName") or ""),
@@ -132,12 +160,26 @@ class SolidWorksBackend:
                                               com.call(component, "ExcludeFromBOM"),
                                               com.call(component, "IsEnvelope"))))
             return found
-        finally:
-            if opened:
-                try:
-                    sw.CloseDoc(com.call(model, "GetTitle"))
-                except Exception as e:
-                    diagnostics.LOG(f"Could not close {os.path.basename(path)} in SolidWorks: {e}")
+
+    def material(self, path):
+        """A part's material in its active configuration, as SolidWorks shows it ('Chrome Stainless Steel'), or ''
+        if none is assigned (see _opened). Each configuration can have its own; the active one is what the person
+        last saved it with."""
+        import pythoncom
+        from litterbox.cad.solidworks import com
+        from win32com.client import VARIANT
+        with self._opened(path, DOC_PART) as model:
+            try:
+                config = com.call(com.call(com.call(model, "ConfigurationManager"), "ActiveConfiguration"), "Name")
+            except Exception:
+                config = ""
+            database = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_BSTR, "")      # an out value: the material library
+            name = model.GetMaterialPropertyName2(config or "", database)
+            try:
+                old = com.call(model, "MaterialIdName") if not name else ""
+            except Exception:
+                old = ""
+            return material_name(name, old)
 
     def copy(self, src, dst):
         import pythoncom

@@ -56,6 +56,12 @@ class Modes(unittest.TestCase):
         frame = bom.lines(vault(), TOP, "A", bom.SINGLE)[0]
         self.assertTrue(frame.sub_assembly)
 
+    def test_each_line_carries_the_material_of_the_revision_it_uses(self):
+        records = vault()
+        records[BRACKET].materials = {"A": "6061-T6 (SS)"}
+        lines = {line.pn: line for line in bom.lines(records, FRAME, "A")}
+        self.assertEqual((lines[BRACKET].material, lines[BOLT].material), ("6061-T6 (SS)", ""))
+
 
 class Problems(unittest.TestCase):
     def test_a_missing_part_and_an_unreleased_one_are_flagged(self):

@@ -17,6 +17,7 @@ from litterbox.gui.logic import export_text
 from litterbox.references import bom
 from litterbox.references import reference_model
 from litterbox.user import settings
+from litterbox.vault import config
 
 
 class ExportActions:
@@ -85,7 +86,8 @@ class ExportActions:
         def work():
             records = reference_model.load_records(repo)
             found = bom.lines(records, pn, rev, mode)
-            return bom_csv.write(path, found, settings.ROOT, bom.cost_summary(records, pn, rev)), len(found)
+            return (bom_csv.write(path, found, settings.ROOT, bom.cost_summary(records, pn, rev),
+                                  config.currency_or_none(repo)), len(found))
 
         self.run_task(work, "", on_success=lambda result: self._say(bom_text.exported_text(*result)),
                       refresh=False, label="Exporting the BOM")

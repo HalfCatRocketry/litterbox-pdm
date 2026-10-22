@@ -13,6 +13,7 @@ from litterbox.core.doc_number import DocNumber
 from litterbox.core.part_number import PN, PNError, parse, parse_short
 from litterbox.core.revision_letters import FIRST_REVISION, check_revision, revision_number
 from litterbox.records import purchasing_info
+from litterbox.records import record_materials
 
 
 STATUS_IN_WORK = "in_work"
@@ -132,7 +133,7 @@ RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "references", "references_outdated", "history",
-    "purchasing", "quantities", "exports", "kind", "bom_items", "documents", "number", "doc_type",
+    "purchasing", "quantities", "exports", "kind", "bom_items", "documents", "number", "doc_type", "materials",
 }
 
 
@@ -170,6 +171,7 @@ class Record:
     purchasing: dict = field(default_factory=dict)  # supplier, cost, lead time (records/purchasing_info.py); {} for none
     exports: dict = field(default_factory=dict)     # revision -> the STEP and PDF Litterbox made (records/record_exports.py)
     documents: dict = field(default_factory=dict)   # revision -> the documents linked to it, e.g. {'A': ['PROP-0001']}
+    materials: dict = field(default_factory=dict)   # revision -> its material from SolidWorks (records/record_materials.py)
     doc_type: str = ""          # a document's type key (documents/doc_types.py); "" for a part
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
 
@@ -235,6 +237,8 @@ class Record:
         if self.exports:
             data["exports"] = {rev: dict(made) for rev, made in sorted(
                 self.exports.items(), key=lambda item: revision_number(item[0]))}
+        if self.materials:
+            data["materials"] = dict(sorted(self.materials.items(), key=lambda item: revision_number(item[0])))
         data.update({
             "history": [dict(e) for e in self.history],
         })
@@ -352,6 +356,11 @@ class Record:
             raise RegistryError(f"{pn}: bad revision in 'documents'. {e}")
 
         try:
+            materials = record_materials.parse(data.get("materials"))
+        except ValueError as e:
+            raise RegistryError(f"{pn}: {e}")
+
+        try:
             purchasing = purchasing_info.clean(data.get("purchasing"))
         except purchasing_info.PurchasingError as e:
             raise RegistryError(f"{pn}: {e}")
@@ -386,6 +395,7 @@ class Record:
             purchasing=purchasing,
             exports=exports,
             documents=documents,
+            materials=materials,
             doc_type=_as_text(data.get("doc_type")),
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},
         )

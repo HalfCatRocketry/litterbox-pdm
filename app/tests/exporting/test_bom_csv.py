@@ -30,21 +30,21 @@ class BomCsv(unittest.TestCase):
     def test_a_heading_row_then_one_row_per_line(self):
         found = [line(1, 2, "Frame", sub_assembly=True, quantity=2, total=2),
                  line(2, 4, "Bolt", cots=True, quantity=3, total=6, purchasing={"supplier": "Acme", "unit_cost": "0.10",
-                                                           "lead_time_days": 3})]
+                                                           "lead_time_days": 3}, material="Zinc-plated steel")]
         path = bom_csv.write(self.tmp / "bom", found, self.root)
         self.assertEqual(path.name, "bom.csv")
         table = self.read(path)
         self.assertEqual(table[0], list(bom_csv.COLUMNS))
-        self.assertEqual(table[1][:10], ["1", "HCR-00002-001", "A", "2", "2", "Frame", "", "in work", "", "OK"])
+        self.assertEqual(table[1][:11], ["1", "HCR-00002-001", "A", "2", "2", "Frame", "", "", "in work", "", "OK"])
         self.assertEqual(table[2][3:5], ["3", "6"])
-        self.assertEqual(table[2][8:], ["Yes", "OK", "Acme", "", "0.10", "0.60", "3"])
+        self.assertEqual(table[2][7:], ["Zinc-plated steel", "in work", "Yes", "OK", "Acme", "", "0.10", "0.60", "3"])
 
     def test_text_that_looks_like_a_formula_is_never_run(self):
         path = bom_csv.write(self.tmp / "b.csv", [line(1, 2, "=HYPERLINK(\"http://x\")",
                                                        purchasing={"supplier": "+Acme"})], self.root)
         row = self.read(path)[1]
         self.assertEqual(row[5], "'=HYPERLINK(\"http://x\")")
-        self.assertEqual(row[10], "'+Acme")
+        self.assertEqual(row[11], "'+Acme")
         self.assertEqual(row[3:5], ["", ""])                                  # not counted
         self.assertEqual(bom_csv.safe_cell("Bolt-M6"), "Bolt-M6")
 

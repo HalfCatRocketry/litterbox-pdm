@@ -15,7 +15,7 @@ from litterbox.records import record_model
 from tests.exporting.test_step_pdf import FakeSolidWorks
 from tests.support.references_fixture import ASM, RefsFixture
 
-BOM = "cad/HCR-00002-001_A.CSV"
+BOM = "cad/HCR-00002-001_A_BOM.csv"
 
 
 class Wanted(unittest.TestCase):
@@ -52,7 +52,7 @@ class ReleaseBomFlow(RefsFixture, unittest.TestCase):
             self.assertIn("Total cost", text)
         with self.user("Alex"):                                                 # Revise leaves it with Rev A
             revise.revise(self.a, ASM, "Next", backend=self.fake, log=lambda *_: None)
-            self.assertFalse((self.a / BOM.replace("_A.", "_B.")).exists())
+            self.assertFalse((self.a / BOM.replace("_A_", "_B_")).exists())
             self.assertTrue((self.a / BOM).exists())
 
     def test_a_part_released_earlier_is_left_alone(self):

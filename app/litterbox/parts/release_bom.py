@@ -1,5 +1,5 @@
 """
-release_bom.py - the BOM kept with a released assembly revision: HCR-00042-001_A.CSV in the cad folder, beside the
+release_bom.py - the BOM kept with a released assembly revision: HCR-00042-001_A_BOM.csv in the cad folder, beside the
 model, written straight after the release and uploaded in a commit of its own. The BOM tab works the BOM out afresh
 each time (with the parts' latest names and purchasing info); this file is the fixed record of what the released
 revision was made of, as it stood at release.
@@ -21,14 +21,16 @@ from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.references import bom
 from litterbox.references import reference_model
+from litterbox.vault import config
 
 
 PERMISSION = "generate_files"           # the same as Generate STEP/PDF: any member
 
 
 def bom_path(pn, revision):
-    """'cad/HCR-00042-001_A.CSV': where a released revision's BOM is kept."""
-    return f"{layout.CAD_DIR_NAME}/{filenames.filename(pn, revision, 'csv')}"
+    """'cad/HCR-00042-001_A_BOM.csv': where a released revision's BOM is kept. The _BOM keeps it clear of any other
+    .csv a revision might have (a file a parametric part reads, say)."""
+    return f"{layout.CAD_DIR_NAME}/{filenames.bom_filename(pn, revision)}"
 
 
 def wanted(record):
@@ -60,7 +62,7 @@ def save(repo, pns):
                 continue
             path = bom_path(pn, record.revision)
             bom_csv.write_in_vault(Path(repo) / path, bom.lines(records, pn, record.revision, bom.INDENTED),
-                                   bom.cost_summary(records, pn, record.revision))
+                                   bom.cost_summary(records, pn, record.revision), config.currency_or_none(repo))
             written[pn] = path
         return list(written.values())
 

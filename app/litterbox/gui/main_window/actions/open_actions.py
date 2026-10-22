@@ -19,6 +19,7 @@ from litterbox.gui.windows import history_window
 from litterbox.parts import downloads
 from litterbox.records import record_model
 from litterbox.records import record_store
+from litterbox.vault import config
 
 
 class OpenActions:
@@ -136,7 +137,7 @@ class OpenActions:
                 self._read_bom_into(window.view, pn, window.winfo_exists)
 
         window = history_window.HistoryWindow(
-            self, record, history_text.row_revisions(row) if row else {},
+            self, record, history_text.row_revisions(row) if row else {}, config.currency_or_none(self.repo()),
             on_open=lambda rev, drawing: self._open_revision(pn, rev, drawing), on_view_eco=self.view_eco,
             on_tab=lambda name: self._popout_tab_changed(window, pn, name),
             on_manage_references=lambda: self._load_references(pn), on_bom=lambda rev, mode: read_bom(),

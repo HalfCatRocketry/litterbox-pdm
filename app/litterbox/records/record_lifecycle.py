@@ -8,6 +8,7 @@ and the git work are up to the caller.
 
 from litterbox.core.revision_letters import FIRST_REVISION, revision_number
 from litterbox.records import purchasing_info
+from litterbox.records import record_materials
 from litterbox.records import record_model
 from litterbox.util import person_name
 
@@ -106,12 +107,24 @@ def bom_needs_update(record, revision, files):
     return any(stem not in counts for stem in record.references.get(revision, []))
 
 
-def record_checkin(record, by, files, comment="", references=None, quantities=None):
+def material_needs_update(record, revision, files):
+    """True if this revision has a part file (.SLDPRT, in `files`) whose material was never read, or was lost when the
+    file changed without SolidWorks to read it (records/record_materials.py)."""
+    if not record.uses_cad or record.status == record_model.STATUS_VOID:
+        return False
+    if not any(str(f).lower().endswith(".sldprt") for f in files):
+        return False
+    return not record_materials.is_read(record, revision)
+
+
+def record_checkin(record, by, files, comment="", references=None, quantities=None, material=None):
     """Log a check-in. `references` (a list, or None for 'not read this time') updates what the
     working revision uses; the event lists them when they changed. If an assembly file was checked
     in and the references could not be read, the revision is marked as needing an update.
     `quantities` ({stem: count}, or None) are how many of each it uses; when an assembly file was checked in
-    without them, the old counts are dropped, so its BOM shows that it needs updating."""
+    without them, the old counts are dropped, so its BOM shows that it needs updating. `material` (text, '' for none
+    assigned, or None for 'not read') is the part's material; when a part file was checked in without it, the old
+    one is dropped, so it shows that it needs updating."""
     changed = set_references(record, references) if references is not None else False
     assembly = any(str(f).lower().endswith(".sldasm") for f in files)
     if references is None and assembly:
@@ -122,10 +135,16 @@ def record_checkin(record, by, files, comment="", references=None, quantities=No
         counted = set_quantities(record, quantities)
     elif assembly:
         record.quantities.pop(record.revision, None)
+    material_changed = False
+    if material is not None:
+        material_changed = record_materials.set_material(record, material)
+    elif any(str(f).lower().endswith(".sldprt") for f in files):
+        record_materials.forget(record)
     return add_event(record, record_model.EVENT_CHECKED_IN, by, files=list(files),
                      comment=(comment or "").strip() or None,
                      references=list(record.references.get(record.revision, [])) if changed else None,
-                     quantities=dict(record.quantities[record.revision]) if counted else None)
+                     quantities=dict(record.quantities[record.revision]) if counted else None,
+                     material=record_materials.material(record) if material_changed else None)
 
 
 def mark_released(record, by, files, **details):

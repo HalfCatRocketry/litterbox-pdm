@@ -16,6 +16,8 @@ to the section are kept as they are.
 
 import re
 
+from litterbox.core import currency
+
 SUPPLIER, SUPPLIER_PN, UNIT_COST, LEAD_TIME_DAYS = "supplier", "supplier_pn", "unit_cost", "lead_time_days"
 FIELDS = (SUPPLIER, SUPPLIER_PN, UNIT_COST, LEAD_TIME_DAYS)
 LABELS = {SUPPLIER: "Supplier", SUPPLIER_PN: "Supplier part number", UNIT_COST: "Unit cost",
@@ -39,8 +41,9 @@ def _text(value, label):
 
 
 def clean_cost(value):
-    """'$1,234.5' -> '1234.5'; '' -> ''. A number of at least zero with at most four decimals."""
-    text = str(value if value is not None else "").strip().replace(",", "").lstrip("$€£¥").strip()
+    """'$1,234.5' -> '1234.5'; '' -> ''. A number of at least zero with at most four decimals. Any currency symbol
+    Litterbox knows is taken off (core/currency.py)."""
+    text = currency.strip_symbols(value).replace(",", "").strip()
     if not text:
         return ""
     if text.startswith("-"):

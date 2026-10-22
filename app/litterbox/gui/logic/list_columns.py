@@ -8,6 +8,7 @@ The first column, with the tick box and the status icon, is always there and isn
 from dataclasses import dataclass
 
 from litterbox.gui.logic import list_view
+from litterbox.gui.logic import material_text
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ _VALUES = {
     "locked_by": lambda row: (row.locked_by if row.kind in ("mine", "theirs") else "",),
     "released": lambda row: (row.released_revision or "",),
     "import_path": lambda row: (row.import_path or "",),
+    "material": lambda row: (material_text.column_text(row),),
 }
 
 
@@ -57,6 +59,7 @@ COLUMNS = (
     Column("locked_by", "Checked out by", 130, False, fit=True),
     Column("released", "Released rev", 96, False),
     Column("import_path", "Imported from", 240, False, fit=True),
+    Column("material", "Material", 160, False, fit=True),
 )
 
 

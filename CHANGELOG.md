@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- **The team's currency.** Team > **Vault Settings...** has **The team's currency** (US Dollar, Euro, Pound Sterling and 21 more, or none). Costs are then shown with its symbol: the unit cost on the Details tab, the BOM tab's Unit cost and Total cost columns and its total ($12.50; 12.50 kr for currencies written after the amount), and the symbol sits beside the Unit cost box in **Purchasing Info**. Typing the symbol yourself still works. The exported BOM `.csv` names the currency in its headings ("Unit cost (USD)") and keeps the cells as plain numbers, so a spreadsheet can add them up. Changing the currency doesn't convert any costs. Litterbox versions before 0.5.3 keep the setting without using it.
+- **Materials.** Each part revision's **material** is kept in its record, as SolidWorks has it assigned (its active configuration; parts made in much older SolidWorks versions that only have an old-style material are read too). It is read when a part's model is checked in with SolidWorks open, and shows on the Details tab and in a **Material** column (View > Columns, off to start with). A part with no material in SolidWorks shows blank. A part checked in without SolidWorks open, or from before 0.5.3, shows **Not read yet**: **Part > Update Material** reads the ticked parts' materials, using SolidWorks if it's open or starting it out of sight and closing it afterwards. A part someone else has checked out is skipped; one you have checked out gets it in your copy, and it goes up with your next Check In. Litterbox versions before 0.5.3 keep the materials without showing them.
+- **Material in the BOM.** The BOM tab and the exported `.csv` have a **Material** column: the material of the revision each line uses.
+- **Saved BOMs are named `HCR-00042-001_A_BOM.csv`** (was `HCR-00042-001_A.CSV` in 0.5.2), so the name can't clash with another `.csv` a revision might have, such as a table a parametric part reads.
 ## 0.5.2
 
 - **Part Workflows and Doc Workflows.** Team's Workflows... is now two buttons. **Part Workflows...** has the parts' Release, Unrelease, Void and Make COTS workflows; **Doc Workflows...**, under it, has Release document, Unrelease document, Void document and Remove document link. Each window's **Add standard workflows** adds only its own. The workflows themselves are unchanged.
