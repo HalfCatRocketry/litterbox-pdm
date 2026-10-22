@@ -17,7 +17,7 @@ from litterbox.gui.widgets import menu_bar
 
 # The menus beside the everyday buttons: (label, App method). The labels are action_rules.BUTTON_ACTIONS keys where
 # the entry depends on the ticked or highlighted parts. None is a line between entries.
-PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), None,
+PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), ("Open PDF", "open_pdf"), None,
              ("References...", "show_references"), ("Details", "show_history"), None,
              ("Generate STEP/PDF", "generate_step_pdf"), ("Export Files", "export_files"))
 
@@ -185,7 +185,7 @@ class Menus:
         count = len(self._ticked_pns())
         menu.add_command(label=f"Acting on {count} ticked part{'s' if count != 1 else ''}", state="disabled")
         menu.add_separator()
-        self._fill_actions(menu, EVERYDAY_MENU + (None,) + OPEN_MENU + (None,) + self._lifecycle_entries())
+        self._fill_actions(menu, EVERYDAY_MENU + (None,) + PART_MENU + (None,) + self._lifecycle_entries())
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:

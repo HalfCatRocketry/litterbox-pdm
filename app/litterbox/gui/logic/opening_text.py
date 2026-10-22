@@ -1,10 +1,11 @@
 """
-opening_text.py - what Open and Open Drawing offer for a part: which revisions, and what to say when
+opening_text.py - what Open, Open Drawing and Open PDF offer for a part: which revisions, and what to say when
 there is nothing to open.
 """
 
 from pathlib import PurePosixPath
 
+from litterbox.cad import file_types
 from litterbox.core import revision_letters
 from litterbox.gui.logic import history_text
 
@@ -37,6 +38,25 @@ def open_choices(row, drawing=False):
 
 def _has_drawing(files):
     return any(PurePosixPath(f).suffix.lower() == ".slddrw" for f in files)
+
+
+def pdf_choices(row):
+    """[(revision, files)] that Open PDF can open: every revision with a PDF (made from its drawing by Generate
+    STEP/PDF or at release), newest first."""
+    revisions = history_text.row_revisions(row)
+    found = [rev for rev, files in revisions.items()
+             if any(PurePosixPath(f).suffix.lower() == file_types.PDF_EXTENSION for f in files)]
+    found.sort(key=revision_letters.revision_number, reverse=True)
+    return [(rev, revisions[rev]) for rev in found]
+
+
+def pdf_message(row):
+    """Why a part has no PDF to open, or '' if it has one."""
+    if pdf_choices(row):
+        return ""
+    if open_choices(row, drawing=True):
+        return f"{row.pn} has no PDF yet. Part > Generate STEP/PDF... makes one from its drawing."
+    return f"{row.pn} has no PDF (and no drawing to make one from)."
 
 
 def open_message(row, drawing=False):

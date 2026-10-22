@@ -47,6 +47,12 @@ def pick_drawing(files):
     return drawings[0] if drawings else None
 
 
+def pick_pdf(files):
+    """The file Open PDF opens: the PDF made from the part's drawing. None if it has none."""
+    pdfs = sorted(f for f in files if PurePosixPath(f).suffix.lower() == file_types.PDF_EXTENSION)
+    return pdfs[0] if pdfs else None
+
+
 def program_for(path, open_with):
     """The program chosen for this file's type in the settings, or None for the Windows default."""
     ext = PurePosixPath(str(path).replace("\\", "/")).suffix.lower()

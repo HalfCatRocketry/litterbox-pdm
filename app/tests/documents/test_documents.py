@@ -88,6 +88,26 @@ def a_file(test, name, text):
     return path
 
 
+class WhereLinked(unittest.TestCase):
+    """The part revisions that link to a document, read from the parts' records (no git needed)."""
+
+    def test_every_linking_part_revision_is_found(self):
+        from litterbox.core.part_number import PN
+        with tempfile.TemporaryDirectory() as repo:
+            for base, documents in ((1, {"A": ["PROP-0001"], "B": ["PROP-0001", "TP-0001"]}), (2, {"A": ["TP-0001"]}),
+                                    (3, {})):
+                record = record_model.Record(PN("HCR", base, 1), "Part", "Alex", "2026-10-01T10:00:00Z",
+                                             documents=documents)
+                path = record_store.record_path(repo, record.pn)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(record_model.dump(record), encoding="utf-8")
+            (Path(repo) / "PN-logs" / "HCR-00009-001.yaml").write_text("not: [a record", encoding="utf-8")
+            self.assertEqual(doc_links.where_linked(repo, PROP1), [(PN("HCR", 1, 1), "A"), (PN("HCR", 1, 1), "B")])
+            self.assertEqual(doc_links.where_linked(repo, "TP-0001"),
+                             [(PN("HCR", 1, 1), "B"), (PN("HCR", 2, 1), "A")])
+            self.assertEqual(doc_links.where_linked(repo, "PROP-0002"), [])
+
+
 @SKIP_ON_WINDOWS
 class DocumentFlow(CreateFixture, unittest.TestCase):
     def add_type(self, repo):

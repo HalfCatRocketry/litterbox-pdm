@@ -1,7 +1,7 @@
 """
-document_actions.py - documents: New Document, opening, adding and removing a document's files, Team > Document
-Types..., and linking documents to parts (a part's Documents tab). Check out, release and the rest are the parts'
-own actions, pointed at documents by the Documents screen (App.act_on).
+document_actions.py - documents: New Document, opening, a document's Details window, adding and removing its files,
+Team > Document Types..., and linking documents to parts (a part's Documents tab). Check out, release and the rest
+are the parts' own actions, pointed at documents by the Documents screen (App.act_on).
 """
 
 from tkinter import filedialog, messagebox
@@ -20,6 +20,8 @@ from litterbox.gui.dialogs import revision_picker
 from litterbox.gui.dialogs.workflow import request_dialog
 from litterbox.gui.logic import document_text
 from litterbox.gui.logic import error_text
+from litterbox.gui.logic import history_text
+from litterbox.gui.windows import document_window
 from litterbox.parts import checkout
 from litterbox.parts import downloads
 from litterbox.records import record_model
@@ -96,8 +98,11 @@ class DocumentActions:
             path = self._pick_file(number, "Open", released)
         else:
             path = self._pick_file(number, "Open")
-        if path is None:
-            return
+        if path is not None:
+            self._open_document_file(number, path)
+
+    def _open_document_file(self, number, path):
+        """Open one of a document's files, downloading it first if it isn't on disk yet."""
         repo = self.repo()
         if lfs_download.is_stub(repo, path):
             self.run_task(lambda: downloads.download_files(repo, [path], f"{number}'s file"), "",
@@ -105,6 +110,32 @@ class DocumentActions:
                           parts=[number])
             return
         self._open_path(path)
+
+    def show_document_details(self, record, row):
+        """A document's Details...: a window of its own (windows/document_window.py), whose Where linked tab is
+        read in the background."""
+        number = record.pn
+        try:
+            types = doc_types.by_key(doc_types.load(self.repo()))
+        except LitterboxError:
+            types = {}
+        window = document_window.DocumentWindow(
+            self, record, history_text.row_revisions(row) if row else {}, types,
+            on_open_file=lambda path: self._open_document_file(number, path), on_view_eco=self.view_eco,
+            on_show_part=lambda pn: self.act_on([pn], self.show_history))
+        repo = self.repo()
+
+        def read():
+            try:
+                return doc_links.where_linked(repo, number), ""
+            except LitterboxError as e:
+                return None, f"Couldn't read the links: {e}"
+
+        def show(result):
+            if window.winfo_exists():
+                window.show_links(result[0], self.rows_by_pn, result[1])
+
+        self.run_task(read, "", on_success=show, refresh=False, is_refresh=True, label="Reading the links")
 
     def add_document_files(self, number):
         row = self.rows_by_pn.get(number)

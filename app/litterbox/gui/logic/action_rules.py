@@ -17,6 +17,7 @@ ALLOWED_KINDS = {
     "edit": {"mine"},
     "open": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},    # anything downloaded
     "open_drawing": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
+    "open_pdf": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
     "release": {"ok", "pending"},            # on a pending part it completes an approved request (see the window)
     "make_cots": {"ok", "pending"},         # on a pending part it completes an approved request
     "revise": {"released"},
@@ -32,7 +33,7 @@ ALLOWED_KINDS = {
 
 
 # Actions that need CAD files: never for a non-CAD part (PartStatus.noncad), whatever its state
-CAD_ONLY = {"open", "open_drawing", "generate_step_pdf", "make_cots"}
+CAD_ONLY = {"open", "open_drawing", "open_pdf", "generate_step_pdf", "make_cots"}
 
 
 def usable(action, row):
@@ -58,7 +59,7 @@ MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "ma
 
 NAME = {            # "...cannot <name> ..."
     "checkout": "check out", "checkin": "check in", "save": "save progress on",
-    "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
+    "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "open_pdf": "open the PDF of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
     "break_checkout": "break the checkout of", "purchasing": "change the purchasing info of",
     "export_files": "export the files of", "generate_step_pdf": "make the STEP/PDF of",
 }
@@ -66,7 +67,7 @@ NAME = {            # "...cannot <name> ..."
 
 PAST = {            # "<past> 2 parts"
     "checkout": "Checked out", "checkin": "Checked in", "save": "Saved progress on",
-    "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
+    "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "open_pdf": "Opened the PDF of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
     "break_checkout": "Broke the checkout of", "purchasing": "Changed the purchasing info of",
     "export_files": "Exported the files of", "generate_step_pdf": "Made the STEP/PDF of",
 }
@@ -111,7 +112,7 @@ def plan_action(action, selected, rows_by_pn, pending=None):
     return plan
 
 
-VIEW_ONLY = {"open", "open_drawing", "references"}      # these only look at a part, so the blue highlighted row will do
+VIEW_ONLY = {"open", "open_drawing", "open_pdf", "references"}      # these only look at a part, so the blue highlighted row will do
 
 
 EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
@@ -140,7 +141,8 @@ def choose_targets(action, ticked, highlighted):
 # The main window's buttons that depend on the selection. Button text -> action key.
 BUTTON_ACTIONS = {
     "Check Out": "checkout", "Check In": "checkin", "Save Progress": "save", "Undo Checkout": "undo",
-    "Open": "open", "Open Drawing": "open_drawing", "Edit Details": "edit", "References...": "references",
+    "Open": "open", "Open Drawing": "open_drawing", "Open PDF": "open_pdf", "Edit Details": "edit",
+    "References...": "references",
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
     "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
     "Purchasing Info": "purchasing", "Export Files": "export_files", "Generate STEP/PDF": "generate_step_pdf",

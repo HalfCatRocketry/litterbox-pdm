@@ -61,6 +61,20 @@ def _your_checkout(repo, pn, user):
     return record
 
 
+def where_linked(repo, number):
+    """[(PN, revision)] of every part revision that links to a document, by part number then revision. Records
+    that can't be read are passed over."""
+    number = str(number)
+    found = []
+    for pn in record_store.list_pns(repo):
+        try:
+            record = record_store.load(repo, pn)
+        except record_model.RegistryError:
+            continue
+        found += [(pn, rev) for rev in sorted(record.documents) if number in record.documents[rev]]
+    return found
+
+
 @converts_errors
 def link(repo, pn, number):
     """Link a document to the working revision of a part you have checked out. Returns True if it changed."""

@@ -1,4 +1,4 @@
-"""Tests for Open, Open Drawing and the reference review. The window itself is replaced by stand-ins (tests/support/gui_fakes.py): these check the wiring, not the look. Please also try the real window."""
+"""Tests for Open, Open Drawing, Open PDF, a document's Details window and the reference review. The window itself is replaced by stand-ins (tests/support/gui_fakes.py): these check the wiring, not the look. Please also try the real window."""
 
 import unittest
 from pathlib import Path
@@ -176,6 +176,102 @@ class OpenDownloadsFirst(unittest.TestCase):
         self.app._open_revision(self.pn, "B")
         self.assertEqual(self.tasks, [])
         self.assertEqual(self.opened[0][0], "HCR-00007-001_B.SLDPRT")
+
+
+
+class OpenPdfWiring(unittest.TestCase):
+    """Open PDF: every revision with a PDF is offered, and only the PDF is downloaded first."""
+    A, B = OpenWiring.A, OpenWiring.B
+
+    def setUp(self):
+        OpenWiring.setUp(self)
+        self.app._plan = lambda action: self.gui.action_rules.plan_action(action, [self.pn], self.app.rows_by_pn)
+        self.row.revisions = {"A": self.A + ["cad/HCR-00007-001_A.PDF"], "B": self.B + ["cad/HCR-00007-001_B.PDF"]}
+        self.tasks = []
+        self.app.run_task = lambda work, done, on_success=None, **kw: self.tasks.append((work, on_success, kw))
+        self.stubs = []
+        replace(self, self.gui.lfs_download, "is_stub", lambda repo, path: path in self.stubs)
+
+    def test_the_revisions_with_a_pdf_are_offered_newest_first(self):
+        self.app.open_pdf()
+        self.assertEqual(self.asked, [(["Rev B (working)", "Rev A (released)"], "Open PDF of")])
+        self.assertEqual(self.opened, [("HCR-00007-001_A.PDF", {".pdf": "x"})])           # answered A
+
+    def test_one_pdf_opens_without_asking_and_none_says_why(self):
+        self.row.revisions = {"A": self.A + ["cad/HCR-00007-001_A.PDF"], "B": self.B}
+        self.app.open_pdf()
+        self.assertEqual((self.asked, self.opened[0][0]), ([], "HCR-00007-001_A.PDF"))
+        self.row.revisions = {"A": self.A, "B": self.B}
+        self.app.open_pdf()
+        self.assertIn("Generate STEP/PDF", self.said[-1])
+
+    def test_a_pdf_that_is_not_downloaded_is_fetched_alone(self):
+        self.stubs = ["cad/HCR-00007-001_A.PDF"]
+        fetched = []
+        replace(self, self.gui.downloads, "download_files", lambda repo, rels, label: fetched.append(rels) or rels)
+        self.app.open_pdf()
+        work, on_success, kw = self.tasks[0]
+        on_success(work())
+        self.assertEqual(fetched, [["cad/HCR-00007-001_A.PDF"]])
+        self.assertEqual(self.opened[0][0], "HCR-00007-001_A.PDF")
+
+    def test_open_pdf_is_in_the_part_menu_and_the_right_click_menu_builds(self):
+        self.assertIn(("Open PDF", "open_pdf"), self.gui.menus.PART_MENU)
+        filled = []
+        self.app.tree = self.gui.ttk.Treeview()
+        self.app.tree.identify_row = lambda y: str(self.pn)
+        self.app.ticked = set()
+        self.app._set_ticks = lambda iids, on: None
+        self.app._ticked_pns = lambda: [self.pn]
+        self.app._lifecycle_entries = lambda: ()
+        self.app._fill_actions = lambda menu, entries: filled.extend(entries)
+        self.app._on_right_click(type("Event", (), {"y": 1, "x_root": 0, "y_root": 0})())
+        self.assertIn(("Open PDF", "open_pdf"), filled)
+
+
+class DocumentDetailsWiring(unittest.TestCase):
+    """A document's Details... opens a window of its own, with the part revisions that link to it."""
+
+    def setUp(self):
+        self.box = FakeBox()
+        self.gui = load_gui_with_fakes(self.box)
+        from litterbox.core.doc_number import DocNumber
+        from litterbox.core.part_number import PN
+        from litterbox.parts.part_status import PartStatus
+        from litterbox.records import record_model
+        self.number, self.part = DocNumber("PROP", 1), PN("HCR", 7, 1)
+        self.record = record_model.Record(self.number, "Igniter test", "Alex", "2026-10-01T10:00:00Z")
+        app = self.gui.app.App.__new__(self.gui.app.App)
+        app.rows_by_pn = {self.number: PartStatus(self.number, "Igniter test", "in_work", "Available", "ok",
+                                                  revisions={"A": ["documents/PROP-0001_A.pdf"]}),
+                          self.part: PartStatus(self.part, "Igniter", "in_work", "Available", "ok")}
+        app._selected_pns = lambda action=None: [self.number]
+        app.repo = lambda: "C:/vault"
+        app._say = lambda text, tone="normal": None
+        self.tasks, self.acted = [], []
+        app.run_task = lambda work, done, on_success=None, **kw: self.tasks.append((work, on_success))
+        app.act_on = lambda numbers, method, *args: self.acted.append((numbers, method))
+        self.app = app
+        replace(self, self.gui.record_store, "load", lambda repo, pn: self.record)
+        replace(self, self.gui.doc_types, "load", lambda repo: [])
+        replace(self, self.gui.doc_links, "where_linked", lambda repo, number: [(self.part, "A")])
+
+    def test_a_document_gets_its_own_window_not_the_parts_pop_out(self):
+        windows, links = [], []
+        real = self.gui.document_window.DocumentWindow
+        replace(self, self.gui.document_window, "DocumentWindow",
+                lambda *a, **k: windows.append(real(*a, **k)) or windows[-1])
+        replace(self, self.gui.history_window, "HistoryWindow", lambda *a, **k: self.fail("the parts' pop-out"))
+        self.app.show_history()
+        window = windows[0]
+        window.show_links = lambda found, rows, message="": links.append(found)
+        work, on_success = self.tasks[0]
+        on_success(work())
+        self.assertEqual(links, [[(self.part, "A")]])
+        window.links = {"x": self.part}
+        window.linked_tree.selection = lambda: ("x",)
+        window._show_part()
+        self.assertEqual(self.acted, [([self.part], self.app.show_history)])
 
 
 if __name__ == "__main__":

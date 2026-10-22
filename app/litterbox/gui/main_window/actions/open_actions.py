@@ -1,5 +1,5 @@
 """
-open_actions.py - Open, Open Drawing, opening an older revision, a part's Details and History, and ECOs.
+open_actions.py - Open, Open Drawing, Open PDF, opening an older revision, a part's Details and History, and ECOs.
 """
 
 from pathlib import Path, PurePosixPath
@@ -22,7 +22,7 @@ from litterbox.records import record_store
 
 
 class OpenActions:
-    """Open, Open Drawing, opening an older revision, Details/History and ECOs. (a part of the main window, App)."""
+    """Open, Open Drawing, Open PDF, an older revision, Details/History and ECOs. (a part of the main window, App)."""
 
     def open_part(self, drawing=False):
         """Open the part's model, or (drawing=True) its drawing, in the program for that file type.
@@ -85,6 +85,34 @@ class OpenActions:
     def open_drawing(self):
         self.open_part(drawing=True)
 
+    def open_pdf(self):
+        """Open a part's PDF (made from its drawing). With PDFs in more than one revision, ask which."""
+        plan = self._plan("open_pdf")
+        if not plan:
+            return
+        pn = plan.targets[0]
+        row = self.rows_by_pn[pn]
+        problem = opening_text.pdf_message(row)
+        if problem:
+            self._say(problem, "warn")
+            return
+        choices = opening_text.pdf_choices(row)
+        if len(choices) == 1:
+            rev = choices[0][0]
+        else:
+            rev = revision_picker.RevisionPickerDialog(
+                self, pn, [(history_text.revision_label(row, r), r) for r, _f in choices], "Open PDF of").show()
+            if rev is None:
+                return
+        path = opener.pick_pdf(dict(choices)[rev])
+        repo = self.repo()
+        if lfs_download.is_stub(repo, path):            # download on demand: just the PDF, not what the model uses
+            self.run_task(lambda: downloads.download_files(repo, [path], f"the PDF of {pn} Rev {rev}"), "",
+                          on_success=lambda _done: self._open_path(path), refresh=False,
+                          label=f"Downloading the PDF of {pn.short}", parts=[pn])
+            return
+        self._open_path(path)
+
     def show_history(self, event=None):
         if event is not None and self.tree.identify_column(event.x) == "#0":
             return                                              # double-clicking a tick box isn't asking for history
@@ -99,6 +127,9 @@ class OpenActions:
             return
         pn = chosen[0]
         row = self.rows_by_pn.get(pn)
+        if record.is_document:                                  # a window of its own: no Uses, Where used or BOM
+            self.show_document_details(record, row)
+            return
 
         def read_bom():
             if window.winfo_exists():

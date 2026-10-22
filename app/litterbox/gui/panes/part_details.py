@@ -37,7 +37,7 @@ HISTORY_COLUMNS = (("when", "When", 130), ("who", "Who", 100), ("what", "What", 
 REVISION_COLUMNS = (("rev", "Rev", 60), ("state", "State", 150), ("details", "Details", 300))
 
 
-def _table(parent, columns, height=None, stretch_last=True, scale=1.0):
+def make_table(parent, columns, height=None, stretch_last=True, scale=1.0):
     """A dark table with sortable headings and a scroll bar, in a frame of its own. Returns (frame, tree, sorter).
     The widths are at 100%; `scale` is the display's (Tk draws the headings bigger on a scaled display)."""
     frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -188,7 +188,7 @@ class PartDetailsView(ctk.CTkFrame):
                                          fg_color=theme.TEAL if column == 0 else theme.GRAY,
                                          hover_color=theme.TEAL_HOVER if column == 0 else theme.GRAY_HOVER,
                                          command=command).grid(row=1, column=column, padx=(0, 6))
-        frame, self.documents_tree, _sorter = _table(tab, document_text.LINK_COLUMNS, scale=self.scale)
+        frame, self.documents_tree, _sorter = make_table(tab, document_text.LINK_COLUMNS, scale=self.scale)
         frame.grid(row=1, column=0, sticky="nsew")
         self.documents_tree.bind("<Double-1>", lambda event: self._open_document())
 
@@ -242,7 +242,7 @@ class PartDetailsView(ctk.CTkFrame):
             release_button.ReleaseButton(buttons, text="Open Drawing", width=100, height=28, fg_color=theme.TEAL,
                                          hover_color=theme.TEAL_HOVER, command=lambda: self._open(True)).grid(
                 row=1, column=0)
-        frame, self.tree, self.sorter = _table(tab, HISTORY_COLUMNS, scale=self.scale)
+        frame, self.tree, self.sorter = make_table(tab, HISTORY_COLUMNS, scale=self.scale)
         frame.grid(row=1, column=0, sticky="nsew")
 
     def _open(self, drawing):
@@ -255,7 +255,7 @@ class PartDetailsView(ctk.CTkFrame):
         tab.rowconfigure(1, weight=1)
         note = ctk.CTkLabel(tab, text="", text_color=theme.MUTED, anchor="w", justify="left")
         note.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 4))
-        frame, tree, _sorter = _table(tab, columns, scale=self.scale)
+        frame, tree, _sorter = make_table(tab, columns, scale=self.scale)
         frame.grid(row=1, column=0, sticky="nsew")
         if self.on_manage_references:
             release_button.ReleaseButton(tab, text="Update references...", height=28, fg_color=theme.GRAY,
@@ -319,7 +319,7 @@ class PartDetailsView(ctk.CTkFrame):
                                      wraplength=320)
         self.bom_note.grid(row=1, column=0, sticky="ew", padx=4, pady=(2, 4))
         tab.bind("<Configure>", lambda event: self._wrap_bom_note(event.width), add="+")
-        frame, self.bom_tree, _sorter = _table(tab, bom_text.COLUMNS, scale=self.scale)
+        frame, self.bom_tree, _sorter = make_table(tab, bom_text.COLUMNS, scale=self.scale)
         frame.grid(row=2, column=0, sticky="nsew")
 
     def _wrap_bom_note(self, width):
