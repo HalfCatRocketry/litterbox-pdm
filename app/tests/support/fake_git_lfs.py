@@ -21,6 +21,7 @@ import os
 import stat
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -62,13 +63,28 @@ args = sys.argv[1:]
 command = args[0] if args else ""
 paths = [a.replace("\\", "/") for a in args[1:] if not a.startswith("--")]
 
-if command in ("lock", "unlock", "locks"):
-    try:                            # Litterbox runs several lock commands at once; a real server handles each as one step
+def hold_guard():
+    """Litterbox runs several lock commands at once (lfs_locks._parallel); a real server handles each as one step,
+    so this fake takes a file lock around reading and writing the store. It is let go when this process ends, and only
+    lock commands take it, so a filter git runs from inside `unlock` never waits for it."""
+    guard = open(STORE + ".guard", "a+")
+    try:
         import fcntl
-        _guard = open(STORE + ".guard", "w")
-        fcntl.flock(_guard, fcntl.LOCK_EX)      # released when this process ends (only lock commands take it, so a
-    except ImportError:                         # filter git runs from inside `unlock` never waits for it)
-        pass                        # not Linux: the tests that use this fake don't run there
+    except ImportError:                     # Windows: lock the guard file's first byte, trying again while it's held
+        import msvcrt
+        guard.seek(0)
+        while True:
+            try:
+                msvcrt.locking(guard.fileno(), msvcrt.LK_NBLCK, 1)
+                return guard
+            except OSError:
+                time.sleep(0.01)
+    fcntl.flock(guard, fcntl.LOCK_EX)
+    return guard
+
+
+if command in ("lock", "unlock", "locks"):
+    _guard = hold_guard()
 
     # Like real git-lfs, every lock command first reads the lock cache; a damaged one makes it fail.
     CACHE = os.path.join(".git", "lfs", "lockcache.db")
@@ -166,6 +182,7 @@ elif command == "pull":                     # download pointers: the ones --incl
                 tmp = path + ".lfs-download"
                 with open(tmp, "wb") as f:
                     f.write(content(data))
+                os.chmod(path, stat.S_IWUSR | stat.S_IRUSR)     # Windows won't replace a read-only file
                 os.replace(tmp, path)       # a new file, read-only like git-lfs leaves a lockable file
                 os.chmod(path, 0o444)
 

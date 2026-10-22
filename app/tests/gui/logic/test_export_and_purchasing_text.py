@@ -81,7 +81,7 @@ class BomTab(unittest.TestCase):
         rows = bom_text.table(self.lines(), bom.INDENTED)
         self.assertEqual(rows[0][1][0], "00002-001")
         self.assertEqual(rows[0][1][2], "2")
-        self.assertEqual(rows[1][1][:7], ("    00004-001", "B", "?", "Bolt", "Acme", "", "3 days"))
+        self.assertEqual(rows[1][1][:8], ("    00004-001", "B", "?", "Bolt", "Acme", "", "", "3 days"))
         self.assertEqual(bom_text.table(self.lines(), bom.SINGLE)[1][1][0], "00004-001")
 
     def test_the_line_above_the_table(self):

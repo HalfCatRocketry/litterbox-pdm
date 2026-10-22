@@ -5,6 +5,8 @@ changed, and the caution while an upload is still running.
 
 from pathlib import PurePosixPath
 
+from litterbox.gui.logic import action_rules
+
 
 def recovered_text(folder, files):
     """What to say when a sync saved your copies of files whose checkout was broken (git/remote.py)."""
@@ -25,7 +27,8 @@ def break_checkout_prompt(pn, who):
 
 def undo_prompt(targets):
     """The question asked before Undo Checkout."""
-    return ("This will discard changes and release the lock on these parts:\n\n"
+    noun = "documents" if action_rules.are_documents(targets) else "parts"
+    return (f"This will discard changes and release the lock on these {noun}:\n\n"
             + "\n".join(str(pn) for pn in targets) + "\n\nContinue?")
 
 
@@ -46,7 +49,7 @@ def unchanged_lines(unchanged):
         if names:
             lines.extend("    " + name for name in names)
         else:
-            lines.append("    (no CAD files yet)")
+            lines.append("    (no files yet)" if action_rules.are_documents([pn]) else "    (no CAD files yet)")
     return lines
 
 
@@ -58,8 +61,8 @@ def cad_changes(paths, limit=15):
     return names
 
 
-CHECKIN_CAUTION = ("Litterbox uploads in the background. Until the banner says Ready, don't open these parts in "
-                   "SolidWorks and don't save them: a save in the middle of an upload can end up half in the vault.")
+CHECKIN_CAUTION = ("Litterbox uploads in the background. Until the banner says Ready, don't open these files and "
+                   "don't save them: a save in the middle of an upload can end up half in the vault.")
 
 
 def open_while_busy_text(pn, label):

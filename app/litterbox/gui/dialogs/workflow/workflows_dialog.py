@@ -1,6 +1,6 @@
 """
-workflows_dialog.py - the Workflows window: the sign-off templates of each action (uses
-gui/logic/workflow_editor.py for the working copy).
+workflows_dialog.py - the Workflows windows (Team > Part Workflows... and Doc Workflows...): the sign-off templates
+of each action in one group, a tab each (uses gui/logic/workflow_editor.py for the working copy).
 """
 
 import tkinter as tk
@@ -18,40 +18,42 @@ from litterbox.workflows import workflow_templates
 
 
 class WorkflowsDialog(modal_dialog.ModalDialog):
-    """Team > Workflows: the sign-off templates for each action, one tab per action.
+    """The sign-off templates for each of `actions` (workflow_templates.PART_ACTIONS or DOCUMENT_ACTIONS), one tab
+    per action, in a window called `title`.
 
-        WorkflowsDialog(parent, roles, templates, apply=callback).show()
+        WorkflowsDialog(parent, roles, templates, apply=callback, actions=..., title="Part Workflows").show()
         # callback(ops, editor) -> problem text, or "" when the change was taken (see workflow_editor.WorkflowEditor)
 
     A template is a list of sign-offs. A role listed twice is two sign-offs; "+ or" lets a sign-off be filled by
     someone with any of several roles. Nothing is saved here: OK keeps the change in the Team window's draft.
     """
 
-    def __init__(self, parent, roles, templates, apply=None):
+    def __init__(self, parent, roles, templates, apply=None, actions=workflow_templates.ACTIONS, title="Workflows"):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result = None
         self.apply = apply
         self.roles = list(roles)
+        self.actions = tuple(actions)
         self.editor = workflow_editor.WorkflowEditor(templates)
-        self.selected = {action: 0 for action in workflow_templates.ACTIONS}
+        self.selected = {action: 0 for action in self.actions}
         self.name_vars = {}
         width, height = 820, 640
         x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
         y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
-        self.title("Workflows")
+        self.title(title)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.minsize(720, 520)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
-        ctk.CTkLabel(self, text="Workflows: who has to sign off before something happens. An action with no "
+        ctk.CTkLabel(self, text=f"{title}: who has to sign off before something happens. An action with no "
                                 "workflow just happens.", text_color=theme.MUTED, anchor="w", justify="left",
                      wraplength=width - 40).grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 4))
         self.tabs = ctk.CTkTabview(self)
         self.tabs.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 6))
         self.panes = {}
-        for action in workflow_templates.ACTIONS:
+        for action in self.actions:
             tab = self.tabs.add(workflow_templates.label_of(action))
             tab.columnconfigure(0, weight=1)
             tab.rowconfigure(2, weight=1)
@@ -203,8 +205,8 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
         self._redraw(action)
 
     def _standard(self):
-        added, skipped = self.editor.add_standard(self.roles)
-        for action in workflow_templates.ACTIONS:
+        added, skipped = self.editor.add_standard(self.roles, self.actions)
+        for action in self.actions:
             self._redraw(action)
         lines = []
         if added:

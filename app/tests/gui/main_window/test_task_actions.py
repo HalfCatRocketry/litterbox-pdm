@@ -365,7 +365,8 @@ class WorkflowWiring(unittest.TestCase):
         """Make the fake WorkflowDialog hand `result` to the apply callback; returns what apply answered."""
         out = []
 
-        def dialog(parent, roles, templates, apply=None):
+        def dialog(parent, roles, templates, apply=None, actions=(), title=""):
+            self.shown_dialog = (tuple(actions), title)
             editor = self.gui.workflow_editor.WorkflowEditor(templates)
             for op in result:
                 if op["op"] == "set":
@@ -387,6 +388,17 @@ class WorkflowWiring(unittest.TestCase):
         self.assertEqual([r.roles for r in draft.templates["release"]["T1"].rows], [["Quality"]])
         self.assertEqual(draft.labels, ["Workflows: Release"])
         self.assertEqual(reloaded, [1])
+        self.assertEqual(self.shown_dialog, (self.gui.workflow_templates.PART_ACTIONS, "Part Workflows"))
+
+    def test_doc_workflows_shows_only_the_documents_actions(self):
+        window, draft, _ = self._draft_window(["Manager"])
+        self._dialog_result([{"op": "set", "action": "release_document", "name": "T1", "rows": [["Manager"]],
+                              "same": False, "requester": True, "old": None}])
+        self.app.edit_workflow(window, documents=True)
+        templates = self.gui.workflow_templates
+        self.assertEqual(self.shown_dialog, (templates.DOCUMENT_ACTIONS, "Doc Workflows"))
+        self.assertEqual(set(templates.PART_ACTIONS) | set(templates.DOCUMENT_ACTIONS), set(templates.ACTIONS))
+        self.assertIn("T1", draft.templates["release_document"])
 
     def test_removing_a_workflow_is_staged(self):
         tpl = {"release": {"T1": self.gui.workflow_templates.Template("release", "T1", [self.gui.workflow_templates.Row(["Quality"])])}}

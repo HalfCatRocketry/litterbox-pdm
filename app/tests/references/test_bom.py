@@ -127,5 +127,24 @@ class Quantities(unittest.TestCase):
         self.assertEqual(amounts(bom.lines(records, TOP, "A", bom.FLAT))[2], (4, 12, 12))
 
 
+class Costs(unittest.TestCase):
+    def test_the_total_is_every_part_revision_once_times_its_total_count(self):
+        from decimal import Decimal
+        from litterbox.gui.logic import bom_text
+        records = counted()
+        records[BRACKET].purchasing = {"unit_cost": "2.50"}
+        summary = bom.cost_summary(records, TOP, "A")                 # 20 bolts at 0.10, 8 brackets at 2.50
+        self.assertEqual((summary.total, summary.priced, summary.no_cost, summary.no_quantity),
+                         (Decimal("22.00"), 2, 0, 0))                 # Frame and Panel are assemblies: not missing
+        self.assertEqual([bom.line_cost(line) for line in bom.lines(records, TOP, "A", bom.INDENTED)],
+                         [None, Decimal("20.00"), Decimal("1.20"), None, Decimal("0.80")])
+        self.assertEqual(bom_text.cost_text(summary), "total cost 22.00")
+        records[BRACKET].purchasing = {}
+        records[PANEL].quantities = {}
+        self.assertEqual(bom_text.cost_text(bom.cost_summary(records, TOP, "A")),
+                         "total cost 0.00 (1 part has no unit cost, 1 is not counted)")
+        self.assertEqual(bom_text.cost_text(bom.cost_summary(vault(), BRACKET, "A")), "")
+
+
 if __name__ == "__main__":
     unittest.main()

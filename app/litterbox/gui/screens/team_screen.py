@@ -7,7 +7,8 @@ once). A screen of the main window, chosen in the sidebar; unsaved changes stay 
     | You: Austin (Owner)   [Who am I?] [Signing...]                                   |
     | +- People -------------------------------------------+  +- Organization -----+ |
     | | [Add Person] [Edit] [Switch On/Off] [More v]       |  | Roles...           | |
-    | | Name  Email  Access  Roles  On                     |  | Workflows...       | |
+    | | Name  Email  Access  Roles  On                     |  | Part Workflows...  | |
+    | |                                                    |  | Doc Workflows...   | |
     | | ...                                                |  | Projects...        | |
     | | the highlighted person's host names, keys and roles|  | Vault Settings...  | |
     | +----------------------------------------------------+  +--------------------+ |
@@ -150,7 +151,10 @@ class TeamScreen(ctk.CTkFrame):
         card = self._card(parent, "Organization")
         card.grid(row=0, column=1, sticky="nsew")
         entries = (("Roles...", lambda: self.app.edit_roles(self), lambda: self._why_not("manage_people")),
-                   ("Workflows...", lambda: self.app.edit_workflow(self), lambda: self._why_not("manage_workflows")),
+                   ("Part Workflows...", lambda: self.app.edit_workflow(self),
+                    lambda: self._why_not("manage_workflows")),
+                   ("Doc Workflows...", lambda: self.app.edit_workflow(self, documents=True),
+                    lambda: self._why_not("manage_workflows")),
                    ("Projects...", lambda: self.app.manage_projects(self), lambda: self._why_not("manage_settings", team=False)),
                    ("Document Types...", lambda: self.app.manage_doc_types(self),
                     lambda: self._why_not("manage_doc_types", team=False)),

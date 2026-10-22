@@ -31,8 +31,13 @@ def call(obj, name, *args):
 
     Through Python's COM bridge some SolidWorks members behave like properties
     and some like methods, and it is not always obvious which; this handles both.
+    A property that gives a SolidWorks object back (GetFirstDocument, GetNext) gives a COM object, which Python
+    also counts as callable: calling it asks SolidWorks for that object's default member, which it hasn't
+    ("Member not found"), so a COM object is returned as it is.
     """
     attribute = getattr(obj, name)
+    if hasattr(attribute, "_oleobj_"):                  # a COM object, not a method
+        return attribute
     return attribute(*args) if callable(attribute) else attribute
 
 

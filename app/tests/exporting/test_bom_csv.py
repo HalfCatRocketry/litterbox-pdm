@@ -37,7 +37,7 @@ class BomCsv(unittest.TestCase):
         self.assertEqual(table[0], list(bom_csv.COLUMNS))
         self.assertEqual(table[1][:10], ["1", "HCR-00002-001", "A", "2", "2", "Frame", "", "in work", "", "OK"])
         self.assertEqual(table[2][3:5], ["3", "6"])
-        self.assertEqual(table[2][8:], ["Yes", "OK", "Acme", "", "0.10", "3"])
+        self.assertEqual(table[2][8:], ["Yes", "OK", "Acme", "", "0.10", "0.60", "3"])
 
     def test_text_that_looks_like_a_formula_is_never_run(self):
         path = bom_csv.write(self.tmp / "b.csv", [line(1, 2, "=HYPERLINK(\"http://x\")",
@@ -47,6 +47,13 @@ class BomCsv(unittest.TestCase):
         self.assertEqual(row[10], "'+Acme")
         self.assertEqual(row[3:5], ["", ""])                                  # not counted
         self.assertEqual(bom_csv.safe_cell("Bolt-M6"), "Bolt-M6")
+
+    def test_the_assembly_total_is_the_last_row(self):
+        from decimal import Decimal
+        table = bom_csv.rows([line(1, 2, "Frame")], bom.CostSummary(Decimal("22.00"), 2))
+        self.assertEqual(table[-1][bom_csv.COLUMNS.index("Name")], bom_csv.TOTAL_LABEL)
+        self.assertEqual(table[-1][bom_csv.COLUMNS.index("Total cost")], "22.00")
+        self.assertEqual(len(bom_csv.rows([line(1, 2, "Frame")], bom.CostSummary())), 2)   # nothing priced: no row
 
     def test_an_every_part_once_list_has_no_level(self):
         self.assertEqual(bom_csv.rows([line(0, 2, "Frame")])[1][0], "")

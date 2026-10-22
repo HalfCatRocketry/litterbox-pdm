@@ -7,8 +7,9 @@ from litterbox.core.filenames import file_stem
 from litterbox.records import purchasing_info
 from litterbox.references import bom
 
-COLUMNS = (("pn", "Part", 130), ("rev", "Rev", 50), ("qty", "Qty", 50), ("name", "Name", 160), ("supplier", "Supplier", 110),
-           ("cost", "Unit cost", 70), ("lead", "Lead time", 70), ("state", "State", 160))
+COLUMNS = (("pn", "Part", 130), ("rev", "Rev", 50), ("qty", "Qty", 50), ("name", "Name", 160),
+           ("supplier", "Supplier", 110), ("cost", "Unit cost", 70), ("ext", "Total cost", 80), ("lead", "Lead time", 70),
+           ("state", "State", 160))
 
 INDENT = "    "
 
@@ -16,6 +17,11 @@ INDENT = "    "
 def quantity(line):
     """The Qty column: how many its parent uses (in "every part once", how many in all); '?' if not counted."""
     return "?" if line.quantity is None else str(line.quantity)
+
+
+def money(value):
+    """1234.5 -> '1,234.50'; None -> ''. No currency sign: unit costs are in the team's own currency."""
+    return "" if value is None else f"{value:,.2f}"
 
 
 def table(found, mode):
@@ -26,8 +32,8 @@ def table(found, mode):
         lead = line.field(purchasing_info.LEAD_TIME_DAYS)
         state = line.state_text + (" (loops back)" if line.loop else "") + (" (added by hand)" if line.added else "")
         rows.append((f"line{number}", (part, line.revision, quantity(line), line.name, line.field(purchasing_info.SUPPLIER),
-                                       line.field(purchasing_info.UNIT_COST), f"{lead} days" if lead else "",
-                                       state)))
+                                       line.field(purchasing_info.UNIT_COST), money(bom.line_cost(line)),
+                                       f"{lead} days" if lead else "", state)))
     return rows
 
 
@@ -45,13 +51,28 @@ def item_choices(rows, assembly_row):
             and (kit or getattr(row, "noncad", False))]
 
 
-def note(found, is_assembly, outdated=False, counts_outdated=False):
+def cost_text(summary):
+    """'total cost 1,234.50 (2 parts have no unit cost)', or '' when nothing in the BOM has a unit cost."""
+    if summary is None or not (summary.priced or summary.no_quantity):
+        return ""
+    gaps = []
+    if summary.no_cost:
+        gaps.append(f"{summary.no_cost} part{'s have' if summary.no_cost != 1 else ' has'} no unit cost")
+    if summary.no_quantity:
+        gaps.append(f"{summary.no_quantity} {'are' if summary.no_quantity != 1 else 'is'} not counted")
+    return f"total cost {money(summary.total)}" + (f" ({', '.join(gaps)})" if gaps else "")
+
+
+def note(found, is_assembly, outdated=False, counts_outdated=False, cost=None):
     """The line above the table. `outdated`: its list of parts used is out of date; `counts_outdated`: only
-    its quantities are (it was checked in without SolidWorks open, or before Litterbox counted parts)."""
+    its quantities are (it was checked in without SolidWorks open, or before Litterbox counted parts). `cost` is
+    the assembly's bom.CostSummary."""
     if not is_assembly:
         return "This revision uses no other parts, so it has no BOM."
     count = len(found)
     said = [f"{count} line{'s' if count != 1 else ''}"]
+    if cost_text(cost):
+        said.append(cost_text(cost))
     said += bom.problems(found)
     if outdated:
         said.append("its list of parts used is out of date. Update BOM reads it again and counts the parts")

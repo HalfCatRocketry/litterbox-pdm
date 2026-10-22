@@ -11,9 +11,14 @@ Three ways to list it:
 Each line has `quantity`, how many its parent uses, and `total`, how many the whole assembly needs (the
 quantities multiplied down the tree; in FLAT, added up over every place the part is used). Either is None when
 an assembly on the way down has no counts (counted without SolidWorks, or before Litterbox counted parts).
+
+Costs: a line's cost is its unit cost (purchasing info) times `total`. cost_summary() adds them up over every part
+revision in the tree once (the FLAT list), whichever way the BOM is shown, so a sub-assembly's parts are always in it.
+A sub-assembly with a unit cost of its own is counted as well as its parts.
 """
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 from litterbox.core import revision_letters
 from litterbox.records import purchasing_info
@@ -126,6 +131,44 @@ def lines(records, pn, revision, mode=INDENTED):
     for line in once.values():
         line.quantity = line.total
     return sorted(once.values(), key=lambda line: (str(line.pn), revision_letters.revision_number(line.revision)))
+
+
+@dataclass
+class CostSummary:
+    total: Decimal = Decimal(0)     # unit cost x total quantity, added up over the part revisions that have both
+    priced: int = 0                 # part revisions in `total`
+    no_cost: int = 0                # parts (not assemblies) with no unit cost
+    no_quantity: int = 0            # part revisions with a unit cost but no count
+
+
+def unit_cost(line):
+    """A line's unit cost as a Decimal, or None if it has none."""
+    text = line.field(purchasing_info.UNIT_COST)
+    try:
+        return Decimal(text) if text else None
+    except InvalidOperation:
+        return None
+
+
+def line_cost(line):
+    """Unit cost x total quantity, or None when either is missing."""
+    cost = unit_cost(line)
+    return None if cost is None or line.total is None else cost * line.total
+
+
+def cost_summary(records, pn, revision):
+    """What one revision of an assembly costs, from every part revision in its tree once."""
+    summary = CostSummary()
+    for line in lines(records, pn, revision, FLAT):
+        cost = unit_cost(line)
+        if cost is None:
+            summary.no_cost += 0 if line.sub_assembly else 1        # an assembly made in house has no price itself
+        elif line.total is None:
+            summary.no_quantity += 1
+        else:
+            summary.total += cost * line.total
+            summary.priced += 1
+    return summary
 
 
 def problems(found):

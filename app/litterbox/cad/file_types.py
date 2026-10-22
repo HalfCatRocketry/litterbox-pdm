@@ -17,10 +17,12 @@ SOLIDWORKS_EXTENSIONS = MODEL_EXTENSIONS + DRAWING_EXTENSIONS
 
 # Exports: files made from a part's own CAD files and kept with that revision, under the same name
 # (HCR-00042-001_A.STEP from HCR-00042-001_A.SLDPRT, HCR-00042-001_A.PDF from HCR-00042-001_A.SLDDRW).
-# They are copied as plain files (never through SolidWorks) and stay behind when the part is revised.
+# They are copied as plain files (never through SolidWorks) and stay behind when the part is revised. A released
+# assembly revision also keeps its BOM as HCR-00042-001_A.CSV (parts/release_bom.py).
 STEP_EXTENSIONS = (".step", ".stp")
 PDF_EXTENSION = ".pdf"
-EXPORT_EXTENSIONS = STEP_EXTENSIONS + (PDF_EXTENSION,)
+BOM_EXTENSION = ".csv"
+EXPORT_EXTENSIONS = STEP_EXTENSIONS + (PDF_EXTENSION, BOM_EXTENSION)
 
 
 def extension(path):

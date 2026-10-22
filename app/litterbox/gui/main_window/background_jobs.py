@@ -155,18 +155,19 @@ class BackgroundJobs:
         self.run_task(
             lambda: func(repo, targets),
             "", on_success=lambda result: self._after_batch(action, plan, result),
-            label=job_text.job_label(action, len(targets)), parts=targets)
+            label=job_text.job_label(action, len(targets), action_rules.are_documents(targets)), parts=targets)
 
     def _after_batch(self, action, plan, result):
         done, failed = result
-        self.note = action_rules.summary(action, len(done), len(failed), len(plan.skipped))
+        documents = action_rules.are_documents(list(plan.targets) + [pn for pn, _why in plan.skipped])
+        self.note = action_rules.summary(action, len(done), len(failed), len(plan.skipped), documents)
         self._say(self.note, "warn" if failed else "normal")
         if failed:
             messagebox.showerror("Litterbox", error_text.shorten(
                 "\n\n".join(f"{pn}: {message}" for pn, message in failed)))
 
         if action == "checkout":
-            self._warn_open_files([path for _pn, r in done for path in r.changed_upstream])
+            self._after_checkout(done)
         elif action in ("checkin", "save"):
             nothing = [str(pn) for pn, r in done if not r.uploaded]
             if nothing:

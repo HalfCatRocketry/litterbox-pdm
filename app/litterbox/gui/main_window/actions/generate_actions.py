@@ -107,7 +107,15 @@ class GenerateActions:
         self.run_task(run, done_text, on_success=finished, **options)
 
     def _report_release_files(self, files):
+        if files.boms:
+            saved = generate_text.boms_saved_text(files.boms)
+            self.note = f"{self.note}. {saved}" if self.note else saved
+        if files.bom_failed:
+            self._log(f"BOM not saved after release: {generate_text.failure_lines(files.bom_failed)}")
+            self.note = (f"{self.note}. " if self.note else "") + "The BOM couldn't be saved with the release (see the log)"
         if not (files.done or files.failed):
+            if files.boms or files.bom_failed:
+                self._say(self.note, "warn" if files.bom_failed else "normal")
             return
         if files.done:
             made = generate_text.done_text(files)

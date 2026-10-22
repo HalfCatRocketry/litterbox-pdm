@@ -83,8 +83,9 @@ class ExportActions:
         repo = self.repo()
 
         def work():
-            found = bom.lines(reference_model.load_records(repo), pn, rev, mode)
-            return bom_csv.write(path, found, settings.ROOT), len(found)
+            records = reference_model.load_records(repo)
+            found = bom.lines(records, pn, rev, mode)
+            return bom_csv.write(path, found, settings.ROOT, bom.cost_summary(records, pn, rev)), len(found)
 
         self.run_task(work, "", on_success=lambda result: self._say(bom_text.exported_text(*result)),
                       refresh=False, label="Exporting the BOM")

@@ -63,7 +63,7 @@ class CheckinActions:
             dialog = confirm_dialogs.ConfirmDialog(
                 self, "No changes detected", "No changes were detected in these files:",
                 checkin_text.unchanged_lines(unchanged),
-                note="Continue will still check the part in: the check-in is recorded in its log, "
+                note="Continue will still check them in: each check-in is recorded in its log, "
                      "uploaded, and your lock is released. Cancel leaves everything as it is.",
                 confirm_text="Continue")
             if not dialog.show():

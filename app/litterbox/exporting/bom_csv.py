@@ -13,7 +13,8 @@ from litterbox.records import purchasing_info
 from litterbox.references import bom
 
 COLUMNS = ("Level", "Part number", "Rev", "Qty", "Total qty", "Name", "Description", "Status", "COTS", "Reference state",
-           "Supplier", "Supplier part number", "Unit cost", "Lead time (days)")
+           "Supplier", "Supplier part number", "Unit cost", "Total cost", "Lead time (days)")
+TOTAL_LABEL = "Total cost of the assembly"
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
 
@@ -33,9 +34,10 @@ def _number(value):
     return "" if value is None else str(value)
 
 
-def rows(found):
+def rows(found, cost=None):
     """The table: a heading row, then one row per BomLine. Qty is how many its parent uses, Total qty how many
-    the whole assembly needs; both are empty when not counted."""
+    the whole assembly needs; both are empty when not counted. Total cost is unit cost x Total qty. With `cost` (a
+    bom.CostSummary of the whole assembly) a last row gives its total."""
     table = [list(COLUMNS)]
     for line in found:
         table.append([str(line.level) if line.level else "", str(line.pn), line.revision,
@@ -43,22 +45,35 @@ def rows(found):
                       line.description, line.status.replace("_", " "), "Yes" if line.cots else "",
                       line.state_text + (" (uses an assembly above it)" if line.loop else ""),
                       line.field(purchasing_info.SUPPLIER), line.field(purchasing_info.SUPPLIER_PN),
-                      line.field(purchasing_info.UNIT_COST), line.field(purchasing_info.LEAD_TIME_DAYS)])
+                      line.field(purchasing_info.UNIT_COST), _number(bom.line_cost(line)),
+                      line.field(purchasing_info.LEAD_TIME_DAYS)])
+    if cost is not None and (cost.priced or cost.no_quantity):
+        total = [""] * len(COLUMNS)
+        total[COLUMNS.index("Name")] = TOTAL_LABEL + ("" if not (cost.no_cost or cost.no_quantity) else
+                                                      " (some parts have no unit cost or count)")
+        total[COLUMNS.index("Total cost")] = str(cost.total)
+        table.append(total)
     return table
 
 
-def write(path, found, litterbox_root):
-    """Write the BOM lines to `path` (a .csv in a folder outside Litterbox and every repository). Returns the
-    path written."""
+def write(path, found, litterbox_root, cost=None):
+    """Write the BOM lines to `path` (a .csv in a folder outside Litterbox and every repository), with the
+    assembly's total cost last when `cost` is given. Returns the path written."""
     path = Path(path)
     if path.suffix.lower() != ".csv":
         path = path.with_name(path.name + ".csv")
     folder = export_folder.check(path.parent, litterbox_root)
-    path = folder / path.name
+    return write_in_vault(folder / path.name, found, cost)
+
+
+def write_in_vault(path, found, cost=None):
+    """Write the BOM lines to `path` with no check on the folder: the copy a released assembly revision keeps in
+    the vault (parts/release_bom.py). Everything else goes through write(). Returns the path written."""
+    path = Path(path)
     try:
         with open(path, "w", encoding="utf-8-sig", newline="") as out:     # the BOM mark makes Excel read UTF-8
             writer = csv.writer(out)
-            for row in rows(found):
+            for row in rows(found, cost):
                 writer.writerow([safe_cell(cell) for cell in row])
     except OSError as e:
         raise export_folder.ExportError(f"The BOM could not be written to {path}: {e}") from None

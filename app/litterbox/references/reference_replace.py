@@ -52,7 +52,7 @@ def _model_file(repo, child, revision):
 
 def _repoint_file(repo, rel, replacements, backend):
     """Change the references inside one assembly file. Returns how many were changed."""
-    path = os.path.join(str(repo), rel)
+    path = os.path.normpath(os.path.join(str(repo), rel))
     changed = 0
     for replacement, old_name, new_path in replacements:
         done = False
@@ -127,7 +127,7 @@ def _plan_replacement(repo, parent, items, locks):
             except LitterboxError as e:
                 return ReplaceResult(parent, "failed", f"{new_rel} could not be downloaded. {e}")
             old_name = filenames.filename(item.child, item.old_revision, file_types.extension(new_rel))
-            edits.append((item, old_name, os.path.join(str(repo), new_rel)))
+            edits.append((item, old_name, os.path.normpath(os.path.join(str(repo), new_rel))))
             names.append(f"{item.child} Rev {item.old_revision} -> {latest}")
         if not edits:
             return ReplaceResult(parent, "skipped", "Nothing to change.")

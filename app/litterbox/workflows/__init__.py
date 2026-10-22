@@ -7,8 +7,8 @@ An Admin can say "a release (or unrelease, void, make COTS) needs sign-offs". Af
 longer does it: it opens the Workflow window, where you pick a template and a person for each sign-off. The
 people named approve (or reject), and when everyone has signed the action happens.
 
-THE TEMPLATES   .litterbox/workflows.yaml, shared through Git like the team file. Admins edit it (Team >
-    Workflows...). Each action can have several named templates (T1, T2... or your own):
+THE TEMPLATES   .litterbox/workflows.yaml, shared through Git like the team file. Admins edit it (Team > Part
+    Workflows... and Doc Workflows...). Each action can have several named templates (T1, T2... or your own):
 
         workflows:
           release:

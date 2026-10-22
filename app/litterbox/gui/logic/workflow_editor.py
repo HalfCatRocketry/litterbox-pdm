@@ -117,11 +117,14 @@ class WorkflowEditor:
                                  "old": i["origin"]})
         return removals + sets
 
-    def add_standard(self, roles):
-        """Add the standard workflows whose roles all exist; returns (added names, [(name, missing roles)])."""
+    def add_standard(self, roles, actions=None):
+        """Add the standard workflows whose roles all exist, for these actions (default every one); returns (added
+        names, [(name, missing roles)])."""
         have = {r.lower() for r in roles}
         added, skipped = [], []
         for action, items in workflow_templates.STANDARD_WORKFLOWS.items():
+            if actions is not None and action not in actions:
+                continue
             for name, rows in items:
                 if name.lower() in {n.lower() for n in self.names(action)}:
                     continue

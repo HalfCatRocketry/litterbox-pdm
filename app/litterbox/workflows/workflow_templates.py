@@ -29,6 +29,12 @@ DOC_ACTION = {RELEASE: RELEASE_DOC, REOPEN: REOPEN_DOC, VOID: VOID_DOC}     # a 
 ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC, VOID_DOC)   # can have templates
 
 
+# The two Workflows windows (Team > Part Workflows... and Doc Workflows...). Remove document link acts on a part's
+# record, but it is about documents, so it is with theirs.
+PART_ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)
+DOCUMENT_ACTIONS = (RELEASE_DOC, REOPEN_DOC, VOID_DOC, REMOVE_DOC)
+
+
 ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS: "Make COTS",
                 REMOVE_DOC: "Remove document link", RELEASE_DOC: "Release document",
                 REOPEN_DOC: "Unrelease document", VOID_DOC: "Void document"}

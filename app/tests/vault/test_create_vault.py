@@ -17,7 +17,7 @@ from litterbox.team import team_model
 from litterbox.team import team_setup
 from litterbox.core import part_number
 from litterbox.records import record_store
-from tests.support.vault_fixture import SHIM, SKIP_ON_WINDOWS, git
+from tests.support.vault_fixture import SKIP_ON_WINDOWS, git, install_fake_lfs
 from litterbox.errors import LitterboxError
 from litterbox.parts import part_status
 
@@ -31,8 +31,7 @@ class EmptyRepo(unittest.TestCase):
         self.root = root
         bin_dir = root / "bin"
         bin_dir.mkdir()
-        shutil.copy(SHIM, bin_dir / "git-lfs")
-        (bin_dir / "git-lfs").chmod(0o755)
+        install_fake_lfs(bin_dir)
         saved = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
         os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"

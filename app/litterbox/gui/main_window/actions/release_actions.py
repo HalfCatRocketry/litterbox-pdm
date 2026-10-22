@@ -33,7 +33,8 @@ class ReleaseActions:
         if len(plans) == 1:
             title, text = f"Release {good[0].pn}", confirmations.release_confirm_text(good[0])
         else:
-            title, text = f"Release {len(good)} parts", confirmations.release_many_confirm_text(good, bad)
+            title = f"Release {action_rules.parts_text(len(good), action_rules.are_documents(p.pn for p in good))}"
+            text = confirmations.release_many_confirm_text(good, bad)
         if not messagebox.askokcancel(title, text):
             return
         pns = [p.pn for p in good]
@@ -41,7 +42,7 @@ class ReleaseActions:
         self.run_releasing(lambda: lifecycle.release_many(repo, pns), pns, "",
                            on_success=lambda result: self._after_batch("release", action_rules.ActionPlan(pns, skipped),
                                                                        result),
-                           label=job_text.job_label("release", len(pns)), parts=pns)
+                           label=job_text.job_label("release", len(pns), action_rules.are_documents(pns)), parts=pns)
 
     def make_cots(self):
         plan = self._plan("make_cots")
@@ -82,12 +83,13 @@ class ReleaseActions:
         if cots and not messagebox.askyesno("Unrelease COTS part" + ("s" if len(cots) > 1 else ""),
                                             confirmations.reopen_cots_warning(cots)):
             return
-        what = str(pns[0]) if len(pns) == 1 else f"these {len(pns)} parts"
+        documents = action_rules.are_documents(pns)
+        what = str(pns[0]) if len(pns) == 1 else f"these {action_rules.parts_text(len(pns), documents)}"
         reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being unreleased?", "Unrelease")
         if reason:
             self.run_task(lambda: lifecycle.reopen_many(repo, pns, reason), "",
                           on_success=lambda result: self._after_batch("reopen", plan, result),
-                          label=job_text.job_label("reopen", len(pns)), parts=pns)
+                          label=job_text.job_label("reopen", len(pns), documents), parts=pns)
 
     def void(self):
         plan = self._plan("void")
@@ -106,15 +108,16 @@ class ReleaseActions:
         if not pns:
             messagebox.showwarning("Can't void", "\n\n".join(why for _pn, why in skipped))
             return
-        what = str(pns[0]) if len(pns) == 1 else f"these {len(pns)} parts"
+        documents = action_rules.are_documents(pns)
+        what = str(pns[0]) if len(pns) == 1 else f"these {action_rules.parts_text(len(pns), documents)}"
         reason = self._ask_reason(f"Why {'is' if len(pns) == 1 else 'are'} {what} being voided?", "Void")
         if not reason:
             return
         if not messagebox.askyesno(
-                "Void part" + ("s" if len(pns) != 1 else ""),
+                ("Void document" if documents else "Void part") + ("s" if len(pns) != 1 else ""),
                 f"Void {pns[0]}?\n\nIts number will never be used again, and it can't be checked out."
                 if len(pns) == 1 else confirmations.void_many_confirm_text(pns)):
             return
         self.run_task(lambda: lifecycle.void_many(repo, pns, reason), "",
                       on_success=lambda result: self._after_batch("void", action_rules.ActionPlan(pns, skipped), result),
-                      label=job_text.job_label("void", len(pns)), parts=pns)
+                      label=job_text.job_label("void", len(pns), documents), parts=pns)

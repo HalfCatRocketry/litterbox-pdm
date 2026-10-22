@@ -44,7 +44,7 @@ def load(repo):
     for action, body in flows.items():
         if not isinstance(body, dict) or "signoffs" in body:
             raise workflow_templates.WorkflowError(f"{layout.WORKFLOWS_FILE} is in the format of Litterbox 0.2. Delete the file (or the "
-                                f"'{action}' part) and set the workflows up again in Team > Workflows....")
+                                f"'{action}' part) and set the workflows up again in Team > Part Workflows... and Doc Workflows....")
         templates[str(action)] = {str(name): workflow_templates.Template.from_dict(str(action), name, t) for name, t in body.items()}
     workflow_templates.validate(templates)
     return templates

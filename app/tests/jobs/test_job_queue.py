@@ -237,7 +237,8 @@ class Wiring(unittest.TestCase):
 
     def test_the_check_in_prompt_carries_the_caution_and_batches_pass_their_parts(self):
         self.assertIn("checkin_text.CHECKIN_CAUTION", self.source)
-        self.assertIn("label=job_text.job_label(action, len(targets)), parts=targets", self.source)
+        self.assertIn("label=job_text.job_label(action, len(targets), action_rules.are_documents(targets)), parts=targets",
+                      self.source)
 
     def test_a_refresh_is_collapsible_and_no_task_is_refused_for_being_busy(self):
         self.assertIn('kind="refresh"', self.source)

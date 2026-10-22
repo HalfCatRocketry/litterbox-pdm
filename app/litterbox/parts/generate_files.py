@@ -11,7 +11,8 @@ The STEP and PDF belong to the part's working revision, in the cad folder (expor
 
 A released revision takes new files only when they are flagged as needed (records/record_exports.py) or it doesn't
 have them yet, unless an Admin makes them again (`force`). after_release() makes them for parts just released, and
-never raises: a release is never held up by SolidWorks, the part stays flagged instead.
+never raises: a release is never held up by SolidWorks, the part stays flagged instead. It also saves a released
+assembly's BOM with it (parts/release_bom.py), which needs no SolidWorks.
 """
 
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ from litterbox.git import lfs_locks
 from litterbox.git import repository
 from litterbox.parts import batch_core
 from litterbox.parts import permission_check
+from litterbox.parts import release_bom
 from litterbox.records import record_exports
 from litterbox.records import record_files
 from litterbox.records import record_model
@@ -39,6 +41,8 @@ class Generated:
     done: list = field(default_factory=list)        # [(pn, [vault paths of the files made])]
     failed: list = field(default_factory=list)      # [(pn, why)]
     notes: list = field(default_factory=list)       # parts left out before starting, and why
+    boms: list = field(default_factory=list)        # after a release: [(pn, vault path)] of the BOMs saved
+    bom_failed: list = field(default_factory=list)  # after a release: [(pn, why)] the BOM wasn't saved
 
 
 def up_to_date(needed, existing_kinds, possible):
@@ -165,23 +169,34 @@ def _with_upload(repo, pns, kinds, force, backend_factory, result):
 
 
 def after_release(repo, pns, backend_factory=None):
-    """Make the STEP and PDF of the parts among these that were just released (flagged, with the release as their
-    latest event), uploaded at once. Never raises: if SolidWorks isn't there or fails, the parts stay flagged and the reason is in Generated.failed."""
-    result = Generated()
-    flagged = []
-    for pn in pns:
+    """For the parts among these that were just released (the release is their latest event): save each
+    assembly's BOM with it, then make the STEP and PDF of those flagged for them, each uploaded at once. Never raises:
+    if SolidWorks isn't there or fails, the parts stay flagged and the reason is in Generated.failed (and a BOM
+    that couldn't be saved is in Generated.bom_failed)."""
+    released, flagged = [], []
+    for pn in pns:                          # decided first: saving the BOM adds an event after the release
         try:
             record = record_store.load(repo, pn)
         except (record_model.RegistryError, LitterboxError):
             continue
         last = record.history[-1].get("event") if record.history else None
-        if record_exports.is_flagged(record) and not record.pending and last == record_model.EVENT_RELEASED:
-            flagged.append(pn)
-    if not flagged:
-        return result
-    try:
-        return generate(repo, flagged, record_exports.KINDS, backend_factory=backend_factory)
-    except Exception as e:                  # anything at all: the release itself is already done
-        diagnostics.LOG(f"Could not make STEP/PDF after release of {', '.join(map(str, flagged))}: {e}")
-        result.failed = [(pn, str(e)) for pn in flagged]
-        return result
+        if not record.pending and last == record_model.EVENT_RELEASED:
+            released.append(pn)
+            if record_exports.is_flagged(record):
+                flagged.append(pn)
+    boms, bom_failed = [], []
+    if released:
+        try:
+            boms, bom_failed = release_bom.save(repo, released)
+        except Exception as e:              # anything at all: the release itself is already done
+            diagnostics.LOG(f"Could not save the BOM after release of {', '.join(map(str, released))}: {e}")
+            bom_failed = [(pn, str(e)) for pn in released]
+    result = Generated()
+    if flagged:
+        try:
+            result = generate(repo, flagged, record_exports.KINDS, backend_factory=backend_factory)
+        except Exception as e:              # anything at all: the release itself is already done
+            diagnostics.LOG(f"Could not make STEP/PDF after release of {', '.join(map(str, flagged))}: {e}")
+            result.failed = [(pn, str(e)) for pn in flagged]
+    result.boms, result.bom_failed = boms, bom_failed
+    return result

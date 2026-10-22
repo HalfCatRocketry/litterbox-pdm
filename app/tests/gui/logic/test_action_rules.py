@@ -253,5 +253,27 @@ class TestButtonStates(unittest.TestCase):
         self.assertEqual(self.why("open", highlighted=[2], pending={"HCR-00002-001": "Checking in 1 part"}), "")
 
 
+class DocumentWords(unittest.TestCase):
+    """The shared actions say "document" when every number they act on is a document's."""
+
+    def test_messages_name_documents(self):
+        from litterbox.core.doc_number import DocNumber
+        from litterbox.core.part_number import PN
+        from litterbox.gui.logic import checkin_text
+        from litterbox.gui.logic import confirmations
+        from litterbox.gui.logic import job_text
+        docs = [DocNumber("PROP", 1), DocNumber("PROP", 2)]
+        self.assertTrue(action_rules.are_documents(docs))
+        self.assertFalse(action_rules.are_documents(docs + [PN("HCR", 1, 1)]))
+        self.assertFalse(action_rules.are_documents([]))
+        self.assertEqual(action_rules.summary("checkout", 1, documents=True), "Checked out 1 document")
+        self.assertEqual(action_rules.summary("checkout", 2), "Checked out 2 parts")
+        self.assertEqual(job_text.job_label("release", 2, True), "Releasing 2 documents")
+        self.assertIn("these documents", checkin_text.undo_prompt(docs))
+        self.assertIn("Void these 2 documents?", confirmations.void_many_confirm_text(docs))
+        plan = action_rules.plan_action("edit", docs, {})
+        self.assertEqual(plan.message, "Select just one document to edit the details of.")
+
+
 if __name__ == "__main__":
     unittest.main()

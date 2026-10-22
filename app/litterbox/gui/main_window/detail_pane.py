@@ -154,10 +154,12 @@ class DetailPane:
                 removable = bom_text.removable(found) if mode != bom.FLAT else {}
                 outdated = rev in record.references_outdated or rev in reference_queries.needs_update(repo, record)
                 counts_outdated = rev in reference_queries.bom_needs_update(repo, record)
+                cost = bom.cost_summary(records, pn, rev) if found else None
                 if not (outdated or counts_outdated):
-                    return bom_text.table(found, mode), bom_text.note(found, assembly), False, editable, removable
+                    return (bom_text.table(found, mode), bom_text.note(found, assembly, cost=cost), False, editable,
+                            removable)
                 installed = reference_reader.can_start_solidworks()
-                note = bom_text.note(found, True, outdated, counts_outdated)
+                note = bom_text.note(found, True, outdated, counts_outdated, cost)
                 if not installed:
                     note += " " + bom_text.update_button_text(False)
                 return bom_text.table(found, mode), note, installed, editable, removable

@@ -9,10 +9,12 @@ from tkinter import messagebox
 
 from litterbox import version
 from litterbox.core.part_number import parse as parse_pn
+from litterbox.git import vault_size
 from litterbox.gui.dialogs import legend_dialog
 from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import org_menu
 from litterbox.gui.logic import ui_scale
+from litterbox.gui.logic import vault_size_text
 from litterbox.gui.widgets import menu_bar
 
 # The menus beside the everyday buttons: (label, App method). The labels are action_rules.BUTTON_ACTIONS keys where
@@ -119,6 +121,7 @@ class Menus:
         menu.add_command(label="Refresh", accelerator="F5", command=self.refresh)
         menu.add_command(label="Get Latest", command=self.get_latest)
         menu.add_command(label="Download All...", command=self.download_all)
+        menu.add_command(label="Vault Size...", command=self.show_vault_size)
         menu.add_command(label="Update file rules...", command=self.update_file_rules,
                          state="normal" if self.file_rules_outdated else "disabled")
         menu.add_separator()
@@ -165,6 +168,15 @@ class Menus:
         menu.add_command(label="Check for updates...", command=self.check_for_updates)
         menu.add_separator()
         menu.add_command(label="About Litterbox", command=self.show_about)
+
+    def show_vault_size(self):
+        """Vault > Vault Size...: how much the vault's history and Git LFS files take up, measured in the
+        background (git/vault_size.py)."""
+        repo = self.repo()
+        self.run_task(lambda: vault_size.measure(repo), "",
+                      on_success=lambda size: messagebox.showinfo("Vault Size", vault_size_text.size_text(size),
+                                                                  parent=self),
+                      refresh=False, is_refresh=True, label="Measuring the vault")
 
     def show_about(self):
         messagebox.showinfo("About Litterbox", f"Litterbox {version.display()}\n\nShared vault check-in / check-out "

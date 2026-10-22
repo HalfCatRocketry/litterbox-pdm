@@ -280,7 +280,7 @@ class DocumentActions:
         if not templates or directory is None or me is None:
             messagebox.showinfo("Remove link", f"Taking a document off a released part needs sign-offs, but this "
                                                f"vault has no {workflow_templates.label_of(action)} workflow. Ask an "
-                                               "Admin to add one (Team > Workflows...).", parent=self)
+                                               "Admin to add one (Team > Doc Workflows...).", parent=self)
             return
         chosen = request_dialog.WorkflowRequestDialog(self, action, [(pn, row.name)], templates, directory,
                                                       me.id).show()

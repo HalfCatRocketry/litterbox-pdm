@@ -222,12 +222,15 @@ class TeamAdmin:
 
         self.run_task(plan, "", on_success=ask, refresh=False, label="Working out which parts change")
 
-    def edit_workflow(self, window):
+    def edit_workflow(self, window, documents=False):
+        """Team > Part Workflows... (or, with documents=True, Doc Workflows...): the sign-off templates of the parts'
+        actions or the documents' own, staged in the Team screen's draft."""
         if not self._may("manage_workflows") or window.draft is None:
             return
         draft = window.draft
+        title = "Doc Workflows" if documents else "Part Workflows"
         if not draft.directory.roles:
-            messagebox.showinfo("Workflows", "This org has no roles yet. Add some in Team > Roles... first.",
+            messagebox.showinfo(title, "This org has no roles yet. Add some in Team > Roles... first.",
                                 parent=window)
             return
 
@@ -254,7 +257,9 @@ class TeamAdmin:
             window.reload()
             return ""
 
-        workflows_dialog.WorkflowsDialog(window, draft.directory.roles, draft.templates, apply=apply).show()
+        actions = workflow_templates.DOCUMENT_ACTIONS if documents else workflow_templates.PART_ACTIONS
+        workflows_dialog.WorkflowsDialog(window, draft.directory.roles, draft.templates, apply=apply, actions=actions,
+                                         title=title).show()
 
     def save_team(self, window):
         """The Team screen's Save: upload every staged change in one go."""

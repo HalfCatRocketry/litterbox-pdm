@@ -23,6 +23,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,7 +40,21 @@ PRT = "cad/HCR-00001-001_A.SLDPRT"
 DRW = "cad/HCR-00001-001_A.SLDDRW"
 REC = "PN-logs/HCR-00001-001.yaml"
 
-SKIP_ON_WINDOWS = unittest.skipIf(os.name == "nt", "uses a fake git-lfs script; run on Linux, macOS or WSL")
+# The git tests take a long time, so on Windows they run only when asked: set LITTERBOX_GIT_TESTS=1 (Git for Windows
+# runs the fake git-lfs through its own sh, with the python3 wrapper setUp puts beside it).
+SKIP_ON_WINDOWS = unittest.skipIf(os.name == "nt" and os.environ.get("LITTERBOX_GIT_TESTS") != "1",
+                                  "a git test: set LITTERBOX_GIT_TESTS=1 to run it on Windows (slow)")
+
+
+def install_fake_lfs(bin_dir):
+    """Put the fake git-lfs in `bin_dir` (which goes first on PATH). On Windows, Git runs it through its own sh, and
+    its #!/usr/bin/env python3 line needs a python3 there: a small one beside it runs this Python."""
+    shim = Path(bin_dir) / "git-lfs"
+    shutil.copy(SHIM, shim)
+    shim.chmod(0o755)
+    if os.name == "nt":
+        python3 = Path(bin_dir) / "python3"
+        python3.write_text(f'#!/bin/sh\nexec "{Path(sys.executable).as_posix()}" "$@"\n', newline="\n")
 
 
 def git(folder, *args):
@@ -67,9 +82,7 @@ class TwoUserVault:
         # Put the fake git-lfs first on PATH so `git lfs ...` finds it.
         bin_dir = root / "bin"
         bin_dir.mkdir()
-        shim = bin_dir / "git-lfs"
-        shutil.copy(SHIM, shim)
-        shim.chmod(0o755)
+        install_fake_lfs(bin_dir)
         saved_env = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved_env)))
         os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"

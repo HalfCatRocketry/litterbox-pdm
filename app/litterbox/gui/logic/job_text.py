@@ -12,9 +12,10 @@ PROGRESS = {        # what the banner says while a job runs: "<progress> 3 parts
 }
 
 
-def job_label(action, count):
-    """'Checking in 3 parts' (or 'Checking in HCR-00007-001' is left to the caller for one part's name)."""
-    return f"{PROGRESS.get(action, 'Working on')} {action_rules.parts_text(count)}"
+def job_label(action, count, documents=False):
+    """'Checking in 3 parts' (or '3 documents'; 'Checking in HCR-00007-001' is left to the caller for one part's
+    name)."""
+    return f"{PROGRESS.get(action, 'Working on')} {action_rules.parts_text(count, documents)}"
 
 
 def busy_state_text(state, label):

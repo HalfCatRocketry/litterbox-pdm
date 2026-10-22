@@ -7,3 +7,5 @@ __pycache__/
 # PyInstaller output (see packaging/litterbox.spec)
 build/
 dist/
+# tools/run_tests.py remembers how long each test class took
+tools/.test_times.json

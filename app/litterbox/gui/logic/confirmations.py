@@ -5,6 +5,8 @@ Revise, Cancel Revision and Edit Details.
 
 from pathlib import PurePosixPath
 
+from litterbox.gui.logic import action_rules
+
 
 def make_cots_problem_text(pn, problems):
     return f"{pn} can't be made COTS yet:\n\n" + "\n".join("- " + p for p in problems)
@@ -45,11 +47,14 @@ def _skipped_text(bad, verb):
 
 
 def release_many_confirm_text(good, bad=()):
-    """The question asked before releasing several parts at once. `good` are the plans that can go ahead."""
+    """The question asked before releasing several parts (or documents) at once. `good` are the plans that can go
+    ahead."""
     listing = "\n".join(f"  {plan.pn}  {plan.name}  ({len(plan.files)} file{'s' if len(plan.files) != 1 else ''})"
                         for plan in good)
-    text = (f"Release these {len(good)} parts?\n\n{listing}\n\nTheir CAD files will be frozen. Nobody will be "
-            "able to check them out unless they are unreleased.")
+    documents = action_rules.are_documents(plan.pn for plan in good)
+    text = (f"Release these {action_rules.parts_text(len(good), documents)}?\n\n{listing}\n\n"
+            f"Their {'' if documents else 'CAD '}files will be frozen. Nobody will be able to check them out unless "
+            "they are unreleased.")
     warned = [plan for plan in good if plan.warnings]
     if warned:
         text += ("\n\nWARNING - the parts these use are not all final:\n" + "\n".join(
@@ -68,7 +73,7 @@ def make_cots_many_confirm_text(good, bad=()):
 
 def void_many_confirm_text(pns):
     listing = "\n".join("  " + str(pn) for pn in pns)
-    return (f"Void these {len(pns)} parts?\n\n{listing}\n\nTheir numbers will never be used again, and they can't be "
+    return (f"Void these {action_rules.parts_text(len(pns), action_rules.are_documents(pns))}?\n\n{listing}\n\nTheir numbers will never be used again, and they can't be "
             "checked out.")
 
 
@@ -128,10 +133,12 @@ def cancel_problem_text(pn, problems):
 
 def cancel_confirm_text(plan):
     kept = "\n".join("  " + PurePosixPath(new).name for _old, new in plan.moves) or "  (no files)"
+    documents = action_rules.are_documents([plan.pn])
     return (f"Cancel Rev {plan.revision} of {plan.pn} ({plan.name})?\n\n"
             f"Its files are not deleted. They are kept in the cancelled-revs folder as:\n{kept}\n\n"
-            f"The part goes back to Rev {plan.back_to}, and the letter {plan.revision} will not be used again. "
-            f"Any assembly that already uses Rev {plan.revision} will lose it.")
+            f"The {'document' if documents else 'part'} goes back to Rev {plan.back_to}, and the letter "
+            f"{plan.revision} will not be used again."
+            + ("" if documents else f" Any assembly that already uses Rev {plan.revision} will lose it."))
 
 
 def release_confirm_text(plan):

@@ -23,7 +23,7 @@ VIEW_ICONS = {"All": "list", "Mine": "pencil", "Checked out": "padlock", "Releas
               "Not downloaded": "cloud", "Void": "ban"}
 
 
-SCREENS = (("tasks", "Workflows", "tasks"), ("ecos", "ECO", "document"), ("documents", "Documents", "list"))
+SCREENS = (("tasks", "Workflows", "tasks"), ("ecos", "ECOs", "document"), ("documents", "Documents", "list"))
 
 
 NAV_ICON = 18                   # the sidebar's icons, at 100%

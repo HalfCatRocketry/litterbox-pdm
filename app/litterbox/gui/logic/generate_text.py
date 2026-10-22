@@ -100,6 +100,13 @@ def done_text(result):
     return text + (f", {len(result.failed)} failed" if result.failed else "")
 
 
+def boms_saved_text(boms):
+    """The status line after BOMs were saved with a release: [(pn, vault path)]."""
+    if len(boms) == 1:
+        return f"Saved the BOM of {boms[0][0]} with its release ({boms[0][1].rsplit('/', 1)[-1]})"
+    return f"Saved the BOMs of {len(boms)} assemblies with their release"
+
+
 def saved_text(folder, made):
     """The status line after saving files to a folder outside Litterbox (a step_pdf.Made)."""
     count = sum(len(files) for files in made.made.values())

@@ -88,6 +88,10 @@ def main(argv=None, prog=None):
                     return
                 lifecycle.release(args.repo, args.pn)
                 files = generate_files.after_release(args.repo, [args.pn])
+                for _pn, path in files.boms:
+                    print(f"Saved the BOM with the release: {path}")
+                for _pn, why in files.bom_failed:
+                    print(f"The BOM was not saved with the release ({why}).")
                 for _pn, names in files.done:
                     print("Made " + ", ".join(names))
                 for _pn, why in files.failed:

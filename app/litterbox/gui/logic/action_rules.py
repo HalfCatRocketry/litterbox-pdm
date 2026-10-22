@@ -5,6 +5,7 @@ of a click (ticked parts, or the highlighted row for view-only actions), and the
 
 from dataclasses import dataclass, field
 
+from litterbox.core.doc_number import DocNumber
 from litterbox.errors import LitterboxError
 
 
@@ -87,10 +88,11 @@ def plan_action(action, selected, rows_by_pn, pending=None):
     job that is queued or running for it: a part with a job in progress can't have anything else done to it yet
     (except looking at it).
     """
+    noun = "document" if are_documents(selected) else "part"
     if not selected:
         return ActionPlan(message="Select a part first (use its box on the left)." if action not in VIEW_ONLY else "Click a part first.")
     if action not in MULTI and len(selected) > 1:
-        return ActionPlan(message=f"Select just one part to {NAME[action]}.")
+        return ActionPlan(message=f"Select just one {noun} to {NAME[action]}.")
 
     targets, skipped = [], []
     for pn in selected:
@@ -108,7 +110,7 @@ def plan_action(action, selected, rows_by_pn, pending=None):
             pn, reason = skipped[0]
             plan.message = f"Can't {NAME[action]} {pn}: {reason}."
         else:
-            plan.message = f"None of the selected parts can be used to {NAME[action]}."
+            plan.message = f"None of the selected {noun}s can be used to {NAME[action]}."
     return plan
 
 
@@ -207,18 +209,25 @@ def run_batch(targets, func):
     return done, failed
 
 
-def parts_text(count):
-    return f"{count} part" + ("" if count == 1 else "s")
+def are_documents(numbers):
+    """True when every number is a document's (PROP-0001), so messages say "document" rather than "part"."""
+    numbers = list(numbers)
+    return bool(numbers) and all(isinstance(number, DocNumber) for number in numbers)
 
 
-def summary(action, done, failed=0, skipped=0):
-    """One line saying what just happened, e.g. 'Checked out 2 parts, 1 failed'."""
+def parts_text(count, documents=False):
+    """'1 part', '3 parts' (or '3 documents')."""
+    return f"{count} {'document' if documents else 'part'}" + ("" if count == 1 else "s")
+
+
+def summary(action, done, failed=0, skipped=0, documents=False):
+    """One line saying what just happened, e.g. 'Checked out 2 parts, 1 failed' (or '2 documents')."""
     if done:
-        text = f"{PAST[action]} {parts_text(done)}"
+        text = f"{PAST[action]} {parts_text(done, documents)}"
         if failed:
             text += f", {failed} failed"
     else:
-        text = f"Could not {NAME[action]} {parts_text(failed or skipped or 1)}"
+        text = f"Could not {NAME[action]} {parts_text(failed or skipped or 1, documents)}"
     if skipped and done:
         text += f", skipped {skipped}"
     return text
