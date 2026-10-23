@@ -60,7 +60,7 @@ The few imports that go up a layer are listed, each with its reason, in `KNOWN_E
 | All tests, on Windows | from `app/`: `python -m unittest discover -s tests -t .` (the git tests are skipped on Windows) |
 | All tests, in parallel | `python tools/run_tests.py` from the repository root: each test class in a process of its own, half the cores at once, slowest first (by the last run's times, in `tools/.test_times.json`); a class that last took over a minute runs a test per process (`--split-over`); `tests.parts` (and so on) to run only some; `--jobs` to choose how many at once |
 | All tests, everything | `python tools/run_tests.py --git` (the git tests too, on Windows); one at a time, the same as the first row with `LITTERBOX_GIT_TESTS=1` set, takes about 40 minutes |
-| On GitHub | `tests.yml` runs everything on Linux on every push to a branch (`tools/run_tests.py --jobs 8`); `release.yml` calls it before building |
+| On GitHub | `tests.yml` runs everything on Linux on every push to a branch; `release.yml` calls it before building |
 | The build | `python app/main.py --self-test` (the release pipeline runs it on the built program) |
 
 - **Git tests** use a real bare "remote" with two clones (Alex and Bea, `tests/support/vault_fixture.py`) and a fake

@@ -40,10 +40,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: python packaging/check_version.py ${{ github.ref_name }}
 
-      - name: Run the tests on Windows too (informational)
-        # Many tests are skipped on Windows (see the test job above), but the rest catch Windows-only problems, such
-        # as how paths and line endings behave. Once this is green, delete the next line so it blocks a release too.
-        continue-on-error: true
+      - name: Run the tests on Windows too
+        # Many tests are skipped on Windows (the git tests need the Linux job), but the rest catch Windows-only
+        # problems, such as how paths and line endings behave. A failure stops the release, as on Linux.
         working-directory: app
         env:
           PYTHONPATH: "."
