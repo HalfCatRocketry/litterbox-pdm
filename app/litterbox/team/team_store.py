@@ -89,8 +89,10 @@ def edit_directory(repo, change, message, action="manage_people"):
     return shared_files.edit(repo, [layout.PEOPLE_FILE, layout.ALLOWED_SIGNERS_FILE], "the people file", make_change)
 
 
-def check_before_push(repo):
-    """Before a push: get the vault's latest people file and make sure it still lets this user push.
+def check_before_push(repo, fetch=True):
+    """Before a push: get the vault's latest people file and make sure it still lets this user push (and, if the
+    vault requires it, that every commit to upload is signed by a key on the team list). fetch=False when a sync has
+    just fetched (guarded_push does that).
 
     This is how "you were switched off while you were away" is caught: the commits you made offline are
     not uploaded, and you are told why. A vault with no people file is not checked.
@@ -98,7 +100,8 @@ def check_before_push(repo):
     if load(repo) is None:
         return
     try:
-        runner.run(["git", "fetch"], repo, quiet=True)
+        if fetch:
+            runner.run(["git", "fetch"], repo, quiet=True)
         text = runner.run(["git", "show", f"@{{u}}:{layout.PEOPLE_FILE}"], repo, quiet=True)
     except LitterboxError:
         return                                  # offline, or the vault has no people file yet: git will say if the push fails
