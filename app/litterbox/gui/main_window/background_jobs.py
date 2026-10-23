@@ -20,7 +20,8 @@ from litterbox.user import settings
 
 
 class BackgroundJobs:
-    """running work in the background so the window never freezes: the job queue, (a part of the main window, App)."""
+    """Running work in the background so the window never freezes: the job queue, its results and its errors. One part
+    of the main window (App)."""
 
     def _watch_for_freezes(self, last=None):
         """Every quarter second; if the window was too busy to run this on time, say so in the log."""

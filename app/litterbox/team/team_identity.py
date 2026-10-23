@@ -112,7 +112,7 @@ def probe_host_name(repo, attempts=5):
     if not (Path(repo) / layout.WHOAMI_FILE).is_file():
         raise team_model.PeopleError(f"{layout.WHOAMI_FILE} is missing from the vault. Run Get Latest, or set up the team again.")
     last = None
-    for attempt in range(attempts):
+    for _attempt in range(attempts):
         try:
             lfs_locks.run_lfs(["git", "lfs", "lock", layout.WHOAMI_FILE], repo, quiet=True)
             break

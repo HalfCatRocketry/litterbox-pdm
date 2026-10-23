@@ -13,7 +13,7 @@ from litterbox.parts import planning
 
 
 class ReleaseActions:
-    """Release, Make COTS, Unrelease (reopen) and Void, with their confirmations. (a part of the main window, App)."""
+    """Release, Make COTS, Unrelease (reopen) and Void, with their confirmations. One part of the main window (App)."""
 
     def release(self):
         plan = self._plan("release")

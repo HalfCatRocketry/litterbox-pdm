@@ -28,10 +28,8 @@ class ExportFilesDialog(modal_dialog.ModalDialog):
         self.choices = list(choices or [("Latest released", part_files_export.RELEASED),
                                         ("Working", part_files_export.WORKING)])
         width, height = 520, 470
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title("Export Files")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

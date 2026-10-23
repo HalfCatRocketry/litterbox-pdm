@@ -35,7 +35,7 @@ FIRST_COLUMN = "#0"             # the tick box and status icon
 
 
 class PartsList:
-    """the parts list (a part of the main window, App)."""
+    """The parts list. One part of the main window (App)."""
 
     doc_rows = ()           # every document's PartStatus (they share rows_by_pn with the parts, see _index_rows)
     _acting_on = None       # the parts or documents act_on() points the actions at, while it runs

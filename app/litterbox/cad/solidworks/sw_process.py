@@ -4,7 +4,6 @@ sure it exits when Litterbox is done with it.
 """
 
 
-
 def solidworks_installed():
     """Is SolidWorks installed on this computer (can Litterbox start it)? Looks for its program registration
     in the Windows registry; False on any other system."""

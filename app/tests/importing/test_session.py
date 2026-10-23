@@ -330,8 +330,8 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             names = [e.name for e in prepared.proposal.entries]
             for entry in prepared.proposal.entries:
                 entry.item.files[0].sha256 = ""                 # as if the scan hadn't read them
-            real_sha256, read = import_duplicates._sha256, []
-            with mock.patch.object(import_duplicates, "_sha256", lambda path: read.append(Path(path).name) or real_sha256(path)):
+            real_hash, read = scan.hash_file, []
+            with mock.patch.object(scan, "hash_file", lambda path: read.append(Path(path).name) or real_hash(path)):
                 found = import_duplicates.find_duplicates(self.a, prepared)
         self.assertNotIn("unique.SLDPRT", read)                 # no other file has its size: never read
         row = {n: names.index(n) for n in names}

@@ -37,10 +37,8 @@ class ProjectsDialog(modal_dialog.ModalDialog):
         self.admin = legacy or project_access.overrides(person)
         self.result = None
         width, height = 640, 520
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Projects")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height, down=4)
         self.minsize(560, 400)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

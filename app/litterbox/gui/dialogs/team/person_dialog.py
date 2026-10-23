@@ -32,10 +32,8 @@ class PersonDialog(modal_dialog.ModalDialog):
         self.apply = apply          # apply(fields) -> problem text, or "" when the change was taken
         self.person, self.existing_ids = person, existing_ids
         width, height = 520, 700
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title("Add Person" if person is None else f"Edit {person.name}")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

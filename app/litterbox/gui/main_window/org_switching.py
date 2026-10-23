@@ -21,7 +21,7 @@ from litterbox.vault import create_vault
 
 
 class OrgSwitching:
-    """switching org, Add org... and Create new org... (a part of the main window, App)."""
+    """Switching org, Add org... and Create new org.... One part of the main window (App)."""
 
     @staticmethod
     def _detect_org(folder):

@@ -22,7 +22,8 @@ from litterbox.vault import config
 
 
 class DetailsActions:
-    """Edit Details, Purchasing Info and BOM lines added by hand. (a part of the main window, App)."""
+    """Edit Details, Purchasing Info, Update Material and the BOM lines added by hand. One part of the main window
+    (App)."""
 
     def add_bom_item(self, pn, then=None):
         """Add item... on the BOM tab of `pn` (an assembly you have checked out). `then()` re-reads the tab."""

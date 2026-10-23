@@ -8,18 +8,10 @@ from pathlib import Path
 
 from litterbox.git import lfs_download
 from litterbox.importing import import_paths
+from litterbox.importing import scan
 from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
-
-
-def _sha256(path):
-    import hashlib
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def find_duplicates(repo, prepared):
@@ -68,7 +60,7 @@ def find_duplicates(repo, prepared):
             if key not in wanted:
                 continue
             try:
-                hashes.setdefault(pointer[0] if pointer else _sha256(path), []).append(pn)
+                hashes.setdefault(pointer[0] if pointer else scan.hash_file(path), []).append(pn)
                 in_vault.add(key)
             except OSError:
                 continue
@@ -81,7 +73,7 @@ def find_duplicates(repo, prepared):
             continue
         main_file = entry.item.files[0]
         try:
-            digest = main_file.sha256 or _sha256(main_file.path)
+            digest = main_file.sha256 or scan.hash_file(main_file.path)
         except OSError:                                 # gone or unreadable since the scan: nothing to compare
             continue
         digests[index] = digest

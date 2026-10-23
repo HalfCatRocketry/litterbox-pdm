@@ -14,7 +14,8 @@ from litterbox.references import reference_reader
 
 
 class CheckinActions:
-    """Check In and Save Progress: the comment, parts with no changes, and (a part of the main window, App)."""
+    """Check In and Save Progress: the comment, parts with no changes, and watching the files for a save after the
+    click. One part of the main window (App)."""
 
     def _ask_comment_and_check_in(self, action, plan, allow_unchanged=frozenset()):
         """Ask for a comment, then check in (or save progress on) the planned parts."""

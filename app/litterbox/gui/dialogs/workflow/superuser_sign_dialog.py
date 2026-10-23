@@ -22,10 +22,8 @@ class SuperuserSignDialog(modal_dialog.ModalDialog):
         window_chrome.set_window_icon(self)
         self.result, self.task = None, task
         width, height = 560, 300 + 34 * len(task.superuser_slots)
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title(f"Approve as superuser: {task.label}")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.minsize(440, 260)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

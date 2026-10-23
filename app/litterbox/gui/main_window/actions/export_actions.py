@@ -21,7 +21,7 @@ from litterbox.vault import config
 
 
 class ExportActions:
-    """Export Files and Export BOM. (a part of the main window, App)."""
+    """Export Files and Export BOM. One part of the main window (App)."""
 
     def _remember_export_folder(self, folder):
         if self.settings.get(export_text.SETTING) != str(folder):

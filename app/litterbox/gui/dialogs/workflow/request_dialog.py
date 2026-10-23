@@ -62,10 +62,8 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
         self.row_vars, self.row_ids, self.extras = [], [], []
         label = workflow_templates.label_of(action)
         width, height = 1060, 800
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title(f"{label} workflow")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height, down=4)
         self.minsize(900, 620)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

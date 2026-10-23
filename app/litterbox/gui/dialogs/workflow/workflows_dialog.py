@@ -36,13 +36,11 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
         self.roles = list(roles)
         self.actions = tuple(actions)
         self.editor = workflow_editor.WorkflowEditor(templates)
-        self.selected = {action: 0 for action in self.actions}
+        self.selected = dict.fromkeys(self.actions, 0)
         self.name_vars = {}
         width, height = 820, 640
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title(title)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.minsize(720, 520)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

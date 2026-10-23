@@ -19,7 +19,7 @@ TONE_COLORS = {"normal": theme.MUTED, "warn": theme.WARN, "error": theme.ERROR}
 
 
 class StatusBar:
-    """the status bar and the log drawer (a part of the main window, App)."""
+    """The status bar and the log drawer. One part of the main window (App)."""
 
     def _build_status_bar(self):
         self.log_box = ctk.CTkTextbox(self, height=150, fg_color=theme.BG_PANEL, text_color=theme.MUTED,

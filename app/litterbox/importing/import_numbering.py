@@ -318,10 +318,10 @@ def _renumber_automatic(repo, proposal, conflicts):
     """Give every automatic row that conflicts a new, free number near the rest of the proposed block. Returns the changes."""
     if proposal.family is not None:
         return _renumber_family(repo, proposal, conflicts)
-    taken, bases = used_numbers(repo, proposal.org)
-    in_use = {e.pn.base for i, e in enumerate(proposal.entries) if i not in {c.index for c in conflicts if not c.manual}}
-    automatic = [e.pn.base for e in proposal.entries if not e.manual]
+    _taken, bases = used_numbers(repo, proposal.org)
     bad = [c for c in conflicts if not c.manual]
+    moving = {c.index for c in bad}
+    in_use = {e.pn.base for i, e in enumerate(proposal.entries) if i not in moving}
     automatic = [e.pn.base for e in proposal.entries if not e.manual]
     free = free_for(repo, proposal, bases | in_use, len(bad), min(automatic, default=None))   # near the others
     if len(free) < len(bad) and proposal.project is not None:

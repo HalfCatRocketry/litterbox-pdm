@@ -24,11 +24,9 @@ class ReassignDialog(modal_dialog.ModalDialog):
         self.result, self.task, self.directory, self.exclude = None, task, directory, set(exclude)
         self.open = [(i, s) for i, s in enumerate(task.slots) if not s["done"] and (only is None or i == only)]
         width, height = 520, 260
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         heading = "Reassign your sign-off" if only is not None else "Change who signs"
         self.title(heading)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

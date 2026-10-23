@@ -14,7 +14,7 @@ from litterbox.references import reference_rescan
 
 
 class CreateActions:
-    """New Part, New Assembly, Import and Import COTS. (a part of the main window, App)."""
+    """New Part, New Assembly, Import and Import COTS. One part of the main window (App)."""
 
     def new_assembly(self):
         """New Assembly: New Part, with the variants set aside for assemblies (from 500, or the org's choice)."""

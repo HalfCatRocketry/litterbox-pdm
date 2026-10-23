@@ -48,7 +48,7 @@ ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Chec
 
 
 class Menus:
-    """the window's menus (a part of the main window, App)."""
+    """The window's menus. One part of the main window (App)."""
 
     def _menu_flag(self, value):
         """A tick for a menu entry. Kept here, because Tk forgets a menu's tick when nothing in Python holds it."""

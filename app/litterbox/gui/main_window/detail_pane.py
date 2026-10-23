@@ -25,7 +25,7 @@ REFERENCE_TABS = ("Uses", "Where used")
 
 
 class DetailPane:
-    """the details pane (a part of the main window, App)."""
+    """The details pane beside the parts list. One part of the main window (App)."""
 
     pane_pn = None
 

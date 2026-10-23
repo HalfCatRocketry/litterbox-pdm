@@ -29,7 +29,8 @@ from litterbox.workflows import workflow_templates
 
 
 class TeamAdmin:
-    """what the Team screen's buttons do: who am I, setting up the team, people, roles, (a part of the main window, App)."""
+    """What the Team screen's buttons do: who am I, setting up the team, people, roles, settings, projects and
+    workflows. One part of the main window (App)."""
 
     def _team_windows(self):
         """The Team screen, once it has been opened (a list, so callers can loop over it)."""

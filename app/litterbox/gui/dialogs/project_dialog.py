@@ -37,10 +37,8 @@ class ProjectDialog(modal_dialog.ModalDialog):
         self.result = None
         self.members = list(project.members) if project else []
         width, height = 720, 760 if directory is not None else 330
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Project")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height, down=4)
         self.minsize(640, height if directory is None else 640)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

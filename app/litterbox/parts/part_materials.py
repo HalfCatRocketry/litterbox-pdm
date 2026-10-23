@@ -96,7 +96,7 @@ def update_materials(repo, pns, backend=None, log=print):
                      f"{pn}: Material updated") for pn, found in edits.items()])
                 errors, notice = batch.errors, batch.notice
             except LitterboxError as e:
-                errors, notice = {pn: e for pn in edits}, ""
+                errors, notice = dict.fromkeys(edits, e), ""
             if notice:
                 log(notice)
             for pn in edits:
