@@ -5,7 +5,7 @@ there is nothing to open.
 
 from pathlib import PurePosixPath
 
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.core import revision_letters
 from litterbox.gui.logic import history_text
 
@@ -37,7 +37,7 @@ def open_choices(row, drawing=False):
 
 
 def _has_drawing(files):
-    return any(PurePosixPath(f).suffix.lower() == ".slddrw" for f in files)
+    return any(file_types.is_drawing(f) for f in files)
 
 
 def pdf_choices(row):

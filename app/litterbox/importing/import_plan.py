@@ -6,8 +6,8 @@ copy them in (parts before the assemblies that use them), and where each copy go
 import os
 from dataclasses import dataclass, field
 
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import sw_errors
+from litterbox.core import file_types
+from litterbox.cad.cad_errors import CadError
 from litterbox.core import filenames
 from litterbox.core import part_number
 from litterbox.core import revision_letters
@@ -64,7 +64,7 @@ def read_references(items, backend, progress=None, cancel=None):
             continue
         try:
             refs[import_paths.path_key(path)] = (path, backend.references(path))
-        except (import_errors.ImportFailed, sw_errors.SolidWorksError):     # already says what went wrong
+        except (import_errors.ImportFailed, CadError):     # already says what went wrong
             raise
         except Exception as e:
             raise import_errors.ImportFailed(f"Could not read the references of {path}:\n{e}") from e
@@ -75,7 +75,7 @@ def _order(items, refs):
     """The original files in copy order: models before what uses them, then the drawings."""
     in_set = {import_paths.path_key(p): p for item in items for p in item_files(item)}
     models = [p for p in in_set.values() if import_paths.ext_of(p) in file_types.MODEL_EXTENSIONS]
-    drawings = [p for p in in_set.values() if import_paths.ext_of(p) == file_types.DRAWING_EXTENSION]
+    drawings = [p for p in in_set.values() if import_paths.ext_of(p) in file_types.DRAWING_EXTENSIONS]
     others = [p for p in in_set.values() if p not in models and p not in drawings]
     order, done = [], set()
 

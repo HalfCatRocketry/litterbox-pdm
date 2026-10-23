@@ -13,6 +13,8 @@ team uses the same ones):
     commit_style, release_rule, require_signatures   see their get_ functions below
     solidworks_version: 2024   the SolidWorks everyone works in (cad/solidworks_versions.py), default none (no check)
     currency: USD         the team's currency (core/currency.py): costs are shown with its symbol, default none
+    toolbox: none         the rule for SolidWorks Toolbox parts (core/toolbox_rules.py): none, team, or no line for
+                          no check
     assembly_variant_start: 500   New Assembly's variants start here, New Part's stay below it (default 5 followed
                           by zeros: 500 with 3-digit variants). An Admin can change it at any time
     projects:             blocks of part numbers set aside for projects (core/projects.py), each a name and the
@@ -36,6 +38,7 @@ from litterbox.cad import solidworks_versions
 from litterbox.core import currency as currencies
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
+from litterbox.core import toolbox_rules
 from litterbox.core.part_number import PNError, check_org
 from litterbox.records import record_migrations
 from litterbox.records import record_store
@@ -278,6 +281,22 @@ def get_currency(repo):
         return check_currency(load(repo).get("currency"))
     except ConfigError as e:
         raise ConfigError(f"currency in {layout.CONFIG_PATH}: {e}") from None
+
+
+def check_toolbox_rule(value):
+    """A Toolbox rule for the vault (core/toolbox_rules.py): OFF, NO_TOOLBOX or TEAM. Raises ConfigError."""
+    try:
+        return toolbox_rules.check(value)
+    except toolbox_rules.ToolboxRuleError as e:
+        raise ConfigError(str(e)) from None
+
+
+def get_toolbox_rule(repo):
+    """The team's rule for SolidWorks Toolbox parts: toolbox_rules.OFF (no check), NO_TOOLBOX or TEAM."""
+    try:
+        return check_toolbox_rule(load(repo).get("toolbox"))
+    except ConfigError as e:
+        raise ConfigError(f"toolbox in {layout.CONFIG_PATH}: {e}") from None
 
 
 def currency_or_none(repo):

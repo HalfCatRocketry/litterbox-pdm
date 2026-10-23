@@ -5,6 +5,7 @@ Revise, Cancel Revision and Edit Details.
 
 from pathlib import PurePosixPath
 
+from litterbox.core import file_types
 from litterbox.gui.logic import action_rules
 
 
@@ -92,8 +93,7 @@ def kind_note(row):
         return "It has been released, so its kind can't change."
     if getattr(row, "cots", False):
         return "A COTS part has a CAD model, so it stays CAD."
-    if any(str(f).lower().endswith((".sldprt", ".sldasm", ".slddrw"))
-           for files in (getattr(row, "revisions", None) or {}).values() for f in files):
+    if any(file_types.is_cad(f) for files in (getattr(row, "revisions", None) or {}).values() for f in files):
         return "It has SolidWorks files, so it stays CAD."
     return ""
 

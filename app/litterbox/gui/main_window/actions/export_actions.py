@@ -6,7 +6,7 @@ Export... button). Neither changes the vault. See exporting/.
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.errors import LitterboxError
 from litterbox.exporting import bom_csv
 from litterbox.exporting import export_folder

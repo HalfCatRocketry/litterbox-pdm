@@ -98,3 +98,8 @@ def enforce_read_only(repo, locks=None):
     if eco_folder.is_dir():
         for file in eco_folder.glob("*.yaml"):
             _set_read_only(file)
+    toolbox = Path(repo) / layout.TOOLBOX_DIR_NAME          # the team's Toolbox: only an Admin changes it
+    if toolbox.is_dir():
+        for folder, _dirs, files in os.walk(toolbox):
+            for name in files:
+                _set_read_only(Path(folder) / name)

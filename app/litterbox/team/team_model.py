@@ -25,7 +25,8 @@ READ_ACTIONS = frozenset({"open", "open_drawing", "open_pdf", "references", "his
 
 
 ADMIN_ACTIONS = frozenset({"manage_people", "manage_workflows", "manage_settings", "override_release",
-                           "break_checkout", "remake_files", "manage_doc_types", "link_released_documents"})
+                           "break_checkout", "remake_files", "manage_doc_types", "link_released_documents",
+                           "manage_toolbox"})
 
 
 OWNER_ACTIONS = frozenset({"transfer_owner", "rename_org"})

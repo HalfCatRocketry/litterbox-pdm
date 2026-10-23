@@ -13,6 +13,7 @@ from litterbox.git import lfs_locks
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
+from litterbox.parts import toolbox_check
 from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
@@ -140,6 +141,7 @@ def release_plan(repo, pn, fetch=True, allow_pending=False, ctx=None):
     cad, problems = blockers(repo, pn, record, "released", fetch, allow_pending=allow_pending, ctx=ctx)
     if record.cots:
         problems.insert(0, "It is a COTS (purchased) part, which is never released.")
+    problems.extend(toolbox_check.release_problems(repo, record, record.revision, cad))
     warnings = []
     rule = config.get_release_rule(repo)
     if rule != "off" and not record.cots:

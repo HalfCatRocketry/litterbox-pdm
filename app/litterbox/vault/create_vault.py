@@ -41,6 +41,7 @@ from litterbox import diagnostics
 from litterbox import layout
 from litterbox import version
 from litterbox.core import part_number
+from litterbox.core import toolbox_rules
 from litterbox.core.part_number import PNError, check_org
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
@@ -284,8 +285,9 @@ class _Writer:
 
 def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
            variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True, set_up_team=True, name=None, email=None,
-           min_version=version.VERSION, org_name=None, assembly_variant_start=None):
-    """Turn the empty cloned repository in `folder` into a Litterbox vault. Returns an InitResult.
+           min_version=version.VERSION, org_name=None, assembly_variant_start=None, toolbox=toolbox_rules.NO_TOOLBOX):
+    """Turn the empty cloned repository in `folder` into a Litterbox vault. Returns an InitResult. A new vault takes
+    no Toolbox parts (core/toolbox_rules.py), as the user guide advises; an Admin can change that in Vault Settings.
 
     Raises InitError if there are problems (nothing is changed), or if a step fails (everything is undone)."""
     checked = plan(folder, org, start_number, base_digits, variant_digits, push, assembly_variant_start)
@@ -324,7 +326,8 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
         config_write.save(repo, org=org, start_number=start_number, base_digits=base_digits,
                     variant_digits=variant_digits, org_name=org_name)
         config_write.set_values(repo, assembly_variant_start=(
-            config.default_assembly_variant(variant_digits) if assembly_variant_start is None else assembly_variant_start))
+            config.default_assembly_variant(variant_digits) if assembly_variant_start is None else assembly_variant_start),
+            toolbox=toolbox)
         config_write.stamp(repo, min_version=min_version)
 
         paths = writer.paths

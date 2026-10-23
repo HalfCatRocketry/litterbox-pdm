@@ -8,8 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox import diagnostics
-from litterbox.cad.solidworks import com
-from litterbox.cad.solidworks import sw_backend
+from litterbox.cad import cad_programs
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
@@ -93,11 +92,11 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     locked, journal = [], None
     owns_backend = backend is None
     if owns_backend:
-        backend = sw_backend.SolidWorksBackend()
+        backend = cad_programs.Backends()
     pushed = False
     kept = []
     try:
-        with com.com_thread():
+        with cad_programs.session():
             lfs_locks.lock(repo, record_path, pn)
             locked.append(record_path)
             remote.pull(repo)

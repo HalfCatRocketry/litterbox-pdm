@@ -1,6 +1,7 @@
 """
 vault_settings_dialog.py - Vault Settings (Admin and Owner): the org name (Owner only), commit style, release rule,
-signed commits, the variant assemblies start at, the SolidWorks version everyone works in, and the team's currency.
+signed commits, the variant assemblies start at, the SolidWorks version everyone works in, the team's currency, and
+the rule for SolidWorks Toolbox parts (core/toolbox_rules.py).
 """
 
 import datetime
@@ -16,6 +17,7 @@ from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import release_button
 from litterbox.cad import solidworks_versions
 from litterbox.core import currency
+from litterbox.core import toolbox_rules
 from litterbox.vault import config
 
 ANY_VERSION = "Any version (no check)"
@@ -24,7 +26,7 @@ NO_CURRENCY = "None (numbers only)"
 
 class VaultSettingsDialog(modal_dialog.ModalDialog):
     """The vault's shared settings, as one dict: org_name, commit_style, release_rule, require_signatures,
-    assembly_variant_start, solidworks_version and currency (see config.py). show() gives the chosen values or None; org_name is
+    assembly_variant_start, solidworks_version, currency and toolbox (see config.py). show() gives the chosen values or None; org_name is
     only among them when may_rename (the Owner), otherwise it is shown but can't be edited. `installed` is the year
     of this computer's SolidWorks (None without one), shown under the SolidWorks choice."""
 
@@ -105,15 +107,28 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         chosen_currency = current.get("currency")
         self.currency_var = tk.StringVar(value=currency.label(chosen_currency) if chosen_currency in currency.BY_CODE
                                          else NO_CURRENCY)
-        ctk.CTkLabel(self, text="The team's currency:", anchor="w").grid(row=row, column=0, sticky="ew", padx=20,
-                                                                       pady=(10, 0))
-        ctk.CTkOptionMenu(self, variable=self.currency_var, values=list(self.currencies), width=510,
+        pair = ctk.CTkFrame(self, fg_color="transparent")          # the currency and the Toolbox rule, side by side
+        pair.grid(row=row, column=0, sticky="ew", padx=20, pady=(10, 0))
+        pair.columnconfigure((0, 1), weight=1, uniform="p")
+        ctk.CTkLabel(pair, text="The team's currency:", anchor="w").grid(row=0, column=0, sticky="ew")
+        ctk.CTkOptionMenu(pair, variable=self.currency_var, values=list(self.currencies), width=240,
                           fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
-            row=row + 1, column=0, padx=20, pady=(4, 0), sticky="w")
-        ctk.CTkLabel(self, text="Costs show its symbol ($12.50). Changing it doesn't convert unit costs.",
-                     anchor="w", justify="left", wraplength=510,
-                     text_color=theme.MUTED).grid(row=row + 2, column=0, sticky="ew", padx=20, pady=(4, 0))
-        row += 3
+            row=1, column=0, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(pair, text="Costs show its symbol ($12.50). Changing it doesn't convert unit costs.",
+                     anchor="w", justify="left", wraplength=240,
+                     text_color=theme.MUTED).grid(row=2, column=0, sticky="new", pady=(4, 0), padx=(0, 10))
+        self.toolbox_choices = {(label + " (default)" if rule == toolbox_rules.OFF else label): rule
+                                for rule, label in toolbox_rules.LABELS.items()}
+        names = {rule: label for label, rule in self.toolbox_choices.items()}
+        self.toolbox_var = tk.StringVar(value=names.get(current.get("toolbox") or "", next(iter(self.toolbox_choices))))
+        ctk.CTkLabel(pair, text="SolidWorks Toolbox parts:", anchor="w").grid(row=0, column=1, sticky="ew")
+        ctk.CTkOptionMenu(pair, variable=self.toolbox_var, values=list(self.toolbox_choices), width=240,
+                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
+            row=1, column=1, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(pair, text="Check In and Release refuse an assembly that breaks it. The team's Toolbox is in "
+                                "Team > Toolbox....", anchor="w", justify="left", wraplength=240,
+                     text_color=theme.MUTED).grid(row=2, column=1, sticky="new", pady=(4, 0))
+        row += 1
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=row, column=0, sticky="ew", padx=20, pady=(14, 16))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
@@ -128,6 +143,7 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
         result["solidworks_version"] = self.versions.get(self.version_var.get())
         result["currency"] = self.currencies.get(self.currency_var.get())
+        result["toolbox"] = self.toolbox_choices.get(self.toolbox_var.get(), toolbox_rules.OFF)
         if self.may_rename:
             try:
                 result["org_name"] = config.check_org_name(self.name_var.get())

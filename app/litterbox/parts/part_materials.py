@@ -9,8 +9,8 @@ skipped; one you have checked out is changed in your copy and goes up with your 
 changed under a lock and uploaded together.
 """
 
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import com
+from litterbox.core import file_types
+from litterbox.cad import cad_programs
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
@@ -30,12 +30,12 @@ EVENT = "material_updated"
 def part_revisions(revisions):
     """{revision: [files]} of the revisions that have a part file."""
     return {rev: files for rev, files in revisions.items()
-            if any(file_types.extension(f) == file_types.PART_EXTENSION for f in files)}
+            if any(file_types.extension(f) in file_types.PART_EXTENSIONS for f in files)}
 
 
 def _read(repo, pn, revisions, backend):
     found = {}
-    with com.com_thread():
+    with cad_programs.session():
         for revision, files in revisions.items():
             lfs_download.download(repo, files, f"files of {pn} Rev {revision}")   # SolidWorks reads the file itself
             found[revision] = reference_reader.read_part_material(repo, pn, revision, backend, files) or ""

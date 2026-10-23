@@ -6,8 +6,8 @@ released revision of the parts they use. Released assemblies are frozen: to chan
 import os
 from dataclasses import dataclass, field
 
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import com
+from litterbox.core import file_types
+from litterbox.cad import cad_programs
 from litterbox.core import filenames
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
@@ -93,7 +93,7 @@ def replace_references(repo, replacements, comment="Updated to the latest releas
         if owns_backend and by_parent:
             backend = reference_reader.new_backend()
         reader = reference_reader.make_reader(backend, log)
-        with com.com_thread():
+        with cad_programs.session():
             _replace_in_all(repo, by_parent, comment, backend, reader, log, results)
     finally:
         if owns_backend and backend is not None:

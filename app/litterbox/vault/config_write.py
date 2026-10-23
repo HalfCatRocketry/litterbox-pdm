@@ -10,6 +10,7 @@ import yaml
 from litterbox import version
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
+from litterbox.core import toolbox_rules
 from litterbox.core.part_number import check_org
 from litterbox.records import record_store
 from litterbox.vault import config
@@ -61,6 +62,13 @@ def set_values(repo, **values):
                 data.pop(key, None)
             else:
                 data[key] = code                     # older Litterbox keeps it without using it
+        elif key == "toolbox":
+            rule = config.check_toolbox_rule(value)
+            if rule == toolbox_rules.OFF:
+                data.pop(key, None)
+            else:
+                data[key] = rule
+                _require_at_least(data, toolbox_rules.MIN_LITTERBOX)     # older Litterbox would check in anything
         elif key == "assembly_variant_start":
             data[key] = config.check_assembly_variant(value, config.get_digits(repo)[1])
         elif key == "projects":

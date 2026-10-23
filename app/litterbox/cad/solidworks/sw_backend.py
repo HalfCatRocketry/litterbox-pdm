@@ -1,7 +1,8 @@
 """
-sw_backend.py - SolidWorks as the importer, Revise, Update references and Generate STEP/PDF use it: read a
-file's references, list an assembly's components (to count them), read a part's material, copy a file with its
-references updated (Pack and Go), point a file at a different one, save a STEP or PDF of it (sw_saving.py), close.
+sw_backend.py - SolidWorks as the importer, Revise, Update references and Generate STEP/PDF use it (the backend of
+cad/cad_program.py): read a file's references, list an assembly's components (to count them, and to find its Toolbox
+parts), read a part's material, copy a file with its references updated (Pack and Go), point a file at a different
+one, save a STEP or PDF of it (sw_saving.py), close.
 
 Through COM, so on one thread only (see importing/session.py and com.com_thread).
 """
@@ -11,17 +12,15 @@ import os
 import shutil
 
 from litterbox import diagnostics
+from litterbox.cad.cad_program import COUNTED, EXCLUDED, SUPPRESSED
 from litterbox.cad.solidworks import sw_errors
 from litterbox.cad.solidworks import sw_process
 from litterbox.cad.solidworks import sw_saving
 
 
-# What an assembly's component is, for counting (components())
-COUNTED, SUPPRESSED, EXCLUDED = "counted", "suppressed", "excluded"
-
-
 DOC_PART, DOC_ASSEMBLY = 1, 2       # swDocumentTypes_e
 OPEN_SILENT, OPEN_READ_ONLY = 1, 2  # swOpenDocOptions_e
+TOOLBOX_STANDARD_PART = 1           # swToolBoxPartType_e: 0 not a Toolbox part, 1 a Toolbox part, 2 one copied from it
 
 
 def full_path(path):
@@ -77,6 +76,7 @@ class SolidWorksBackend:
 
     references(path)         [(stored, found)] for the file's direct references
     components(path)         [(file, COUNTED / SUPPRESSED / EXCLUDED)] for an assembly's top-level components
+    library_components(path) the files of an assembly's top-level components that are Toolbox parts
     material(path)           a part's material in its active configuration ('' for none)
     copy(src, dst)           copy a file on disk (nothing needs to be open)
     repoint(file, old, new)  change one reference inside the NEW file
@@ -90,6 +90,7 @@ class SolidWorksBackend:
         self._started_by_us = False
         self._pid = None                    # the process of a SolidWorks we started, learned while it is alive
         self.attach_only = attach_only      # True: use a SolidWorks that is already running, never start one
+        self._components = {}               # full path: (its modification time, _read_components)
 
     def _app(self):
         if self._sw is None:
@@ -151,15 +152,44 @@ class SolidWorksBackend:
     def components(self, path):
         """One (file, state) per component at the top of an assembly, one entry for each copy (see _opened). A
         component whose file can't be found is reported as suppressed."""
+        return [(file, state) for file, state, _toolbox in self._read_components(path)]
+
+    def library_components(self, path):
+        """The files of an assembly's top-level components that are Toolbox parts (see _opened): those whose model
+        says it is a Toolbox part (ModelDocExtension.ToolboxPartType 1; a part copied from Toolbox, 2, is a part of
+        its own). A component with no model loaded (suppressed, or its file missing) can't say, and is left out.
+        Tried with SolidWorks 2024: a socket head cap screw from Toolbox gives 1, an ordinary part 0. The file is
+        where SolidWorks loaded it, which for a Toolbox part is always the Toolbox folder this computer's SolidWorks
+        is set to use (Toolbox Data Location), whatever folder the assembly was saved with."""
+        return [file for file, _state, toolbox in self._read_components(path) if toolbox]
+
+    def _read_components(self, path):
+        """[(file, state, is a Toolbox part)] for an assembly's top-level components, read with one opening of the
+        assembly and kept while the file is unchanged (check-in asks for both the counts and the Toolbox parts)."""
         from litterbox.cad.solidworks import com
+        try:
+            stamp = os.stat(path).st_mtime_ns
+        except OSError:
+            stamp = None
+        kept = self._components.get(full_path(path))
+        if kept is not None and stamp is not None and kept[0] == stamp:
+            return kept[1]
         with self._opened(path, DOC_ASSEMBLY) as model:
             found = []
             for component in com.call(model, "GetComponents", True) or []:
+                try:
+                    doc = com.call(component, "GetModelDoc2")
+                    kind = com.call(com.call(doc, "Extension"), "ToolboxPartType") if doc is not None else 0
+                except Exception:
+                    kind = 0
                 found.append((str(com.call(component, "GetPathName") or ""),
                               component_state(com.call(component, "IsSuppressed"),
                                               com.call(component, "ExcludeFromBOM"),
-                                              com.call(component, "IsEnvelope"))))
-            return found
+                                              com.call(component, "IsEnvelope")),
+                              kind == TOOLBOX_STANDARD_PART))
+        if stamp is not None:
+            self._components[full_path(path)] = (stamp, found)
+        return found
 
     def material(self, path):
         """A part's material in its active configuration, as SolidWorks shows it ('Chrome Stainless Steel'), or ''

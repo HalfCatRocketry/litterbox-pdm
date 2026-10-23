@@ -6,9 +6,8 @@ import unittest
 
 from tests.support.gui_fakes import FakeBox, load_gui_with_fakes
 
-from litterbox.cad.solidworks import sw_documents
-from litterbox.cad.solidworks import sw_watcher
-from litterbox.cad.solidworks.sw_documents import OpenDocument
+from litterbox.cad import open_documents
+from litterbox.cad.open_documents import OpenDocument
 from litterbox.core.part_number import PN
 from litterbox.parts.part_status import PartStatus
 
@@ -19,7 +18,7 @@ PART = PN("HCR", 1, 1)
 
 class FakeWatcher:
     def __init__(self, *docs):
-        self.docs = {sw_documents.key(f"{REPO}/{rel}"): OpenDocument(f"{REPO}/{rel}", unsaved, False, True)
+        self.docs = {open_documents.key(f"{REPO}/{rel}"): OpenDocument(f"{REPO}/{rel}", unsaved, False, True)
                      for rel, unsaved in docs}
 
     def snapshot(self):
@@ -91,7 +90,7 @@ class SolidWorksWiring(unittest.TestCase):
 
     def test_a_part_being_checked_in_that_gets_opened_is_warned_about(self):
         self.app.jobs = types.SimpleNamespace(pending_parts=lambda: {str(PART): "Checking in 1 part"})
-        changes = sw_watcher.differences({}, FakeWatcher((PRT, False)).snapshot())
+        changes = open_documents.differences({}, FakeWatcher((PRT, False)).snapshot())
         self.app._solidworks_changed(changes)
         warnings = [call for call in self.box.calls if call[0] == "showwarning"]
         self.assertIn("was opened in SolidWorks", warnings[0][1][1])

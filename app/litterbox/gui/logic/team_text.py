@@ -4,6 +4,7 @@ and which vault settings changed.
 """
 
 from litterbox import version
+from litterbox.core import toolbox_rules
 
 
 def person_unchanged(person, fields):
@@ -117,6 +118,20 @@ def changed_settings(current, chosen):
     if not chosen:
         return {}
     return {key: value for key, value in chosen.items() if current.get(key) != value}
+
+
+def toolbox_rule_prompt(rule):
+    """The "Are you sure?" before the vault's Toolbox rule (core/toolbox_rules.py) is set to `rule` (not OFF)."""
+    if rule == toolbox_rules.TEAM:
+        what = ("From now on, an assembly may use Toolbox parts only from the team's Toolbox, which an Admin keeps "
+                "in the vault (Team > Toolbox...), and no other files from outside the vault.")
+    else:
+        what = ("From now on, an assembly may not use Toolbox parts, or any other file from outside the vault: model "
+                "each fastener as a part of its own.")
+    return (what + " Check In refuses an assembly that does, and so does Release. An assembly last checked in "
+            "without SolidWorks needs Update BOM before it can be released."
+            f"\n\nEveryone will also need Litterbox {toolbox_rules.MIN_LITTERBOX} or newer, since older versions "
+            "don't check this.\n\nSet it?")
 
 
 def solidworks_version_prompt(year, installed):

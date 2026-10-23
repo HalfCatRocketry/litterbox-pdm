@@ -6,10 +6,12 @@ in_work -> released -> (reopen) in_work, and in_work -> void. Each change adds a
 and the git work are up to the caller.
 """
 
+from litterbox.core import file_types
 from litterbox.core.revision_letters import FIRST_REVISION, revision_number
 from litterbox.records import purchasing_info
 from litterbox.records import record_materials
 from litterbox.records import record_model
+from litterbox.records import record_other_files
 from litterbox.util import person_name
 
 
@@ -75,7 +77,7 @@ def references_need_update(record, revision, files):
     file (in `files`) and either was never read or has changed since it was last read."""
     if record.cots or record.status == record_model.STATUS_VOID:
         return False
-    if not any(str(f).lower().endswith(".sldasm") for f in files):
+    if not any(file_types.is_assembly(f) for f in files):
         return False
     return revision not in record.references or revision in record.references_outdated
 
@@ -99,7 +101,7 @@ def bom_needs_update(record, revision, files):
     cover every part it uses (an older Litterbox checked it in)."""
     if record.cots or record.status == record_model.STATUS_VOID:
         return False
-    if not any(str(f).lower().endswith(".sldasm") for f in files):
+    if not any(file_types.is_assembly(f) for f in files):
         return False
     if references_need_update(record, revision, files) or revision not in record.quantities:
         return True
@@ -112,21 +114,22 @@ def material_needs_update(record, revision, files):
     file changed without SolidWorks to read it (records/record_materials.py)."""
     if not record.uses_cad or record.status == record_model.STATUS_VOID:
         return False
-    if not any(str(f).lower().endswith(".sldprt") for f in files):
+    if not any(file_types.is_part(f) for f in files):
         return False
     return not record_materials.is_read(record, revision)
 
 
-def record_checkin(record, by, files, comment="", references=None, quantities=None, material=None):
+def record_checkin(record, by, files, comment="", references=None, quantities=None, material=None, other_files=None):
     """Log a check-in. `references` (a list, or None for 'not read this time') updates what the
     working revision uses; the event lists them when they changed. If an assembly file was checked
     in and the references could not be read, the revision is marked as needing an update.
     `quantities` ({stem: count}, or None) are how many of each it uses; when an assembly file was checked in
     without them, the old counts are dropped, so its BOM shows that it needs updating. `material` (text, '' for none
     assigned, or None for 'not read') is the part's material; when a part file was checked in without it, the old
-    one is dropped, so it shows that it needs updating."""
+    one is dropped, so it shows that it needs updating. `other_files` ([{file, toolbox}], or None) are the files the
+    assembly uses that aren't Litterbox parts (records/record_other_files.py); without them they are forgotten too."""
     changed = set_references(record, references) if references is not None else False
-    assembly = any(str(f).lower().endswith(".sldasm") for f in files)
+    assembly = any(file_types.is_assembly(f) for f in files)
     if references is None and assembly:
         if record.revision not in record.references_outdated:
             record.references_outdated.append(record.revision)
@@ -135,10 +138,14 @@ def record_checkin(record, by, files, comment="", references=None, quantities=No
         counted = set_quantities(record, quantities)
     elif assembly:
         record.quantities.pop(record.revision, None)
+    if other_files is not None:
+        record_other_files.set_other_files(record, other_files)
+    elif assembly:
+        record_other_files.forget(record)
     material_changed = False
     if material is not None:
         material_changed = record_materials.set_material(record, material)
-    elif any(str(f).lower().endswith(".sldprt") for f in files):
+    elif any(file_types.is_part(f) for f in files):
         record_materials.forget(record)
     return add_event(record, record_model.EVENT_CHECKED_IN, by, files=list(files),
                      comment=(comment or "").strip() or None,

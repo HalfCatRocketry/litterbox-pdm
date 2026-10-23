@@ -13,7 +13,7 @@ import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.errors import LitterboxError
 from litterbox.exporting import export_folder
 from litterbox.git import lfs_download

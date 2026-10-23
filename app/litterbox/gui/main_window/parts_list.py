@@ -303,6 +303,7 @@ class PartsList:
             self._show_rows(rows)
             self._check_file_rules()
             self._check_record_upgrade()
+            self._check_toolbox_setting()
 
         self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",
                       kind="refresh")
