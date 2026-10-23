@@ -12,6 +12,7 @@ from litterbox.change_orders import eco_model
 from litterbox.change_orders import eco_store
 from litterbox.core.part_number import PN
 from litterbox.records import record_lifecycle
+from litterbox.records import record_migrations
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.team import team_model
@@ -28,7 +29,7 @@ class RecordFormat(RegistryTestCase):
     def test_new_records_say_their_format(self):
         self.make(42)
         text = (self.repo / "PN-logs" / "HCR-00042-001.yaml").read_text(encoding="utf-8")
-        self.assertTrue(text.startswith(f"format: {record_model.RECORD_FORMAT}\n"))
+        self.assertTrue(text.startswith(f"format: {record_migrations.current_format()}\n"))
 
     def test_a_record_without_a_format_is_format_1(self):
         data = record_model.Record(PN("HCR", 1, 1), "Old part", "Alex", "2026-01-01T00:00:00Z").to_dict()
@@ -37,7 +38,7 @@ class RecordFormat(RegistryTestCase):
 
     def test_a_record_from_a_newer_litterbox_is_refused_with_advice(self):
         data = record_model.Record(PN("HCR", 1, 1), "New part", "Alex", "2026-01-01T00:00:00Z").to_dict()
-        data["format"] = record_model.RECORD_FORMAT + 1
+        data["format"] = record_migrations.current_format() + 1
         with self.assertRaisesRegex(record_model.RegistryError, "newer Litterbox"):
             record_model.Record.from_dict(data)
         for bad in ("2", True, 0):

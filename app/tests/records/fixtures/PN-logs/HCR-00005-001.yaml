@@ -1,0 +1,41 @@
+format: 1
+org: HCR
+pn: '00005-001'
+revision: A
+released_revision: ''
+name: M5 x 12 socket head screw
+description: ''
+status: in_work
+cots: true
+imported: false
+kind: noncad
+created_by: Bea Jones
+created_by_id: bea
+created_at: '2026-04-02T08:00:00Z'
+approvals: []
+draft:
+  id: r-20260403-1
+  action: release
+  revision: A
+  requested_by: Bea Jones
+  requested_by_id: bea
+  requested_at: '2026-04-03T09:00:00Z'
+  template_name: Standard
+  rejected_by: Alex Smith
+  rejected_by_id: alex
+  reason: Wrong supplier part number
+history:
+- event: created
+  by: Bea Jones
+  at: '2026-04-02T08:00:00Z'
+  revision: A
+  by_id: bea
+- event: release_rejected
+  by: Alex Smith
+  at: '2026-04-03T10:00:00Z'
+  revision: A
+  by_id: alex
+  action: release
+  reason: Wrong supplier part number
+  requested_by: Bea Jones
+  requested_by_id: bea

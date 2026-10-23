@@ -4,6 +4,8 @@ record_store.py - reading and writing records in PN-logs/, and which part number
 takes either number.
 
 A record is never deleted, and a record can only be created once (create_record refuses a number that exists).
+Records are only written in a vault that requires a Litterbox reading this one's record format
+(records/record_migrations.py): until an Admin upgrades the vault's records, creating and saving them is refused.
 """
 
 import os
@@ -18,6 +20,7 @@ from litterbox.core.doc_number import DocNumber
 from litterbox.core.numbering import next_base, next_variant
 from litterbox.core.part_number import try_parse
 from litterbox.records import record_lifecycle
+from litterbox.records import record_migrations
 from litterbox.records import record_model
 from litterbox.util import fast_yaml
 from litterbox.util import person_name
@@ -73,6 +76,14 @@ def exists(repo, pn):
     return record_path(repo, pn).is_file()
 
 
+def check_may_write():
+    """Refuse to write a record if this vault's records still need upgrading (record_migrations.may_write)."""
+    if not record_migrations.may_write():
+        raise record_model.RegistryError(
+            "This Litterbox keeps part records in a newer format, and this vault hasn't been upgraded to it yet, so "
+            "nothing can be changed until it is. An Admin or the Owner can upgrade it (Vault > Upgrade records...).")
+
+
 def create_record(repo, pn, name, created_by, description="", cots=False, imported=False, import_path="",
                   project="", kind=record_model.KIND_CAD, doc_type=""):
     """Create the record file for a brand-new PN and return the Record.
@@ -98,6 +109,7 @@ def create_record(repo, pn, name, created_by, description="", cots=False, import
     record_lifecycle.add_event(record, record_model.EVENT_CREATED, created_by)
     record.history[-1]["at"] = record.created_at    # created event and created_at match exactly
 
+    check_may_write()
     path = record_path(repo, pn)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +137,7 @@ def save(repo, record):
             f"The record for {record.pn} is read-only. Check the part out first so you hold its lock."
         )
 
+    check_may_write()
     text = record_model.dump(record)
     tmp_path = None
     try:

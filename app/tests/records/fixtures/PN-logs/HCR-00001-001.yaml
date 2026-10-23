@@ -1,0 +1,16 @@
+org: HCR
+pn: '00001-001'
+revision: A
+released_revision: ''
+description: Bracket from before parts had names
+status: in_work
+cots: false
+imported: false
+created_by: Alex Smith
+created_at: '2026-01-05T10:00:00Z'
+approvals: []
+history:
+- event: created
+  by: Alex Smith
+  at: '2026-01-05T10:00:00Z'
+  revision: A

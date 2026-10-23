@@ -14,6 +14,7 @@ from litterbox.core.part_number import PN, PNError, parse, parse_short
 from litterbox.core.revision_letters import FIRST_REVISION, check_revision, revision_number
 from litterbox.records import purchasing_info
 from litterbox.records import record_materials
+from litterbox.records import record_migrations
 
 
 STATUS_IN_WORK = "in_work"
@@ -104,9 +105,6 @@ def _clean_event(event):
     return cleaned
 
 
-RECORD_FORMAT = 1       # the shape of a record file. Raise it (with a migration step) only when an older Litterbox
-                        # would misread the new shape; adding a field it can ignore doesn't need it. See
-                        # docs/REMINDERS.md, "Upgrading old part records".
 
 _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
@@ -166,9 +164,9 @@ class Record:
 
     def to_dict(self):
         if self.is_document:
-            data = {"format": RECORD_FORMAT, "number": str(self.pn), "doc_type": self.doc_type}
+            data = {"format": record_migrations.current_format(), "number": str(self.pn), "doc_type": self.doc_type}
         else:
-            data = {"format": RECORD_FORMAT, "org": self.pn.org,
+            data = {"format": record_migrations.current_format(), "org": self.pn.org,
                     "pn": _Quoted(self.pn.short)}   # without the org: it is the line above
         data.update({
             "revision": self.revision,
@@ -232,12 +230,13 @@ class Record:
             raise RegistryError("The record has no 'pn' field.")
         if "pn" not in data:
             data = dict(data, pn=data["number"])
-        record_format = data.get("format", 1)               # records written before 0.4.2 have none: format 1
-        if isinstance(record_format, bool) or not isinstance(record_format, int) or record_format < 1:
+        record_format = record_migrations.stored_format(data)     # records written before 0.4.2 have none: 1
+        if record_format is None:
             raise RegistryError(f"{data['pn']}: 'format' must be a whole number, 1 or higher.")
-        if record_format > RECORD_FORMAT:
+        if record_format > record_migrations.current_format():
             raise RegistryError(f"{data['pn']}: this record was written by a newer Litterbox (record format "
                                 f"{record_format}). Update Litterbox to read it.")
+        data = record_migrations.upgrade(data)              # an older record is read in the current shape
         try:
             if "number" in data:
                 pn = doc_number.parse(str(data["number"]))

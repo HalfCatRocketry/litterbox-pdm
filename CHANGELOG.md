@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.7
+
+- **Upgrading records.** Litterbox can now bring a vault's part and document records up to a new record format when a later version needs one. Nothing changes yet: there is no new format, so the vault isn't touched. When there is one, an Admin or the Owner is asked once per session to upgrade (**Vault > Upgrade records...**, greyed out until then). The question says what changes and how many records. Upgrading makes everyone in the vault update Litterbox, then rewrites every record in one upload. A record someone has checked out is left for them, and is upgraded when they check it in. Until the vault is upgraded, the new version reads every record but changes none, so an older copy of Litterbox never meets a record it can't read.
+- **User guide: Decisions to make first.** A new section in Getting started, for everyone: what is built into a team's CAD files and history once parts are released. Don't use Toolbox fasteners (or, if you must, share one copy as a document); one part per file, with no configurations; linked design tables as documents; at least 6 digits in the base number; one vault for the whole team; and which Git host to choose.
+
 ## 0.5.6
 
 Nothing in the window changes: this release is faster and fixes a few things.

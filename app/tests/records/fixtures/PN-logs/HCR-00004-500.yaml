@@ -1,0 +1,43 @@
+format: 1
+org: HCR
+pn: '00004-500'
+revision: A
+released_revision: ''
+name: Fastener kit
+description: Bolts and glue for the drive
+status: in_work
+cots: false
+imported: false
+kind: noncad
+purchasing:
+  supplier: McMaster-Carr
+  unit_cost: '3.20'
+created_by: Bea Jones
+created_by_id: bea
+created_at: '2026-04-02T09:00:00Z'
+approvals: []
+bom_items:
+  A:
+    HCR-00005-001_A: 8
+documents:
+  A:
+  - PROP-0001
+history:
+- event: created
+  by: Bea Jones
+  at: '2026-04-02T09:00:00Z'
+  revision: A
+  by_id: bea
+- event: edited
+  by: Bea Jones
+  at: '2026-04-02T09:05:00Z'
+  revision: A
+  by_id: bea
+  changes:
+  - 'BOM: HCR-00005-001_A x 8 added'
+- event: document_linked
+  by: Bea Jones
+  at: '2026-04-02T09:06:00Z'
+  revision: A
+  by_id: bea
+  document: PROP-0001

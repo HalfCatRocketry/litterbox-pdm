@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.5.6"
+VERSION = "0.5.7"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -53,8 +53,9 @@ BLOCKS = [
 ], [1.6, 4.9]),
 
 ("h1", "Getting started"),
-("p", "If someone has already set up your team, read What you need, Installing Litterbox, and Joining your team's "
-      "vault, then go to The main window. If you are setting up a team, read the whole chapter."),
+("p", "If someone has already set up your team, read What you need, Installing Litterbox, Joining your team's "
+      "vault, and Decisions to make first, then go to The main window. If you are setting up a team, read the whole "
+      "chapter."),
 ("h2", "What you need"),
 ("ul", [
     "A Windows computer.",
@@ -92,9 +93,36 @@ BLOCKS = [
       "of your copy (see Projects)."),
 ("tip", "Don't move or rename the vault folder. Every computer keeps vaults under C:\\Litterbox, so SolidWorks "
         "assemblies find their parts on every machine."),
+("h2", "Decisions to make first"),
+("p", "Some choices are built into a team's CAD files and history as soon as parts are released, and a later "
+      "update of Litterbox can't undo them. Decide these before the first part:"),
+("table", ["Decision", "Recommendation"], [
+    ["Toolbox fasteners", "Don't use SolidWorks Toolbox. Model each fastener as a part of its own, so it has a part "
+                          "number, revisions, and purchasing info like any other part. Toolbox files are kept "
+                          "outside the vault, and a released assembly keeps pointing at wherever they were. If you "
+                          "must use Toolbox, keep the Toolbox folder as a controlled document (in a .zip), and make "
+                          "sure every member installs that copy in the same folder."],
+    ["Configurations and design tables", "Don't keep several configurations in one file: model each one as a "
+                                         "separate part. Litterbox gives each file one part number, one material, "
+                                         "and one BOM line, and a file can't be split into several part numbers "
+                                         "later. If linked tables (Excel design tables or equation files) define a "
+                                         "part's geometry, keep them as controlled documents, so a change to them "
+                                         "is released like any other. Revising such a document gives its file a "
+                                         "new name (_B), so point the parts at the new file when they are next "
+                                         "revised."],
+    ["Part number digits", "Use at least 6 digits in the base number, and more for a larger team. The digits can't "
+                           "be changed after the vault is set up."],
+    ["One vault", "Keep one vault for the whole team and all its projects. An assembly can only use parts in its "
+                  "own vault, and parts can't move between vaults. Use projects to separate work inside it (see "
+                  "Projects for what Restrict and Hide do and don't protect)."],
+    ["Git host", "For a team of more than three or four members, consider GitLab Premium. Free plans limit the "
+                 "number of members or the Git LFS storage. Moving to another host later is possible but takes "
+                 "planning (every part must be checked in first), and files can't be removed from the vault's "
+                 "history, so its storage only grows."],
+], [1.7, 4.8]),
 ("h2", "Setting up a new team"),
 ("p", "One person sets up the team and becomes the vault's **Owner**. The org code and the part number format "
-      "can't be changed afterwards, so decide them first."),
+      "can't be changed afterwards, so decide them first (see Decisions to make first)."),
 ("ol", [
     "On your Git host, create an **empty** repository (no README) for the vault. The host must support Git LFS "
     "file locking; GitHub, Azure DevOps, and GitLab do. Hosts limit LFS storage differently: GitHub's free "
@@ -450,6 +478,10 @@ BLOCKS = [
 ("ul", [
     "**Vault > Update file rules...** appears when Litterbox has newer rules for which files Git LFS stores and "
     "locks. An Admin is asked once per session. The update changes only Litterbox's own lines.",
+    "**Vault > Upgrade records...** appears when an update of Litterbox keeps part records in a new format. Until an "
+    "Admin upgrades the vault, nobody on the new version can change anything, so an Admin is asked once per "
+    "session. Upgrading makes everyone update Litterbox, and rewrites every record in one upload. Parts checked out "
+    "at the time are upgraded when they are checked in.",
     "**Vault > Vault Size...** shows how much the vault uses on the host (its history and every version of every "
     "Git LFS file) and how much is downloaded on your computer.",
     "Some features raise the oldest Litterbox version the vault accepts (workflows, projects, documents, and "

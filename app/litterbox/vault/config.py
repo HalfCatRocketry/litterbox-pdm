@@ -37,6 +37,7 @@ from litterbox.core import currency as currencies
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
 from litterbox.core.part_number import PNError, check_org
+from litterbox.records import record_migrations
 from litterbox.records import record_store
 from litterbox.util import fast_yaml
 from litterbox.vault import compatibility
@@ -288,8 +289,34 @@ def currency_or_none(repo):
 
 
 def apply(repo):
-    """Tell the rest of the program how this vault writes its part numbers. Returns (base, variant) digits."""
+    """Tell the rest of the program how this vault writes its part numbers, and whether records may be written in
+    this Litterbox's record format (records/record_migrations.py). Returns (base, variant) digits."""
     compatibility.check_compatible(repo)
     digits = get_digits(repo)
     part_number.configure(*digits)
+    record_migrations.configure(lambda: _minimum_on_disk(repo), _latest_minimum_reader(repo))
     return digits
+
+
+def _latest_minimum_reader(repo):
+    """A function giving the vault's min_litterbox_version as the vault's server has it, asked at most once."""
+    found = []
+
+    def read():
+        if not found:
+            from litterbox.git import remote                # git/repository imports this module
+            try:
+                data = fast_yaml.safe_load(remote.latest_text(repo, layout.CONFIG_PATH)) or {}
+            except yaml.YAMLError:
+                data = {}
+            found.append(str(data.get("min_litterbox_version") or "") if isinstance(data, dict) else "")
+        return found[0]
+    return read
+
+
+def _minimum_on_disk(repo):
+    """The vault's min_litterbox_version as its config file says now ("" for none, or if it can't be read)."""
+    try:
+        return load(repo).get("min_litterbox_version") or ""
+    except ConfigError:
+        return ""

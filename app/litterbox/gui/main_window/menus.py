@@ -124,6 +124,8 @@ class Menus:
         menu.add_command(label="Vault Size...", command=self.show_vault_size)
         menu.add_command(label="Update file rules...",
                          **menu_bar.entry_options(self.file_rules_outdated, self.update_file_rules))
+        menu.add_command(label="Upgrade records...",
+                         **menu_bar.entry_options(self.records_outdated, self.upgrade_records))
         menu.add_separator()
         menu.add_command(label="New Part...", command=self.new_part)
         menu.add_command(label="New Assembly...", command=self.new_assembly)

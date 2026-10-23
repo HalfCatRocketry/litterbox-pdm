@@ -139,6 +139,16 @@ def commits_behind(repo):
         return None
 
 
+def latest_text(repo, rel):
+    """A vault file's text as the vault's server has it now, after a quick fetch that changes no files (as the server
+    last had it if it can't be reached); "" if it has no such file or there is no server to ask."""
+    try:
+        runner.run(["git", "fetch", "--quiet"], repo, quiet=True)
+    except LitterboxError:
+        pass
+    return repository.quiet_output(repo, "show", f"@{{upstream}}:{rel}")
+
+
 def push_with_retry(repo, attempts=3, after_sync=None):
     """Sync then push. If someone else pushed first, sync again and retry. after_sync() runs after every sync,
     before the push; it raises to stop the upload. (Litterbox pushes through team/guarded_push.push, which first
