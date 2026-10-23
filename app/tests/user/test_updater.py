@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 from litterbox.user import updater
+from tests.support import temp_folders
 
 REPO = "someone/litterbox-pdm"
 PRIVATE, PUBLIC = updater.generate_keypair()
@@ -142,6 +143,7 @@ class ReadingErrors(unittest.TestCase):
 class Downloading(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(temp_folders.remove, self.dir)
         self.update = updater.parse_manifest(manifest(), updater.sign(manifest(), PRIVATE), PUBLIC, REPO)
 
     @staticmethod

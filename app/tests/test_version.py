@@ -8,6 +8,7 @@ from litterbox.vault import compatibility
 from litterbox.vault import config
 from litterbox.vault import config_write
 from litterbox import version
+from tests.support import temp_folders
 
 
 class Versions(unittest.TestCase):
@@ -41,6 +42,7 @@ class Versions(unittest.TestCase):
 class VaultCompatibility(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(temp_folders.remove, self.dir)
         self.saved = (version.VERSION, version.VAULT_FORMAT)
         self.addCleanup(lambda: (setattr(version, "VERSION", self.saved[0]),
                                  setattr(version, "VAULT_FORMAT", self.saved[1])))
