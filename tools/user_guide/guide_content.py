@@ -5,520 +5,525 @@
 ("ul", [items]) ("ol", [items])           lists
 ("table", [headings], [[cells]], [widths in inches])
 ("tip", text)                              a shaded box for tips and warnings
+
+House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.5.4"
+VERSION = "0.5.5"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
-("p", "Litterbox is a product data manager (PDM) for small hardware teams that design in SolidWorks. It keeps "
-      "everyone's CAD files in one shared place, makes sure only one person edits a part at a time, numbers parts, "
-      "tracks revisions and releases, and works out bills of materials. If you have ever lost a day to two people "
-      "saving over each other's assembly, or found three different files called bracket_final_v2.SLDPRT, this is "
-      "the problem it solves."),
-("p", "What makes it different from the big commercial PDMs is that there's **no server**. A Litterbox vault is "
-      "an ordinary Git repository using Git LFS (Git's add-on for large files), hosted wherever your team already "
-      "keeps code: GitHub, Azure DevOps, GitLab and so on. Litterbox is the Windows program on top that turns Git's "
-      "commits, branches and file locks into check out, check in, release and revise. You never need to use Git "
+("p", "Litterbox is a product data manager (PDM) for small hardware teams that design in SolidWorks. It keeps the "
+      "team's CAD files in one shared vault, lets only one person edit a part at a time, numbers parts, tracks "
+      "revisions and releases, and works out bills of materials."),
+("p", "Litterbox has **no server**. A vault is an ordinary Git repository that uses Git LFS (Git's add-on for large "
+      "files), hosted on a Git host such as GitHub, Azure DevOps, or GitLab. Litterbox is a Windows program that "
+      "turns Git's commits and file locks into check out, check in, release, and revise. You don't need to use Git "
       "yourself."),
-("p", "That design brings a few things for free:"),
+("p", "This design has the following consequences:"),
 ("ul", [
-    "**Cost.** Nothing beyond the Git host, which is often free.",
-    "**Offline work.** Everything you've downloaded is on your own disk. You only need a connection to check out, "
-    "check in and get other people's changes.",
-    "**A complete history.** Every change is a commit with who, when and why. The host backs it up for you.",
-    "**Readable data.** Part records are plain text (YAML) files. Anyone can script against the vault, and nothing "
-    "is locked away in a database you can't get out of.",
+    "**Cost.** The only cost is the Git host, which is often free.",
+    "**Offline work.** Downloaded files are on your own disk. You need a connection only to check out, check in, "
+    "and get other people's changes.",
+    "**History.** Every change is a commit that records who, when, and why. The host keeps a copy.",
+    "**Readable data.** Part records are plain text (YAML) files. They can be read and scripted without Litterbox.",
 ]),
-("p", "Litterbox is aimed at student competition teams (rocketry, robotics, Formula SAE, CubeSats), small "
-      "start-ups, labs and makerspaces: groups of a few to a few dozen people who need release control and a "
-      "history that outlives the people who made it, without paying for or running a PDM server."),
-("h2", "The ideas you need"),
-("p", "A handful of words come up everywhere in this guide:"),
-("table", ["Term", "What it means"], [
-    ["Vault", "The shared Git repository that holds your team's parts, and its copy on your computer under "
+("p", "Litterbox is meant for groups of a few to a few dozen people, such as student competition teams, small "
+      "companies, labs, and makerspaces, that need release control and a lasting history without running a PDM "
+      "server."),
+("h2", "Terms"),
+("table", ["Term", "Meaning"], [
+    ["Vault", "The shared Git repository that holds the team's parts, and its copy on your computer under "
               "C:\\Litterbox\\<vault name>."],
-    ["Org", "The team or company a vault belongs to. It has a short code (HCR) that starts every part number. You "
-            "can belong to several orgs and switch between them."],
-    ["Part number", "A part's permanent identity, for example HCR-100010-001: the org code, a base number and a "
-                    "variant. A number is never reused, even if the part is voided."],
-    ["Revision", "A version of a part that has been or will be released: A, B, C ... A part's files carry it in "
-                 "their names (HCR-100010-001_A.SLDPRT)."],
-    ["Record", "The small text file that describes a part: its name, status, revisions, history, purchasing info, "
-               "what it uses and so on. Records live in the PN-logs folder."],
-    ["Check out / check in", "Taking the lock on a part so you can edit it, and uploading your changes and giving "
-                             "the lock back."],
-    ["Release", "Freezing a revision. Released files can't be changed; to change the part you revise it, which "
-                "starts the next revision."],
-    ["Workflow", "A set of sign-offs (by role) that an action needs before it happens, such as a release."],
+    ["Org", "The team or company a vault belongs to. Its short code (HCR) starts every part number. You can belong "
+            "to several orgs and switch between them."],
+    ["Part number", "A part's permanent identity, for example HCR-100010-001: the org code, a base number, and a "
+                    "variant. A number is never reused, even after the part is voided."],
+    ["Revision", "A released or to-be-released version of a part: A, B, C, and so on. A part's file names include "
+                 "it (HCR-100010-001_A.SLDPRT)."],
+    ["Record", "The text file that describes a part: its name, status, revisions, history, purchasing info, and the "
+               "parts it uses. Records are in the PN-logs folder."],
+    ["Check out / check in", "Taking the lock on a part so you can edit it, and uploading your changes and releasing "
+                             "the lock."],
+    ["Release", "Freezing a revision. Released files can't be changed. To change the part, revise it, which starts "
+                "the next revision."],
+    ["Workflow", "A set of sign-offs, by role, that an action needs before it happens."],
+    ["Project", "A block of part numbers set aside for one project. A project can have a Lead and members, and can "
+                "be restricted or hidden."],
 ], [1.6, 4.9]),
 
 ("h1", "Getting started"),
-("p", "This part is for people and teams who are new to Litterbox. If someone has already set your team up, read "
-      "\"What you need\", \"Installing Litterbox\" and \"Joining your team's vault\", then skip to \"A first look at "
-      "the window\". If you're the one setting a team up, read all of it."),
+("p", "If someone has already set up your team, read What you need, Installing Litterbox, and Joining your team's "
+      "vault, then go to The main window. If you are setting up a team, read the whole chapter."),
 ("h2", "What you need"),
 ("ul", [
-    "A Windows computer. Litterbox is a Windows program.",
-    "**Git for Windows** (git-scm.com). It includes Git LFS. Install it with the default options.",
-    "An account on your team's Git host with access to the vault's repository. Your team lead adds you there.",
-    "**SolidWorks**, if you're going to model. You can use Litterbox without it to look at parts, open PDFs, run "
-    "workflows, manage purchasing and documents, but anything that reads or writes SolidWorks files needs it.",
+    "A Windows computer.",
+    "**Git for Windows** (git-scm.com), which includes Git LFS. Install it with the default options.",
+    "An account on your team's Git host with access to the vault's repository. Your team lead adds you.",
+    "**SolidWorks**, to model. Without it you can look at parts, open PDFs, run workflows, and manage purchasing "
+    "and documents. Anything that reads or writes SolidWorks files needs it.",
 ]),
-("p", "The first time you use Git it needs your name and email. Litterbox asks for them if they're missing, or "
-      "you can set them yourself in a terminal:"),
+("p", "Git needs your name and email the first time you use it. Litterbox asks for them if they are missing. You "
+      "can also set them in a terminal:"),
 ("code", ['git config --global user.name "Alex Smith"', 'git config --global user.email "alex@example.com"']),
 ("h2", "Installing Litterbox"),
 ("ol", [
     "Download Litterbox-Setup-<version>.exe from the latest release on the Litterbox GitHub page.",
     "Run it. It installs for your Windows user only and doesn't need administrator rights.",
-    "Windows SmartScreen may say the app is unrecognised, because the installer isn't code-signed yet. Choose "
+    "Windows SmartScreen may say the app is unrecognised, because the installer isn't code-signed. Choose "
     "**More info**, then **Run anyway**.",
 ]),
-("p", "Litterbox checks for a newer version when it starts and asks before updating. Updates are signed, and "
-      "Litterbox refuses one that isn't. To turn the check off, add `update_check: false` to "
+("p", "Litterbox checks for a newer version at start-up and asks before it updates. Updates are signed, and "
+      "Litterbox refuses an unsigned one. To turn off the check, add `update_check: false` to "
       "C:\\Litterbox\\settings.yaml. Help > Check for updates... checks by hand."),
 ("h2", "Joining your team's vault"),
 ("ol", [
-    "Ask whoever runs your team for the vault's repository URL: the https address from the host's Clone button.",
-    "In Litterbox, choose **File > Add org...** and paste it. Litterbox copies the vault into "
+    "Get the vault's repository URL from your team lead: the https address from the host's Clone button.",
+    "In Litterbox, choose **File > Add org...** and paste the URL. Litterbox copies the vault into "
     "C:\\Litterbox\\<repository name> in the background and opens it.",
-    "Your team lead adds you to the team list (Team screen > Add Person) with your host user name. Until they do, "
-    "Litterbox lets you look at everything but not change anything, and says so.",
+    "Your team lead adds you to the team list (Team screen > Add Person) with your host user name. Until then, you "
+    "can look at everything but can't change anything.",
 ]),
-("p", "Litterbox **downloads on demand**: a new copy gets every part record and its history, but leaves the CAD "
-      "files on the server until you need them. Checking out a part downloads its files; opening one downloads "
-      "what it needs first (for an assembly, every part it uses). Vault > Download All... gets everything at once, "
-      "and `download: all` in settings.yaml keeps it that way."),
-("tip", "Don't move or rename the vault folder. Litterbox always keeps vaults under C:\\Litterbox, and because "
-        "every computer uses the same path, SolidWorks assemblies find their parts on everyone's machine."),
+("p", "Litterbox **downloads on demand**. A new copy gets every part record and its history, and leaves the CAD "
+      "files on the host until they are needed. Checking out a part downloads its files. Opening a file downloads "
+      "what it needs first (for an assembly, every part it uses). Vault > Download All... gets everything, and "
+      "`download: all` in settings.yaml keeps it that way."),
+("p", "If your team uses **hidden projects**, the parts of a hidden project you are not a member of are left out "
+      "of your copy (see Projects)."),
+("tip", "Don't move or rename the vault folder. Every computer keeps vaults under C:\\Litterbox, so SolidWorks "
+        "assemblies find their parts on every machine."),
 ("h2", "Setting up a new team"),
-("p", "One person, who becomes the vault's **Owner**, sets the team up. Plan this before you start, because the "
-      "org code and the part number format can't be changed afterwards."),
+("p", "One person sets up the team and becomes the vault's **Owner**. The org code and the part number format "
+      "can't be changed afterwards, so decide them first."),
 ("ol", [
-    "On your Git host, create an **empty** repository (no README) for the vault. Make sure the host supports Git "
-    "LFS file locking; GitHub, Azure DevOps and GitLab all do. Note that hosts limit LFS storage differently: "
-    "GitHub's free allowance is small, Azure DevOps has no practical limit.",
+    "On your Git host, create an **empty** repository (no README) for the vault. The host must support Git LFS "
+    "file locking; GitHub, Azure DevOps, and GitLab do. Hosts limit LFS storage differently: GitHub's free "
+    "allowance is small, and Azure DevOps has no practical limit.",
     "In Litterbox, choose **File > Create new org...** and paste the repository's URL.",
-    "Fill in the org: the **code** (2 to 6 letters, it starts every part number), the full **name**, how many "
-    "**digits** the base and variant numbers have (6 and 3 gives HCR-100010-001), the **first number** to hand "
-    "out, and the variant where assemblies start (500 by default).",
-    "Litterbox shows it all once more for you to check, then sets up the repository: Git LFS and lock rules, the "
-    "settings file, and the team list with you as Owner. It uploads the lot as the vault's first commit.",
+    "Fill in the org's **code** (2 to 4 letters), its full **name**, the number of **digits** in the base and "
+    "variant numbers (6 and 3 give HCR-100010-001), the **first number** to hand out, and the variant where "
+    "assemblies start (500 by default).",
+    "Check the summary. Litterbox then sets up the repository (the Git LFS and lock rules, the settings file, and "
+    "the team list with you as Owner) and uploads it as the vault's first commit.",
 ]),
-("p", "Then set the team up from the **Team** screen (in the sidebar):"),
+("p", "Then set up the team on the **Team** screen:"),
 ("ul", [
-    "**Add Person** for each team member: their name, email, the user name(s) they use on the Git host, their "
-    "access level and their roles.",
-    "**Roles...** for the jobs people do (Responsible Engineer, Manufacturing, Quality, Manager, Chief ...). "
-    "Workflows ask for sign-offs by role. Add the standard roles gives you a sensible set.",
-    "**Part Workflows...** and **Doc Workflows...** if releases need sign-offs (see Sign-off workflows below).",
-    "**Projects...**, **Document Types...** and **Vault Settings...** as you need them.",
-    "Press **Save** at the top right. Team changes are drafted on the Team screen and uploaded together.",
+    "**Add Person** for each member: name, email, user name(s) on the Git host, access level, and roles.",
+    "**Roles...** for the jobs people do (Responsible Engineer, Manufacturing, Quality, Manager, Chief, and so on). "
+    "Workflows ask for sign-offs by role. **Add the standard roles** adds a common set.",
+    "**Part Workflows...** and **Doc Workflows...** if actions need sign-offs (see Sign-off workflows and ECOs).",
+    "**Projects...**, **Document Types...**, and **Vault Settings...** as needed.",
+    "**Save** at the top right. Changes to people, roles, and workflows are drafted on the Team screen and uploaded "
+    "together.",
 ]),
-("p", "If you already have CAD files, bring them in with Create > **Import...** (see Importing existing CAD)."),
-("h2", "A first look at the window"),
-("table", ["Area", "What it's for"], [
-    ["Menu bar", "File (orgs, exit), Vault (refresh, get latest, download, file rules, vault size, new parts), View "
-                 "(screens, sidebar, details pane, log, columns, text size) and Help. The org's name sits in the "
+("p", "To bring in existing CAD files, use Create > **Import...** (see Importing existing CAD)."),
+("h2", "The main window"),
+("table", ["Area", "Purpose"], [
+    ["Menu bar", "File (orgs, exit), Vault (refresh, get latest, downloads, file rules, vault size, new parts), View "
+                 "(screens, sidebar, details pane, log, columns, text size), and Help. The org's name is in the "
                  "middle."],
-    ["Header", "The org box (switch orgs), who you are, and how many changes others have uploaded that you haven't "
-               "got yet. Click that to Get Latest."],
-    ["Sidebar", "Views of the parts list (All, Mine, Checked out, Released, Not downloaded, Void, with counts), "
-                "then the Workflows, ECOs, Documents and Team screens. Ctrl+1 to Ctrl+5 jump between them."],
-    ["Toolbar", "Check Out, Check In, Save Progress and Undo Checkout, then the Part, Lifecycle and Create menus. "
-                "A greyed-out button tells you why if you rest the mouse on it."],
-    ["Parts list", "One row per part. The first column has a tick box and a status icon: a different shape per "
-                   "status, so colour is never the only clue (Help > Status icons explains them)."],
-    ["Details pane", "Everything about the highlighted part, in tabs. The button at its top opens it in a window "
-                     "of its own; double-clicking a part does the same."],
-    ["Status bar", "A coloured dot (ready, working, error), what just happened, the jobs waiting, and the Log."],
+    ["Header", "The org box (switch orgs), who you are, and how many changes others have uploaded that you don't "
+               "have yet. Click the count to Get Latest."],
+    ["Sidebar", "Views of the parts list (All, Mine, Checked out, Released, Not downloaded, and Void, with counts), "
+                "then the Workflows, ECOs, Documents, and Team screens. Ctrl+1 to Ctrl+5 switch between them."],
+    ["Toolbar", "Check Out, Check In, Save Progress, and Undo Checkout, then the Part, Lifecycle, and Create menus. "
+                "Hover over a greyed-out button to see why it is unavailable."],
+    ["Parts list", "One row per part: a tick box and status icon, then Part number, Rev, Name, Description, and "
+                   "more. Each status has its own icon shape (Help > Status icons)."],
+    ["Details pane", "Everything about the highlighted part, in tabs. The button at its top, or double-clicking a "
+                     "part, opens it in a separate window."],
+    ["Status bar", "A dot showing ready, working, or error, the last result, the queued jobs, and the Log."],
 ], [1.4, 5.1]),
-("p", "There's a difference between **ticking** a part and **highlighting** it. Actions that change parts (Check "
-      "Out, Release ...) act on the ticked parts, so a stray click on a row can never be what you release. Actions "
-      "that only look (Open, References, Details) use the highlighted row. Right-click a part for its menu; it "
-      "ticks that part on its own first, so it's always clear what the menu acts on."),
-("p", "Everything runs in the background. You can keep browsing, ticking and queueing actions while Litterbox "
-      "uploads, and a part with a job waiting shows it in its status."),
+("p", "**Ticking** a part and **highlighting** it are different. Actions that change parts (Check Out, Release, and "
+      "so on) act on ticked parts. Actions that only look (Open, References, Details) act on the highlighted row. "
+      "Right-clicking a part ticks only that part and opens its menu."),
+("p", "Actions run in the background. You can keep browsing, ticking, and queueing actions during an upload. A "
+      "part with a queued job shows it in its status."),
 ("h2", "Your first part"),
 ("ol", [
-    "Choose Create > **New Part**. Give it a name and (optionally) a description and project. Litterbox suggests "
-    "the next free part number; you can type another.",
-    "Litterbox creates the part's record, checks it out to you, and shows the exact file name its model must have, "
-    "for example HCR-100010-001_A, with a Copy button.",
-    "In SolidWorks, model the part and **Save As** into the vault's cad folder "
-    "(C:\\Litterbox\\<vault>\\cad\\) under that name. A drawing gets the same name with .SLDDRW.",
-    "Back in Litterbox, tick the part and press **Check In**. Add a comment if you like. Litterbox uploads the "
-    "files and the record, and gives the lock back.",
+    "Choose Create > **New Part**. Enter a name and, optionally, a description and project. Litterbox suggests the "
+    "next free part number; you can type another.",
+    "Litterbox creates the part's record, checks it out to you, and shows the file name its model must have (for "
+    "example HCR-100010-001_A), with a Copy button.",
+    "In SolidWorks, model the part and **Save As** into the vault's cad folder (C:\\Litterbox\\<vault>\\cad\\) "
+    "under that name. A drawing has the same name with .SLDDRW.",
+    "In Litterbox, tick the part and press **Check In**, with an optional comment. Litterbox uploads the files and "
+    "the record and releases the lock.",
 ]),
-("p", "That's the whole loop. Everyone else sees your part after their next Get Latest."),
+("p", "Other people see the part after their next Get Latest."),
 
 ("h1", "Everyday work"),
 ("h2", "Part numbers and file names"),
-("p", "A part number is the org code, a base number and a variant: HCR-100010-001. Variants let related parts "
-      "share a base (a family of brackets, say). New Part hands out variants below the assembly start (001 to 499 by "
-      "default) and **New Assembly** starts at 500, so you can tell at a glance which numbers are assemblies."),
+("p", "A part number is the org code, a base number, and a variant: HCR-100010-001. Related parts can share a base "
+      "with different variants. New Part uses variants below the assembly start (001 to 499 by default), and "
+      "**New Assembly** starts at 500, so assembly numbers are easy to recognise."),
 ("p", "Every file in the cad folder is named after its part and revision: HCR-100010-001_A.SLDPRT, "
-      "HCR-100010-001_A.SLDDRW, HCR-100010-001_A.STEP, HCR-100010-001_A.PDF. That's how Litterbox knows which files "
-      "belong to which part and revision, so the names matter. Files that don't follow the pattern are ignored."),
-("p", "**Projects** (set up by an Admin) reserve a block of numbers: with 6 digits, project Rover starting 12 owns "
-      "120000 to 129999. Choose a project in New Part and Litterbox suggests the next number in its block. With no "
-      "project, Litterbox never hands out a number inside one."),
+      "HCR-100010-001_A.SLDDRW, HCR-100010-001_A.STEP, and HCR-100010-001_A.PDF. Litterbox uses the names to match "
+      "files to parts and revisions, and ignores files that don't follow the pattern."),
+("h2", "Projects"),
+("p", "A **project** reserves a block of part numbers: with 6 digits, project Rover starting 12 owns 120000 to "
+      "129999. Choose a project in New Part, New Assembly, or Import, and Litterbox suggests the next number in its "
+      "block. With no project, Litterbox never hands out a number inside a block."),
+("p", "Team > **Projects...** lists the projects you can see. Each project can have a **Project Lead**, "
+      "**members**, and two options. All of these are optional:"),
+("table", ["Option", "Effect"], [
+    ["Restrict Project", "Only its members, its Lead, Admins, and the Owner can make part numbers in it, change its "
+                         "parts (check out, check in, release, revise, void, and the other actions), and ask for or "
+                         "sign its workflows. Superusers can still sign. A restricted project appears in New Part, "
+                         "New Assembly, and Import only for those who can use it."],
+    ["Hide Project", "Restricted, and invisible to everyone else. Litterbox leaves its parts (records, CAD files, "
+                     "and cancelled revisions) out of their copy of the vault, so their CAD files are never "
+                     "downloaded, and leaves its ECOs out of their ECOs screen."],
+], [1.6, 4.9]),
+("p", "Either option needs a Lead. Admins and the Owner add, change, and delete projects. A project's Lead can "
+      "change everything about it except its digits, including its members. In the Project window, search the "
+      "team, select people, and press **Add**; select members and press **Remove** to take them off."),
+("p", "A part belongs to the project whose block holds its number. Someone added to a hidden project gets its "
+      "parts at their next Get Latest, and someone taken off loses them at theirs."),
+("tip", "Restrict and Hide control what Litterbox does. They are not security: anyone with access to the vault on "
+        "the Git host can read all of it, including a hidden project's records."),
 ("h2", "Finding parts"),
 ("ul", [
     "The sidebar views filter the list: your checkouts, everything checked out, released parts, parts not "
-    "downloaded, and void parts (hidden everywhere else).",
-    "The search box looks in every column, or one column you pick beside it. It takes wildcards: `*` for any "
-    "characters and `?` for one, matching the whole value (Te*rt finds Test Part but not My Test Part).",
-    "Click a column heading to sort. View > Columns adds more columns: Project, Kind, COTS, Status, Checked out "
-    "by, Released rev, Imported from and Material.",
+    "downloaded, and void parts (which no other view shows).",
+    "The search box looks in every column, or in one column chosen beside it. `*` matches any characters and `?` "
+    "matches one, against the whole value (Te*rt finds Test Part but not My Test Part).",
+    "Click a column heading to sort. View > Columns adds Project, Kind, COTS, Status, Checked out by, Released rev, "
+    "Imported from, and Material.",
 ]),
 ("h2", "Checking out and checking in"),
-("p", "Files you don't have checked out are **read-only** on your disk, so SolidWorks opens them read-only and "
-      "you can't save over someone else's work by accident. To edit a part:"),
+("p", "Files you don't have checked out are **read-only** on your disk, so SolidWorks opens them read-only and you "
+      "can't save over someone else's work. To edit a part:"),
 ("ol", [
-    "Tick it and press **Check Out**. Litterbox takes the lock on the part's record and files, downloads the "
-    "latest version if needed, and makes the files writable. If you already had the part open in SolidWorks, "
-    "Litterbox makes it writable there too, so you can save straight away.",
-    "Edit and save in SolidWorks as usual.",
-    "Press **Check In** to upload your changes and give the lock back, or **Save Progress** to upload them and "
-    "keep the lock (useful at the end of a day, so your work is backed up).",
+    "Tick it and press **Check Out**. Litterbox takes the lock on the part's record and files, downloads the latest "
+    "version if needed, and makes the files writable. A part already open in SolidWorks is made writable there "
+    "too.",
+    "Edit and save in SolidWorks.",
+    "Press **Check In** to upload your changes and release the lock, or **Save Progress** to upload them and keep "
+    "the lock.",
 ]),
-("p", "**Undo Checkout** throws your changes away and puts the part back as it is in the vault. Check In notices "
-      "parts with nothing changed and asks before going ahead, and refuses a part you saved in SolidWorks after "
-      "pressing it (the save could end up half uploaded): that part stays checked out and you check it in again."),
-("tip", "Until the status bar says Ready after a check-in, don't save those parts in SolidWorks. Litterbox warns "
-        "you, but it's worth knowing why: a save in the middle of an upload can end up half in the vault."),
-("p", "When an assembly is checked in with SolidWorks open, Litterbox also reads which parts it uses and how many "
-      "of each, and when a part is checked in it reads its material. Without SolidWorks open the check-in still "
-      "works; Litterbox notes that those need updating (see Assemblies, references and BOMs, and Materials)."),
+("p", "**Undo Checkout** discards your changes and restores the part as it is in the vault. Check In asks before "
+      "checking in a part with no changes. It refuses a part saved in SolidWorks after Check In was pressed, because "
+      "the save could be partly uploaded; that part stays checked out, and you check it in again."),
+("tip", "Don't save parts in SolidWorks while they are being checked in. Wait until the status bar says Ready."),
+("p", "When an assembly is checked in with SolidWorks open, Litterbox reads which parts it uses and how many of "
+      "each. When a part is checked in with SolidWorks open, Litterbox reads its material. Without SolidWorks the "
+      "check-in still works, and Litterbox marks these as needing an update (see Assemblies, references, and BOMs, "
+      "and Materials)."),
 ("h2", "Getting other people's changes"),
-("p", "**Get Latest** (Vault menu, or click \"N changes to get\" in the header) downloads what others have "
-      "uploaded. It keeps the files you already have up to date without fetching the rest. If a file it replaces is "
-      "open in SolidWorks, close and reopen it there so you aren't looking at an old copy. **Refresh** (F5) "
-      "re-reads your copy without going to the server."),
+("p", "**Get Latest** (Vault menu, or the change count in the header) downloads what others have uploaded. It "
+      "updates the files you already have and doesn't fetch the rest. If it replaces a file that is open in "
+      "SolidWorks, close and reopen the file there. **Refresh** (F5) re-reads your copy without contacting the "
+      "host."),
 ("h2", "Opening files"),
-("p", "The **Part** menu has Open, Open Drawing and **Open PDF**. When a part has a working revision and released "
-      "ones, Litterbox asks which you want. Files open in whatever Windows uses for them, so SolidWorks files open "
-      "in SolidWorks. To use another program for a file type, add it to settings.yaml:"),
+("p", "The **Part** menu has Open, Open Drawing, and **Open PDF**. When a part has a working revision and released "
+      "ones, Litterbox asks which to open. Files open in the program Windows uses for them. To use another program "
+      "for a file type, add it to settings.yaml:"),
 ("code", ["open_with:", "  .pdf: C:\\Program Files\\Adobe\\Acrobat\\Acrobat.exe"]),
 ("h2", "The details pane"),
-("table", ["Tab", "What it shows"], [
-    ["Details", "Pick a revision: its state, who released it and when, the workflow and who signed, its ECO, "
-                "what its release changed (form, fit, function), what to do with its parts once a later revision "
-                "was released (its disposition), its files, material, STEP/PDF, and the part's purchasing info."],
-    ["History", "Every revision, with buttons to open older ones, and everything that ever happened to the part."],
-    ["Uses / Where used", "What an assembly uses, and which assemblies use this part, with whether each use is "
-                          "up to date."],
+("table", ["Tab", "Contents"], [
+    ["Details", "For the chosen revision: its state, who released it and when, the workflow and signers, its ECO, "
+                "what its release changed (Form, Fit, Function), the disposition of its parts after a later "
+                "release, its files, material, and STEP/PDF, and the part's purchasing info."],
+    ["History", "Every revision, with buttons to open older ones, and every event in the part's history."],
+    ["Uses / Where used", "The parts an assembly uses, and the assemblies that use this part, with whether each use "
+                          "is up to date."],
     ["BOM", "The bill of materials of an assembly revision (see below)."],
-    ["Documents", "Documents linked to the revision picked on the Details tab."],
+    ["Documents", "Documents linked to the revision chosen on the Details tab."],
 ], [1.5, 5.0]),
 
 ("h1", "Revisions and the lifecycle"),
-("p", "A part is **in work** until it's released. Its first revision is A. The Lifecycle menu moves it along:"),
-("table", ["Action", "What it does"], [
-    ["Release", "Freezes the working revision. Its files become read-only for everyone, and nobody can check it "
-                "out. Litterbox checks first that the files are there and warns (or, if your org chooses, refuses) "
-                "when an assembly uses parts that aren't released or are out of date."],
-    ["Revise", "Starts the next revision of a released part: copies its files to the new letter (B), re-points "
-               "drawings at the new model, and checks it out to you. The released revision stays as it was."],
-    ["Cancel Revision", "Throws away a revision that was never released. Its files go to a cancelled-revs folder, "
-                        "not the bin, and the letter isn't used again."],
-    ["Unrelease", "Takes a part back to in work (with a reason), for when a release was a mistake."],
-    ["Void", "Retires a part that was never released. Its number is never used again. You say what to do with any "
-             "parts already made (the Dispo, see below)."],
-    ["Make COTS", "Records a part as commercial off-the-shelf: something you bought and didn't modify. It's "
-                  "frozen like a release."],
-    ["Edit Details", "Changes a part's name and description, and switches it between CAD and non-CAD until it's "
-                     "first released."],
+("p", "A part is **in work** until it is released. Its first revision is A. The Lifecycle menu has these "
+      "actions:"),
+("table", ["Action", "Effect"], [
+    ["Release", "Freezes the working revision. Its files become read-only for everyone, and it can't be checked "
+                "out. Litterbox first checks that the files exist, and warns (or, if the org chooses, refuses) when "
+                "an assembly uses parts that are unreleased or out of date."],
+    ["Revise", "Starts the next revision of a released part: copies its files to the new letter (B), points "
+               "drawings at the new model, and checks it out to you. The released revision is unchanged."],
+    ["Cancel Revision", "Discards a revision that was never released. Its files move to the cancelled-revs folder, "
+                        "and its letter isn't reused."],
+    ["Unrelease", "Returns a part to in work, with a reason, when a release was a mistake."],
+    ["Void", "Retires a part that was never released. Its number is never reused."],
+    ["Make COTS", "Records a part as commercial off-the-shelf (bought, not modified). It is frozen like a release."],
+    ["Edit Details", "Changes a part's name and description, and switches it between CAD and non-CAD until its "
+                     "first release."],
 ], [1.5, 5.0]),
-("p", "Revision letters skip I, O, Q, S, X and Z, which are easily mistaken for numbers (ASME Y14.35 recommends "
-      "this): H is followed by J, and Y by AA."),
-("p", "Release, Unrelease, Void and Make COTS work on several ticked parts at once, and each part's history "
-      "records who did it. If your vault has a workflow for the action, pressing it starts a sign-off request "
-      "instead (see Sign-off workflows)."),
-("h2", "What changed, and what to do with the old parts"),
-("p", "Releasing Rev B or later replaces a revision people may already have made parts to. So for each part, "
-      "Litterbox asks two things:"),
+("p", "Revision letters skip I, O, Q, S, X, and Z, which are easily mistaken for numbers (as ASME Y14.35 "
+      "recommends): H is followed by J, and Y by AA."),
+("p", "Release, Unrelease, Void, and Make COTS work on several ticked parts at once, and each part's history "
+      "records who did it. If the vault has a workflow for the action, pressing it starts a sign-off request "
+      "instead (see Sign-off workflows and ECOs)."),
+("h2", "Form, Fit, Function, and Dispo"),
+("p", "When a workflow with an ECO releases a part at Rev B or later, the Workflow window asks two things for each "
+      "part:"),
 ("ul", [
-    "**Form, Fit and Function**: tick what the new revision changes. Leave all three clear for a change that "
-    "touches none of them, such as a drawing correction.",
-    "**Dispo** (disposition): what to do with the parts already made to the revision before. **Use As Is**, "
-    "**Rework**, **Scrap** or **Return To Supplier**. It starts blank and has to be chosen.",
+    "**Form, Fit, and Function**: which of these the new revision changes. Leave all three clear for a change that "
+    "affects none of them, such as a drawing correction.",
+    "**Dispo** (disposition): what to do with parts already made to the previous revision: **Use As Is**, "
+    "**Rework**, **Scrap**, or **Return To Supplier**. It starts blank and must be chosen.",
 ]),
-("p", "A first release (Rev A) asks neither, since nothing earlier exists. Voiding a part asks for a Dispo of its "
-      "own revision's parts. With a workflow these are columns of the Workflow window's parts list; without one, a "
-      "small window asks before the release or void happens. What changed is kept with the new revision, and the "
-      "Dispo with the old one: pick the old revision on the Details tab and it says, for example, \"Disposition: "
-      "Scrap (Rev B released)\"."),
+("p", "A void through such a workflow asks for a Dispo of the voided revision's parts. A first release (Rev A) "
+      "asks neither. Workflows without an ECO, and Release or Void without a workflow, don't ask them."),
+("p", "What changed is stored with the new revision, and the Dispo with the old one. Choose the old revision on the "
+      "Details tab to see it, for example \"Disposition: Scrap (Rev B released)\"."),
 
-("h1", "Assemblies, references and BOMs"),
-("h2", "What a part uses, and where it's used"),
-("p", "Litterbox keeps a list of the parts each assembly revision uses, read from the assembly when it's checked "
-      "in. That gives you **Uses** and **Where used** on the details pane, and Part > **References...** for a "
-      "fuller view. Each use says whether it's up to date: a newer revision may have been released, or the part "
-      "used may not be released yet, or may be void."),
+("h1", "Assemblies, references, and BOMs"),
+("h2", "Uses and where used"),
+("p", "Litterbox keeps a list of the parts each assembly revision uses, read from the assembly at check-in. This "
+      "list provides **Uses** and **Where used** on the details pane, and Part > **References...**. Each use shows "
+      "whether it is up to date: a newer revision may be released, or the part used may be unreleased or void."),
 ("p", "**Update references...** points in-work assemblies at the latest released revisions of their parts, in "
-      "SolidWorks, and checks them in. It never touches a released assembly; revise it first."),
+      "SolidWorks, and checks them in. It never changes a released assembly; revise it first."),
 ("h2", "The BOM tab"),
-("p", "An assembly's bill of materials is worked out from those lists every time you look, so it's never out of "
-      "step with the models. Three ways to list it:"),
+("p", "An assembly's bill of materials is worked out from those lists each time it is shown, so it always matches "
+      "the models. It has three views:"),
 ("ul", [
     "**Single level**: what the assembly itself uses.",
     "**Indented**: the same, with each sub-assembly's parts under it.",
-    "**Every part once**: each part revision anywhere in the tree once, with its total quantity. A buying list.",
+    "**Every part once**: each part revision in the tree once, with its total quantity.",
 ]),
-("p", "Each line shows the part's revision, quantity, name, material, supplier, unit cost, total cost and lead "
-      "time, and whether that use is out of date. The line above the table gives the assembly's **total cost**, "
-      "worked out from every part in the tree once, and says how many parts have no unit cost or no count. "
-      "**Export...** saves the list you're looking at as a .csv file that opens in Excel, to a folder outside the "
-      "vault."),
-("p", "Quantities are counted by SolidWorks at check-in: each copy at the top of the assembly, leaving out "
-      "suppressed copies and those excluded from the BOM. If an assembly was checked in without SolidWorks open, "
-      "the BOM says it needs updating and **Update BOM** counts it again (starting SolidWorks out of sight if it "
-      "isn't running)."),
+("p", "Each line shows the revision, quantity, name, material, supplier, unit cost, total cost, lead time, and "
+      "whether the use is out of date. The line above the table gives the assembly's **total cost**, from every "
+      "part in the tree once, and says how many parts have no unit cost or no count. **Export...** saves the "
+      "current view as a .csv file, to a folder outside the vault."),
+("p", "Quantities are counted by SolidWorks at check-in: each copy at the top level of the assembly, excluding "
+      "suppressed copies and those excluded from the BOM. If an assembly was checked in without SolidWorks, the BOM "
+      "says it needs updating, and **Update BOM** counts it again (starting SolidWorks in the background if needed)."),
 ("p", "When an assembly is released, Litterbox saves its indented BOM beside the model as "
-      "HCR-100010-500_A_BOM.csv, so the released revision keeps a fixed record of what it was made of."),
+      "HCR-100010-500_A_BOM.csv, as a fixed record of the released revision."),
 ("h2", "Non-CAD parts and kits"),
-("p", "Not everything in a product is modelled: paint, glue, wire, raw stock, labels. New Part and New Assembly "
-      "have a **Kind**: CAD or **Non-CAD**. A non-CAD part has a part number, revisions, a lifecycle and "
-      "purchasing info like any other, just no files."),
-("p", "On a CAD assembly you have checked out, the BOM tab's **Add item...** adds a non-CAD part to its BOM with a "
-      "quantity (two cans of paint, say), and **Remove** takes it off. A **kit** is a non-CAD assembly, built only "
-      "from lines added this way, of any parts. Lines added by hand freeze at release and carry on to the next "
-      "revision like the rest."),
+("p", "New Part and New Assembly have a **Kind**: CAD or **Non-CAD**. A non-CAD part (paint, glue, wire, raw "
+      "stock, labels) has a part number, revisions, a lifecycle, and purchasing info, but no files."),
+("p", "On a checked-out CAD assembly, the BOM tab's **Add item...** adds a non-CAD part with a quantity, and "
+      "**Remove** takes it off. A **kit** is a non-CAD assembly made only of lines added this way, from any parts. "
+      "Added lines freeze at release and carry on to the next revision."),
 
-("h1", "Purchasing, costs and materials"),
+("h1", "Purchasing, costs, and materials"),
 ("h2", "Purchasing info"),
-("p", "Lifecycle > **Purchasing Info...** gives a part a supplier, a supplier part number, a unit cost and a lead "
-      "time in days. Purchasing info belongs to the part, not to a revision (a price changes without the design "
-      "changing), so it needs no check-out and works on released parts too: the change is uploaded at once and "
-      "the part's history records it."),
-("p", "An Admin chooses the **team's currency** in Team > Vault Settings.... Costs are then shown with its symbol "
-      "($12.50) on the Details tab, in the BOM and beside the Unit cost box. Unit costs are stored as plain numbers, "
-      "so changing the currency doesn't convert anything. An exported BOM names the currency in its column "
-      "headings and keeps the cells as numbers, so a spreadsheet can add them up."),
+("p", "Lifecycle > **Purchasing Info...** sets a part's supplier, supplier part number, unit cost, and lead time in "
+      "days. Purchasing info belongs to the part, not to a revision, so it needs no check-out and works on released "
+      "parts. The change is uploaded at once and recorded in the part's history."),
+("p", "An Admin chooses the **team's currency** in Team > Vault Settings.... Costs are shown with its symbol "
+      "($12.50) on the Details tab, in the BOM, and beside the Unit cost box. Unit costs are stored as plain "
+      "numbers, so changing the currency doesn't convert them. An exported BOM names the currency in its column "
+      "headings and keeps the cells as numbers."),
 ("h2", "Materials"),
-("p", "Each revision's material is read from SolidWorks when the part is checked in with SolidWorks open (from "
-      "its active configuration), and shows on the Details tab, in the BOM and in the Material column. A part "
-      "with no material assigned shows blank. One checked in without SolidWorks open, or from before Litterbox "
-      "read materials, shows **Not read yet**: tick it and choose Part > **Update Material**, which reads it "
-      "through SolidWorks (starting it out of sight if needed)."),
+("p", "Each revision's material is read from SolidWorks (its active configuration) when the part is checked in "
+      "with SolidWorks open. It appears on the Details tab, in the BOM, and in the Material column. A part with no "
+      "material assigned shows blank. A part checked in without SolidWorks, or before Litterbox read materials, "
+      "shows **Not read yet**; tick it and choose Part > **Update Material** to read it."),
 
-("h1", "Release outputs and sharing files"),
+("h1", "Release outputs and exports"),
 ("h2", "STEP and PDF files"),
-("p", "Most people around the engineers want a STEP and a drawing PDF, not SolidWorks files. Litterbox makes them "
-      "for you:"),
 ("ul", [
-    "**At release.** Straight after a part is released, Litterbox makes a STEP (always AP214) of the model and a "
-    "PDF of every sheet of the drawing, from the frozen files, and uploads them as HCR-100010-001_A.STEP and "
-    "_A.PDF. If the person releasing has no SolidWorks, the release still happens; the part is flagged "
-    "**STEP/PDF needs updating** and anyone with SolidWorks can make them later.",
-    "**On demand.** Part > **Generate STEP/PDF...** makes them for the ticked parts, either into the vault (as "
-    "above) or straight into a folder outside it. An Admin can tick Make released parts' files again to replace "
-    "damaged ones.",
+    "**At release.** After a part is released, Litterbox makes a STEP (AP214) of the model and a PDF of every sheet "
+    "of the drawing from the frozen files, and uploads them as HCR-100010-001_A.STEP and _A.PDF. If the person "
+    "releasing has no SolidWorks, the release still happens, the part is flagged **STEP/PDF needs updating**, and "
+    "anyone with SolidWorks can make them later.",
+    "**On demand.** Part > **Generate STEP/PDF...** makes them for the ticked parts, into the vault or into a "
+    "folder outside it. An Admin can tick Make released parts' files again to replace damaged ones.",
 ]),
-("p", "Litterbox starts SolidWorks out of sight if it isn't running, and closes it again afterwards. Your own "
-      "STEP settings are put back."),
+("p", "Litterbox starts SolidWorks in the background if it isn't running, closes it afterwards, and restores your "
+      "STEP settings."),
 ("h2", "Exporting"),
-("p", "Part > **Export Files...** copies the ticked parts' files to a folder you pick, for a vendor or a machinist: "
-      "any of model, drawing, STEP and PDF, of the latest released revision (or the working one, or one you pick), "
-      "and optionally the parts each assembly uses. Exports always go outside C:\\Litterbox and outside any Git "
-      "repository, so a copy can never end up uploaded or locked with the vault."),
+("p", "Part > **Export Files...** copies the ticked parts' files to a folder you choose: any of model, drawing, "
+      "STEP, and PDF, from the latest released revision, the working revision, or a revision you pick, and "
+      "optionally the parts each assembly uses. Exports always go outside C:\\Litterbox and outside any Git "
+      "repository."),
 
 ("h1", "Documents"),
-("p", "Test procedures, plans, datasheets and design-review slides deserve revision control too. The **Documents** "
-      "screen keeps them. Documents don't use part numbers: an Admin sets up **document types** in Team > "
-      "Document Types... (a name and a prefix, like Propulsion Document, PROP), and **New Document** numbers each "
-      "one with the next free number for its type: PROP-0001, PROP-0002 ..."),
-("p", "A document goes through the same life as a part: check out, check in, release, revise (its files are "
-      "copied to the new revision), unrelease, void and cancel revision, from the buttons on the Documents screen. "
-      "**Add Files...** puts files of any type into its working revision (one of each type: PROP-0001_A.docx, "
-      "PROP-0001_A.pdf), **Remove File...** takes one out, and **Open** opens one. **Details...** shows its revisions, "
-      "files, history, and every part revision that links to it."),
-("p", "**Linking documents to parts.** A part's Documents tab lists the documents linked to a revision, with "
-      "Open, Add... and Remove. A link belongs to the part revision: it's frozen at release and carried to the next "
-      "revision. On a part you have checked out you can add and remove links freely. An Admin or a superuser can "
-      "add a link to a released part at any time; taking one off a released part needs sign-offs through a "
-      "Remove document link workflow."),
-("p", "An Admin can hide a document type nobody should use any more (Hide / Offer in Document Types). Documents "
-      "of that type stay as they are; it just isn't offered by New Document."),
+("p", "The **Documents** screen keeps documents such as test procedures, plans, datasheets, and review slides "
+      "under revision control. Documents don't use part numbers. An Admin sets up **document types** in Team > "
+      "Document Types... (a name and a prefix, such as Propulsion Document, PROP), and **New Document** numbers each "
+      "document with the next free number for its type: PROP-0001, PROP-0002, and so on."),
+("p", "Documents go through the same lifecycle as parts: check out, check in, release, revise (which copies the "
+      "files to the new revision), unrelease, void, and cancel revision. **Add Files...** adds a file of any type to "
+      "the working revision (one per type, such as PROP-0001_A.docx and PROP-0001_A.pdf), **Remove File...** "
+      "removes one, and **Open** opens one. **Details...** shows the document's revisions, files, history, and the "
+      "part revisions that link to it."),
+("p", "**Links to parts.** A part's Documents tab lists the documents linked to a revision, with Open, Add..., and "
+      "Remove. A link belongs to the part revision: it freezes at release and carries on to the next revision. On a "
+      "checked-out part, links can be added and removed freely. An Admin or a superuser can add a link to a "
+      "released part at any time; removing one from a released part needs a Remove document link workflow."),
+("p", "An Admin can hide a document type (Hide / Offer in Document Types). Its documents are unchanged, and New "
+      "Document no longer offers it."),
 
 ("h1", "Sign-off workflows and ECOs"),
 ("h2", "How workflows work"),
-("p", "A workflow is a list of sign-offs that an action needs before it happens. Each sign-off asks for someone "
-      "holding a role (Responsible Engineer), or any of several roles (Manager or Chief). An action with no "
-      "workflow just happens when you press it. An Admin sets them up in Team > **Part Workflows...** (Release, "
-      "Unrelease, Void and Make COTS) and **Doc Workflows...** (Release document, Unrelease document, Void document "
-      "and Remove document link). An action can have several workflows, named T1, T2 or whatever you like, and "
-      "**Add standard workflows** gives you a starting set."),
-("p", "Each workflow also says whether one person may fill more than one sign-off, whether the person asking may "
-      "sign, and whether it **requires an ECO**."),
+("p", "A workflow is a list of sign-offs that an action needs before it happens. Each sign-off asks for a person "
+      "with a role (Responsible Engineer) or with any of several roles (Manager or Chief). An action without a "
+      "workflow happens when you press it. An Admin sets up workflows in Team > **Part Workflows...** (Release, "
+      "Unrelease, Void, and Make COTS) and **Doc Workflows...** (Release document, Unrelease document, Void "
+      "document, and Remove document link). An action can have several named workflows. **Add standard workflows** "
+      "adds a starting set."),
+("p", "Each workflow also sets whether one person may fill more than one sign-off, whether the requester may sign, "
+      "and whether it **requires an ECO**."),
 ("h2", "Asking for sign-off"),
 ("ol", [
-    "Tick the parts and press the action (Release, say). With a workflow in place, the Workflow window opens "
-    "instead.",
-    "Check the parts list: Part, Name, Rev (\"A → B\" for a new revision), and for a release of Rev B or later "
-    "the **Form**, **Fit** and **Function** boxes and the **Dispo** (click a cell to tick it or pick from its "
-    "menu). Parts at Rev A show dashes. Add Parts and Remove Parts change the list.",
-    "Pick the workflow, choose a person for each sign-off, and add extra sign-offs if you need to. If the request "
-    "needs an ECO, fill in its title and description on the right.",
-    "Submit. Several parts go through one request together; people sign once for the lot. The parts show as "
-    "waiting for sign-offs, and everyone named sees the request under **Workflows > My Tasks**.",
-    "When the last person signs, the action happens straight away. (If that fails, for instance because you were "
-    "offline, the sign-offs are kept and **Complete** in My Tasks finishes it.)",
+    "Tick the parts and press the action (Release, for example). With a workflow in place, the Workflow window "
+    "opens.",
+    "Check the parts list: Part, Name, and Rev (\"A → B\" for a new revision). If the request has an ECO, the list "
+    "also has **Form**, **Fit**, **Function**, and **Dispo** for parts at Rev B or later; click a cell to tick it "
+    "or choose from its menu. Add Parts and Remove Parts change the list.",
+    "Choose the workflow, a person for each sign-off, and any extra sign-offs. If the request needs an ECO, enter "
+    "its title and description.",
+    "Submit. Several parts go through one request, and each person signs once for all of them. The parts show as "
+    "waiting for sign-offs, and everyone named sees the request in **Workflows > My Tasks**.",
+    "When the last person signs, the action happens. If it fails (for example, offline), the sign-offs are kept "
+    "and **Complete** in My Tasks finishes it.",
 ]),
-("p", "The person who asked (or an Admin) can withdraw the request until it's done. An Admin can **Override "
-      "Approve** or **Override Reject**, recorded as an override with a reason, and in **All Workflows** can change "
-      "who signs (Change signer...)."),
+("p", "Only people who may sign for the parts' projects are offered as signers (see Projects)."),
+("p", "The requester or an Admin can withdraw a request until it is done. An Admin can **Override Approve** or "
+      "**Override Reject**, recorded as an override with a reason, and can change who signs in **All Workflows** "
+      "(Change signer...)."),
 ("h2", "Reviewing a request"),
-("p", "Select a request in **My Tasks** and press **Review** (or double-click it). The Review window shows the "
-      "request as it was asked, without letting you change it: the parts with what changed and their Dispo, the "
-      "workflow, every sign-off with who it's for and who has signed, and the ECO if there is one."),
+("p", "Select a request in **My Tasks** and press **Review**, or double-click it. The Review window shows the "
+      "request as it was submitted, read-only: the parts (with Form, Fit, Function, and Dispo when it has an ECO), "
+      "the workflow, every sign-off with its person and whether it is signed, and the ECO."),
 ("ul", [
-    "**Open Drawing** and **Open PDF** open the selected part's files at the revision being released; **Previous "
-    "Drawing** and **Previous PDF** open the revision before, so you can compare them.",
-    "Each sign-off that's yours has a **Reassign** button: pick someone else with the role to give it to. "
-    "**Undo** takes it back. Nothing is saved until you press a button at the bottom.",
-    "The **Comment** box is optional when you approve and required when you reject. The person who asked sees it.",
+    "**Open Drawing** and **Open PDF** open the selected part's files at the revision being released. **Previous "
+    "Drawing** and **Previous PDF** open the revision before it.",
+    "Each of your sign-offs has a **Reassign** button to give it to someone else with the role. **Undo** takes it "
+    "back. Nothing is saved until you press a button at the bottom.",
+    "The **Comment** is optional to approve and required to reject. The requester sees it.",
 ]),
-("table", ["Button", "What it does"], [
-    ["Approve", "Hands any sign-offs you reassigned to their new people, then approves the rest of yours. Greyed "
-                "out once you've reassigned all of them."],
-    ["Reject", "Sends the whole request back to the person who asked (any reassignments are dropped). Greyed out "
-               "once you've reassigned all your sign-offs."],
-    ["Reassign", "Only works once you've reassigned every one of your sign-offs: it hands them over and signs "
-                 "nothing."],
+("table", ["Button", "Effect"], [
+    ["Approve", "Hands any reassigned sign-offs to their new people, then approves the rest of yours. Unavailable "
+                "once all of yours are reassigned."],
+    ["Reject", "Sends the request back to the requester and drops any reassignments. Needs a comment. Unavailable "
+               "once all of yours are reassigned."],
+    ["Reassign", "Available once all of your sign-offs are reassigned. Hands them over without signing."],
 ], [1.3, 5.2]),
-("p", "Whoever you hand a sign-off to finds the request in their own My Tasks."),
-("h2", "When a request is rejected"),
-("p", "A rejected request isn't thrown away. It leaves the signers' My Tasks and appears in the asker's, marked "
-      "as rejected with who rejected it and why. Until it's dealt with it's a **draft**: its parts can be checked "
-      "out and in to fix whatever was wrong, but they can't go into any other workflow."),
-("p", "**Review** opens it in the Workflow window, filled in as it was asked. Change whatever needs changing (the "
-      "parts, the people, Form, Fit, Function, the Dispo, the ECO) and press **Resubmit workflow**: everyone signs "
-      "again from the start, and the same ECO carries on. Or press **Withdraw** to drop it for good."),
-("p", "**Superusers.** An Admin can mark a role as a superuser role (Team > Roles...). Whoever holds it can give "
-      "any sign-off on any request, recorded as \"as Quality for Bea Jones (superuser)\". It's meant for someone at "
-      "the top of the org who can sign for anyone. Admins, the Owner and superusers also see **All Workflows**."),
+("p", "A person you hand a sign-off to sees the request in their My Tasks."),
+("h2", "Rejected requests"),
+("p", "A rejected request leaves the signers' My Tasks and appears in the requester's, marked rejected, with who "
+      "rejected it and why. It is then a **draft**: its parts can be checked out and in, but can't go into another "
+      "workflow."),
+("p", "**Review** opens the draft in the Workflow window as it was submitted. Change the parts, people, Form, Fit, "
+      "Function, Dispo, or ECO, and press **Resubmit workflow**; everyone signs again, and the same ECO continues. "
+      "**Withdraw** drops the request."),
+("p", "**Superusers.** An Admin can make a role a superuser role (Team > Roles...). A person with that role can "
+      "give any sign-off on any request they can see, recorded as \"as Quality for Bea Jones (superuser)\". Admins, "
+      "the Owner, and superusers see **All Workflows**."),
 ("h2", "Engineering change orders"),
-("p", "A workflow that requires an ECO asks for a **title** and description when it starts, and Litterbox saves it "
-      "as ECO-0001, ECO-0002 ... in the vault, with each part's revision, what changed and its Dispo. A release "
-      "whose parts are all at Rev A needs no ECO, even when its workflow requires one: a first release changes "
-      "nothing. If any part is at Rev B or later, the ECO is asked for."),
-("p", "The ECO stays open while its request is waiting, and while a rejected request is being changed (the "
-      "rejection and the resubmission go in its history). It closes when the request is released or withdrawn, "
-      "with the sign-offs and comments, and is never changed again. The **ECOs** screen lists and searches them, "
-      "and a released revision's Details tab links to the ECO it was released with."),
+("p", "A workflow that requires an ECO asks for a **title** and a **description** when the request starts. "
+      "Litterbox saves the ECO as ECO-0001, ECO-0002, and so on, with each part's revision, what changed, and its "
+      "Dispo. A release whose parts are all at Rev A needs no ECO, even if its workflow requires one."),
+("p", "An ECO stays open while its request waits, and while a rejected request is being changed (its history "
+      "records the rejection and the resubmission). It closes, with the sign-offs and comments, when the request is "
+      "released or withdrawn, and is not changed after that. The **ECOs** screen lists and searches them, and a "
+      "released revision's Details tab links to its ECO."),
 
 ("h1", "Running the team"),
-("p", "This part is for Admins and the Owner. Everything here is on the **Team** screen, and changes to people, "
-      "roles and workflows are drafted there and uploaded together when you press Save."),
+("p", "This chapter is for Admins and the Owner. These tasks are on the **Team** screen. Changes to people, roles, "
+      "and workflows are drafted there and uploaded together with Save."),
 ("h2", "People and access"),
-("table", ["Access", "What they can do"], [
-    ["Owner", "Everything, plus renaming the org and handing Ownership to someone else. There's exactly one."],
-    ["Admin", "Manage people, roles, workflows, projects, document types and vault settings; override workflows; "
-              "break a checkout; remake released STEP/PDF files; link documents to released parts."],
-    ["Member", "Everyday work: create, check out and in, release (subject to workflows), sign off."],
-    ["Not listed, or switched off", "Read-only: look, open, export. Litterbox says why they can't do more."],
+("table", ["Access", "Permissions"], [
+    ["Owner", "Everything, plus renaming the org and transferring ownership. There is exactly one Owner."],
+    ["Admin", "Manage people, roles, workflows, projects, document types, and vault settings; override workflows; "
+              "break a checkout; remake released STEP/PDF files; link documents to released parts. Admins can work "
+              "in every project, restricted or hidden."],
+    ["Member", "Everyday work: create, check out, check in, release (subject to workflows), and sign off. A "
+               "project's Lead can change that project."],
+    ["Not listed, or switched off", "Read-only: look, open, and export."],
 ], [1.7, 4.8]),
-("p", "Litterbox knows who you are from the account you're signed in to on the Git host, matched against each "
-      "person's host user names. **Who am I?** checks it. Optionally, an Admin can require **signed commits** "
-      "(Vault Settings), and each person sets up a signing key with Signing...; Litterbox then refuses uploads that "
-      "aren't signed by a key on the team list."),
-("p", "When someone can't check a part in (they've left, or their laptop died), an Admin can **Break Checkout** "
-      "(Lifecycle menu). Their changes aren't uploaded; when they next sync, Litterbox saves their copies of any "
-      "files that changed meanwhile beside the vault and tells them where."),
+("p", "Litterbox identifies you by the account you are signed in to on the Git host, matched against each "
+      "person's host user names. **Who am I?** checks it. An Admin can require **signed commits** (Vault "
+      "Settings); each person then sets up a signing key with Signing..., and Litterbox refuses uploads that aren't "
+      "signed by a key on the team list."),
+("p", "When someone can't check a part in, an Admin can **Break Checkout** (Lifecycle menu). That person's changes "
+      "aren't uploaded. At their next sync, Litterbox saves their copies of files that changed beside the vault and "
+      "tells them where."),
 ("h2", "Vault settings"),
-("table", ["Setting", "What it controls"], [
-    ["Organization name", "Shown beside the org code. Only the Owner can change it."],
-    ["Commits for a batch", "One commit per part (clear histories) or one for the batch (faster)."],
-    ["Release rule", "Warn, block or say nothing when a release uses parts that are out of date or not released."],
+("table", ["Setting", "Controls"], [
+    ["Organization name", "The name shown beside the org code. Only the Owner can change it."],
+    ["Commits for a batch", "One commit per part or one for the whole batch."],
+    ["Release rule", "Warn, block, or do nothing when a release uses parts that are out of date or unreleased."],
     ["Signed commits", "Whether uploads must be signed by a key on the team list."],
-    ["Assembly variant start", "Where New Assembly's variants start (500)."],
-    ["SolidWorks version", "The version everyone works in. Anyone with a newer SolidWorks can't check out or "
-                           "revise, because SolidWorks upgrades files when it saves them and older versions can't "
-                           "open them."],
+    ["Assembly variant start", "The first variant New Assembly uses (500)."],
+    ["SolidWorks version", "The version everyone works in. People with a newer SolidWorks can't check out or "
+                           "revise, because SolidWorks upgrades files when it saves them."],
     ["Team's currency", "The symbol costs are shown with."],
 ], [1.8, 4.7]),
-("h2", "Keeping the vault healthy"),
+("h2", "Vault maintenance"),
 ("ul", [
     "**Vault > Update file rules...** appears when Litterbox has newer rules for which files Git LFS stores and "
-    "locks. An Admin is asked once per session; the update changes only Litterbox's own lines.",
-    "**Vault > Vault Size...** shows how much the vault takes up on the host (its history and every version of "
-    "every file in Git LFS) and how much is downloaded on your computer. Worth checking on hosts with small LFS "
-    "allowances.",
-    "Some features raise the oldest Litterbox version the vault accepts (workflows, projects, documents ...). "
-    "Litterbox tells anyone on an older version to update before they upload anything.",
+    "locks. An Admin is asked once per session. The update changes only Litterbox's own lines.",
+    "**Vault > Vault Size...** shows how much the vault uses on the host (its history and every version of every "
+    "Git LFS file) and how much is downloaded on your computer.",
+    "Some features raise the oldest Litterbox version the vault accepts (workflows, projects, documents, and "
+    "others). Litterbox tells anyone on an older version to update before they upload anything.",
 ]),
 
 ("h1", "Importing existing CAD"),
-("p", "Create > **Import...** brings a folder of existing SolidWorks files into the vault, giving each part a "
-      "number and renaming the files to match, with their references updated so assemblies still find their parts."),
+("p", "Create > **Import...** brings a folder of SolidWorks files into the vault. It gives each part a number and "
+      "renames the files to match, updating their references so assemblies still find their parts."),
 ("ol", [
-    "Pick the folders to import (or a saved scan). Litterbox scans them with SolidWorks: which files are parts, "
-    "assemblies and drawings, what each assembly uses, and which files the vault already has.",
-    "Review the table. Each item gets a proposed part number, which you can change, and a name. Choose a project "
-    "if you use them, or import a family under one base number. Untick anything you don't want.",
+    "Choose the folders to import, or a saved scan. Litterbox scans them with SolidWorks to find the parts, "
+    "assemblies, and drawings, what each assembly uses, and which files the vault already has.",
+    "Review the table. Each item has a proposed part number, which you can change, and a name. Choose a project "
+    "(only projects you can use are offered), or import a family under one base number. Untick anything you don't "
+    "want.",
     "**Finish & Import** copies the files into the vault under their new names through SolidWorks, creates the "
-    "records and uploads everything. STEP and PDF files with the same name as a model or drawing come along too.",
+    "records, and uploads everything. STEP and PDF files with the same name as a model or drawing are included.",
 ]),
-("p", "**Import COTS...** does the same for purchased parts and records them as COTS straight away. If an import "
-      "stops part-way, Litterbox remembers what it had done and can pick up or clean up next time."),
-("tip", "Try an import on a copy of a small, self-contained assembly first. Imported files are renamed, so "
-        "anything outside the import that pointed at the old files won't follow them."),
+("p", "**Import COTS...** does the same for purchased parts and records them as COTS. If an import stops part-way, "
+      "Litterbox records what it did and finishes or cleans up next time."),
+("tip", "Try an import on a copy of a small, self-contained assembly first. Imported files are renamed, so files "
+        "outside the import that point at the old names won't follow them."),
 
 ("h1", "Working with SolidWorks"),
-("p", "Litterbox talks to SolidWorks through its API for the things that need it: reading references, counting "
-      "parts, reading materials, copying files at Revise and Import, and making STEP and PDF files. Some notes on "
-      "how that behaves:"),
+("p", "Litterbox uses the SolidWorks API to read references, count parts, read materials, copy files at Revise and "
+      "Import, and make STEP and PDF files."),
 ("ul", [
-    "When it needs SolidWorks and it isn't running, Litterbox starts one **out of sight** and closes it afterwards. "
-    "When it is running, Litterbox uses it, and leaves documents you have open as they are.",
-    "At check-in it only uses a SolidWorks that's already running; it never starts one just to check in.",
+    "If SolidWorks isn't running when Litterbox needs it, Litterbox starts it **in the background** and closes it "
+    "afterwards. If it is running, Litterbox uses it and leaves your open documents as they are.",
+    "Check-in only uses a SolidWorks that is already running.",
     "Litterbox reads your installed SolidWorks version from Windows, without starting it, for the org's version "
     "check.",
-    "Litterbox can also **watch** what SolidWorks has open (add `solidworks_watch: true` to settings.yaml): it then "
-    "warns before checking in parts with unsaved changes, and before Get Latest replaces a file you have open.",
+    "Litterbox can **watch** what SolidWorks has open (`solidworks_watch: true` in settings.yaml). It then warns "
+    "before checking in parts with unsaved changes, and before Get Latest replaces an open file.",
 ]),
 
 ("h1", "Settings and troubleshooting"),
 ("h2", "Your settings"),
-("p", "Your personal settings live in C:\\Litterbox\\settings.yaml, outside every vault, and are never shared. "
-      "Most are set from the program (columns, text size, the open org). A few are only in the file:"),
+("p", "Your personal settings are in C:\\Litterbox\\settings.yaml, outside every vault, and are not shared. Most "
+      "are set in the program (columns, text size, and the open org). These are only in the file:"),
 ("table", ["Setting", "Effect"], [
-    ["update_check: false", "Don't look for a newer Litterbox at start-up."],
-    ["download: all", "Download every CAD file, not just those you use."],
-    ["open_with", "Which program opens each file type."],
+    ["update_check: false", "Don't check for a newer Litterbox at start-up."],
+    ["download: all", "Download every CAD file, not only those you use."],
+    ["open_with", "The program that opens each file type."],
     ["solidworks_watch: true", "Watch what SolidWorks has open (see Working with SolidWorks)."],
     ["solidworks_popups: false", "Send the watcher's warnings to the log instead of pop-ups."],
     ["debug_mode: true", "More detail in the log, including how long each step took."],
 ], [2.2, 4.3]),
-("p", "View > **Text size** (Ctrl+= and Ctrl+-) makes everything bigger or smaller, and Litterbox follows Windows' "
+("p", "View > **Text size** (Ctrl+= and Ctrl+-) changes the size of everything. Litterbox follows Windows' "
       "display scaling on each monitor."),
-("h2", "When something goes wrong"),
+("h2", "Problems"),
 ("ul", [
-    "A real problem turns the status bar's dot red. Press **Details...** for what went wrong and what to do about "
-    "it. Problems don't interrupt you with pop-ups.",
+    "A problem turns the status bar's dot red. **Details...** says what went wrong and what to do.",
     "The **Log** (View > Log, or the status bar) shows every Git command and its result. The full log is "
-    "C:\\Litterbox\\logs\\litterbox.log; send it along when you ask for help.",
-    "If an upload is refused because someone uploaded first, Litterbox gets their changes and tries again. If it "
-    "can't, your commits are kept and nothing is left half done; try again in a minute.",
-    "If Git LFS's lock cache gets damaged, Litterbox moves it aside and carries on.",
+    "C:\\Litterbox\\logs\\litterbox.log; include it when you ask for help.",
+    "If an upload is refused because someone else uploaded first, Litterbox gets their changes and tries again. If "
+    "that fails, your commits are kept and nothing is left half done; try again later.",
+    "If Git LFS's lock cache is damaged, Litterbox moves it aside and continues.",
+    "An action on a part in a restricted project you are not a member of is refused, with the name of the "
+    "project's Lead to ask.",
 ]),
 ("h2", "The command line"),
-("p", "For scripting and bulk work, the same features run from a terminal in the app folder of a source copy: "
-      "`python -m litterbox <command>`, with status and the part actions (checkout, checkin, release ...), "
-      "new-part, scan, import and init-vault. `python -m litterbox <command> --help` lists each one's options."),
+("p", "The same features run from a terminal in the app folder of a source copy: `python -m litterbox <command>`, "
+      "with status, the part actions (checkout, checkin, release, and others), new-part, scan, import, and "
+      "init-vault. `python -m litterbox <command> --help` lists each command's options."),
 
 ("h1", "Quick reference"),
-("table", ["Keys", "Does"], [
-    ["Ctrl+1 ... Ctrl+5", "Parts, Workflows, ECOs, Team, Documents"],
+("table", ["Keys", "Action"], [
+    ["Ctrl+1 ... Ctrl+5", "Parts, Workflows, ECOs, Team, and Documents"],
     ["F5", "Refresh"],
-    ["Ctrl+= / Ctrl+- / Ctrl+0", "Text larger, smaller, reset"],
-    ["Alt+F, Alt+A, Alt+V, Alt+H", "Open the File, Vault, View and Help menus"],
-    ["Double-click a part", "Its details in a window of its own"],
+    ["Ctrl+= / Ctrl+- / Ctrl+0", "Larger, smaller, and default text size"],
+    ["Alt+F, Alt+A, Alt+V, Alt+H", "Open the File, Vault, View, and Help menus"],
+    ["Double-click a part", "Open its details in a separate window"],
     ["Double-click a request in My Tasks", "Review it"],
-    ["Shift-click a tick box", "Tick everything between the last click and this one"],
+    ["Shift-click a tick box", "Tick every part between the last click and this one"],
 ], [2.3, 4.2]),
 ]

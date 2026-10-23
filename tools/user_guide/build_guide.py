@@ -18,6 +18,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 from guide_content import BLOCKS, VERSION
 
+FONT, MONO = "Roboto", "Roboto Mono"          # Google's Roboto family; Word substitutes if a reader lacks them
 ACCENT = RGBColor(0x1F, 0x5F, 0x8B)
 INK = RGBColor(0x22, 0x22, 0x22)
 MUTED = RGBColor(0x66, 0x66, 0x66)
@@ -38,9 +39,9 @@ def runs(paragraph, text, size=None):
             run.bold = True
         elif piece.startswith("`"):
             run = paragraph.add_run(piece[1:-1])
-            run.font.name = "Consolas"
-            run._element.rPr.rFonts.set(qn("w:eastAsia"), "Consolas")
-            run.font.size = Pt(9.5)
+            run.font.name = MONO
+            run._element.rPr.rFonts.set(qn("w:eastAsia"), MONO)
+            run.font.size = Pt(9)
         else:
             run = paragraph.add_run(piece)
         if size:
@@ -84,20 +85,38 @@ def field(paragraph, instruction):
     paragraph.add_run()._r.append(end)
 
 
+def use_roboto(document):
+    """Roboto everywhere: the document's default font, and every style, with the theme fonts (Calibri, Calibri
+    Light) that Word's template puts on styles taken off, since they win over a font name."""
+    defaults = document.styles.element.find(qn("w:docDefaults"))
+    fonts = [defaults.find(".//" + qn("w:rFonts"))] if defaults is not None else []
+    fonts += document.styles.element.findall(".//" + qn("w:rFonts"))
+    for element in fonts:
+        if element is None:
+            continue
+        for theme in ("w:asciiTheme", "w:hAnsiTheme", "w:eastAsiaTheme", "w:cstheme"):
+            element.attrib.pop(qn(theme), None)
+        for key in ("w:ascii", "w:hAnsi", "w:eastAsia", "w:cs"):
+            if element.get(qn(key)) != MONO:
+                element.set(qn(key), FONT)
+
+
 def styles(document):
     normal = document.styles["Normal"]
-    normal.font.name, normal.font.size, normal.font.color.rgb = "Calibri", Pt(11), INK
-    normal.element.rPr.rFonts.set(qn("w:eastAsia"), "Calibri")
+    normal.font.name, normal.font.size, normal.font.color.rgb = FONT, Pt(10.5), INK
+    normal.element.rPr.rFonts.set(qn("w:eastAsia"), FONT)
     normal.paragraph_format.space_after = Pt(6)
     normal.paragraph_format.line_spacing = 1.12
     for name, size, before, after in (("Heading 1", 18, 18, 6), ("Heading 2", 13.5, 14, 4), ("Heading 3", 11.5, 10, 2)):
         style = document.styles[name]
-        style.font.name, style.font.size, style.font.bold = "Calibri", Pt(size), True
+        style.font.name, style.font.size, style.font.bold = FONT, Pt(size), True
+        style.element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), FONT)
         style.font.color.rgb = ACCENT if name != "Heading 3" else INK
         style.paragraph_format.space_before, style.paragraph_format.space_after = Pt(before), Pt(after)
         style.paragraph_format.keep_with_next = True
     for name in ("List Bullet", "List Number"):
         document.styles[name].paragraph_format.space_after = Pt(3)
+    use_roboto(document)
 
 
 def table(document, headings, rows, widths):
@@ -121,6 +140,8 @@ def table(document, headings, rows, widths):
                 shade(cell, "EEF3F7")
     for column, width in zip(grid.columns, widths):
         column.width = Inches(width)
+    for row in grid.rows:                                   # a row is never split across two pages
+        row._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
     header = grid.rows[0]._tr.get_or_add_trPr()
     repeat = OxmlElement("w:tblHeader")
     repeat.set(qn("w:val"), "true")
@@ -162,7 +183,7 @@ def cover(document):
     borders.append(bottom)
     ppr.append(borders)
     about = document.add_paragraph()
-    runs(about, "Check-in, check-out, revisions, releases and BOMs for small SolidWorks teams, on Git and Git LFS.")
+    runs(about, "Check-in, check-out, revisions, releases, and BOMs for small SolidWorks teams, on Git and Git LFS.")
     about.runs[0].font.color.rgb = MUTED
     version = document.add_paragraph()
     run = version.add_run(f"For Litterbox {VERSION}  ·  {date.today():%B %Y}")
@@ -231,7 +252,7 @@ def build(path):
                 paragraph.paragraph_format.left_indent = Inches(0.3)
                 paragraph.paragraph_format.space_after = Pt(1)
                 run = paragraph.add_run(line)
-                run.font.name, run.font.size = "Consolas", Pt(9.5)
+                run.font.name, run.font.size = MONO, Pt(9)
             document.paragraphs[-1].paragraph_format.space_after = Pt(8)
         elif kind == "table":
             table(document, block[1], block[2], block[3])
