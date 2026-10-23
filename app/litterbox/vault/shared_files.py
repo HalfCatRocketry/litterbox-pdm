@@ -59,11 +59,16 @@ def _snapshot(repo, path):
 
 def _put_back(repo, rel, saved, committed):
     """Undo edit(): drop its commit, then return each file to how it was after the pull (a tracked file from git, an
-    untracked one from the bytes kept). Never raises: what can't be undone is logged."""
-    try:
-        if committed:
+    untracked one from the bytes kept). Never raises: what can't be undone is logged, and the other files are still
+    put back."""
+    if committed:
+        try:
             runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
-        for path, (tracked, before) in saved.items():
+        except LitterboxError as e:                         # the files would be "put back" to our own commit
+            diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
+            return
+    for path, (tracked, before) in saved.items():
+        try:
             if tracked:
                 runner.run(["git", "restore", "--staged", "--worktree", "--", path], repo)
                 continue
@@ -73,5 +78,5 @@ def _put_back(repo, rel, saved, committed):
                 full.unlink(missing_ok=True)
             else:
                 full.write_bytes(before)                    # an untracked file of theirs
-    except (LitterboxError, OSError) as e:
-        diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
+        except (LitterboxError, OSError) as e:
+            diagnostics.LOG(f"WARNING: could not fully undo the change to {path}: {e}")
