@@ -12,7 +12,6 @@ from litterbox.workflows import workflow_templates
 
 
 CHANGE_HINT = "Tick what changed, and choose a Dispo for the parts already made."
-VOID_HINT = "Choose a Dispo: what to do with the parts already made to the revision being voided."
 
 
 def request_confirm_text(action, parts, template, slots, reason="", warnings=(), eco=None, resubmit=False):

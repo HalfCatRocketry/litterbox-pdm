@@ -1,9 +1,13 @@
 """Tests for Undo Checkout and the parts list status (parts/undoing.py, part_status.py). They run the real code against real git repos (a bare remote plus a clone each for Alex and Bea) with a fake git-lfs, so they need Linux, macOS or WSL and are skipped on Windows."""
 
 import unittest
+from unittest import mock
+
 from tests.support.vault_fixture import DRW, PART, PRT, SKIP_ON_WINDOWS, git, is_writable
 from litterbox.records import record_store
+from litterbox.git import lfs_locks
 from litterbox.parts import checkout
+from litterbox.parts import part_status
 from litterbox.parts import undoing
 from tests.support.engine_fixture import EngineFixture
 
@@ -49,6 +53,21 @@ class UndoAndStatus(EngineFixture, unittest.TestCase):
             row = self.status_of(self.b)                # a pointer: flagged as not downloaded (in a real LFS vault the
             self.assertTrue(row.not_downloaded)         # part stays "ok"; see tests/parts/test_downloads.py)
             self.assertIn("(not downloaded)", row.state)
+
+    def test_one_look_at_the_vault_gives_the_same_rows(self):
+        with self.user("Alex"):
+            checkout.checkout(self.a, PART)
+            (self.a / PRT).write_bytes(b"changed")
+            state = part_status.read_state(self.a)
+            calls = []
+            real = lfs_locks.get_locks
+            with mock.patch.object(lfs_locks, "get_locks", lambda *a, **k: calls.append(1) or real(*a, **k)):
+                rows = part_status.get_status(self.a, state=state)
+                docs = part_status.get_status(self.a, documents=True, state=state)
+            self.assertEqual(calls, [], "the lock list is read once, by read_state")
+            self.assertEqual(rows, part_status.get_status(self.a))
+            self.assertEqual(docs, part_status.get_status(self.a, documents=True))
+            self.assertEqual(rows[0].kind, "mine")
 
 
 if __name__ == "__main__":

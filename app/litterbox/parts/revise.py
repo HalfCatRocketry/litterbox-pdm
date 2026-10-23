@@ -121,14 +121,7 @@ def revise(repo, pn, reason, backend=None, log=print):
             read_only.enforce_read_only(repo)
             raise revision_files.RevisionFailed(f"Rev {record_store.load(repo, pn).revision} of {pn} was created, but it could not be "
                                  "checked out to you. Click Check Out to continue.") from None
-        try:
-            if journal is not None:
-                journal["locked"] = locked
-                revision_files.undo_attempt(repo, journal, log)
-            else:
-                lfs_locks.force_unlock_quietly(repo, locked)
-        finally:
-            revision_files.clear_journal(repo)
+        revision_files.give_up(repo, journal, locked, log)
         raise
     finally:
         if owns_backend:

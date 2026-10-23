@@ -38,9 +38,6 @@ class TaskActions:
         for window in self._task_windows():
             window.reload()
 
-    def show_tasks(self):
-        self.show_screen("tasks")
-
     def _eco_of(self, number):
         """The ECO to show beside a request, or None (none, or it can't be read: that is only logged)."""
         if not number:

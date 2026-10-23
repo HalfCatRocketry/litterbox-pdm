@@ -155,8 +155,3 @@ def tick_png(size, ticked, box_color, accent):
     return picture.png()
 
 
-def badge_png(name, size, color):
-    """A badge on its own, for the legend: drawn like on a row, without the icon under it."""
-    picture = draw.Drawing(size)
-    picture.paint(_shape(name), color)
-    return picture.png()

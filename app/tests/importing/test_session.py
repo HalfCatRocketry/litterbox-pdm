@@ -10,6 +10,7 @@ Run from the app folder with:  python -m unittest discover -s tests -t . -v
 import queue
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from tests.support.import_fixture import ImportFixture
@@ -322,12 +323,17 @@ class SessionFlow(ImportFixture, unittest.TestCase):
             (other / "p3.SLDPRT").write_text("different contents\n")
             (other / "new_a.SLDPRT").write_text("new\n")
             (other / "new_b.SLDPRT").write_text("new\n")
-            (other / "unique.SLDPRT").write_text("unique\n")
+            (other / "unique.SLDPRT").write_text("unique: no file in the vault or this import is this long\n")
             path = self.tmp / "other-manifest.yaml"
             manifest.save(scan.scan([other], repo=self.a), path)
             prepared = import_prepare.prepare(self.a, path, backend=self.fake, gap=0, jitter=0, log=lambda *_: None, cots=True)
             names = [e.name for e in prepared.proposal.entries]
-            found = import_duplicates.find_duplicates(self.a, prepared)
+            for entry in prepared.proposal.entries:
+                entry.item.files[0].sha256 = ""                 # as if the scan hadn't read them
+            real_sha256, read = import_duplicates._sha256, []
+            with mock.patch.object(import_duplicates, "_sha256", lambda path: read.append(Path(path).name) or real_sha256(path)):
+                found = import_duplicates.find_duplicates(self.a, prepared)
+        self.assertNotIn("unique.SLDPRT", read)                 # no other file has its size: never read
         row = {n: names.index(n) for n in names}
         self.assertIn("identical to the one in the vault", found[row["same bytes"]][0])
         self.assertTrue(any("exactly this name already exists" in w for w in found[row["p3"]]))

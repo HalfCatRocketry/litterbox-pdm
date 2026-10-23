@@ -56,7 +56,7 @@ def find_duplicates(repo, prepared):
         except OSError:
             continue
         wanted.setdefault((size, import_paths.ext_of(main_file.path)), []).append(index)
-    hashes = {}
+    hashes, in_vault = {}, set()
     for pn, revisions in record_files.cad_index(repo).items():
         for rel in sorted(f for files in revisions.values() for f in files):
             path = Path(repo) / rel
@@ -69,14 +69,21 @@ def find_duplicates(repo, prepared):
                 continue
             try:
                 hashes.setdefault(pointer[0] if pointer else _sha256(path), []).append(pn)
+                in_vault.add(key)
             except OSError:
                 continue
+    # Only a file that shares its size and type with another (in the vault, or in this import) can be a copy, so
+    # only those are read: the rest of an import can be gigabytes.
+    could_match = {index for key, indexes in wanted.items() if key in in_vault or len(indexes) > 1 for index in indexes}
     digests = {}
     for index, entry in enumerate(entries):
-        main_file = entry.item.files[0]
-        if (os.path.getsize(main_file.path) if os.path.isfile(main_file.path) else -1, import_paths.ext_of(main_file.path)) not in wanted:
+        if index not in could_match:
             continue
-        digest = main_file.sha256 or _sha256(main_file.path)
+        main_file = entry.item.files[0]
+        try:
+            digest = main_file.sha256 or _sha256(main_file.path)
+        except OSError:                                 # gone or unreadable since the scan: nothing to compare
+            continue
         digests[index] = digest
         for pn in hashes.get(digest, []):
             warn(index, f"The file is identical to the one in the vault for {pn}.")

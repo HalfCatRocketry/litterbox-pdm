@@ -22,12 +22,9 @@ ASSETS_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "
 # "icon: black" to C:\Litterbox\settings.yaml.
 ICON_SETTING = {"choice": icon_files.DEFAULT_ICON}
 
-
 FADE_IN_MS = 160            # how long a window takes to fade in, and out
 
-
 FADE_OUT_MS = 120
-
 
 FADE_STEPS = 8
 

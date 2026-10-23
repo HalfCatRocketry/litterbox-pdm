@@ -6,7 +6,6 @@ of a click (ticked parts, or the highlighted row for view-only actions), and the
 from dataclasses import dataclass, field
 
 from litterbox.core.doc_number import DocNumber
-from litterbox.errors import LitterboxError
 
 
 # The "kind" values come from litterbox_engine.PartStatus.kind
@@ -119,13 +118,10 @@ def plan_action(action, selected, rows_by_pn, pending=None):
 
 VIEW_ONLY = {"open", "open_drawing", "open_pdf", "references"}      # these only look at a part, so the blue highlighted row will do
 
-
 EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
-
 
 # The ticked parts, or else the highlighted one: its window lists the parts before anything is done
 TICKED_OR_HIGHLIGHTED = EXPORTS | {"generate_step_pdf", "update_material"}
-
 
 LOOKS = VIEW_ONLY | EXPORTS     # change nothing in the vault, so a part with a job running can still be used
 
@@ -197,20 +193,6 @@ def button_states(ticked, highlighted, rows_by_pn, pending=None):
     """{button text: True if it should be usable} for the main window's selection-dependent buttons."""
     return {text: action_available(action, ticked, highlighted, rows_by_pn, pending)
             for text, action in BUTTON_ACTIONS.items()}
-
-
-def run_batch(targets, func):
-    """Run func(pn) for each part, carrying on if one fails.
-
-    Returns (done, failed): done is [(pn, result)], failed is [(pn, error text)].
-    """
-    done, failed = [], []
-    for pn in targets:
-        try:
-            done.append((pn, func(pn)))
-        except LitterboxError as e:
-            failed.append((pn, str(e)))
-    return done, failed
 
 
 def are_documents(numbers):

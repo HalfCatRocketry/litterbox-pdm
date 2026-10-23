@@ -18,72 +18,50 @@ from litterbox.records import record_materials
 
 STATUS_IN_WORK = "in_work"
 
-
 STATUS_RELEASED = "released"
-
 
 STATUS_VOID = "void"
 
-
 ALL_STATUSES = (STATUS_IN_WORK, STATUS_RELEASED, STATUS_VOID)
-
 
 KIND_CAD = "cad"            # a part or assembly with SolidWorks files (every record before 0.5.1)
 KIND_NONCAD = "noncad"      # no CAD files: paint, raw stock, a kit put together in its BOM (bom_items)
 ALL_KINDS = (KIND_CAD, KIND_NONCAD)
 KIND_LABEL = {KIND_CAD: "CAD", KIND_NONCAD: "Non-CAD"}
 
-
 EVENT_CREATED = "created"
-
 
 EVENT_CHECKED_OUT = "checked_out"
 
-
 EVENT_CHECKED_IN = "checked_in"
-
 
 EVENT_RELEASED = "released"
 
-
 EVENT_REOPENED = "reopened"
-
 
 EVENT_VOIDED = "voided"
 
-
 EVENT_MADE_COTS = "made_cots"
-
 
 EVENT_EDITED = "edited"
 
-
 EVENT_REVISED = "revised"
-
 
 EVENT_REVISION_CANCELLED = "revision_cancelled"
 
-
 EVENT_RELEASE_REQUESTED = "release_requested"
-
 
 EVENT_RELEASE_SIGNED = "release_signed"
 
-
 EVENT_RELEASE_REJECTED = "release_rejected"
-
 
 EVENT_RELEASE_WITHDRAWN = "release_withdrawn"
 
-
 EVENT_REASSIGNED = "workflow_reassigned"
-
 
 EVENT_CHECKOUT_BROKEN = "checkout_broken"       # an Admin took a part back from whoever had it checked out
 
-
 EVENT_PURCHASING_EDITED = "purchasing_edited"   # supplier, cost or lead time changed (records/purchasing_info.py)
-
 
 EVENT_FILES_MADE = "files_made"         # Litterbox made the STEP and/or PDF of a revision (records/record_exports.py)
 

@@ -58,9 +58,9 @@ The few imports that go up a layer are listed, each with its reason, in `KNOWN_E
 | What | How |
 |---|---|
 | All tests, on Windows | from `app/`: `python -m unittest discover -s tests -t .` (the git tests are skipped on Windows) |
-| All tests, in parallel | `python tools/run_tests.py` from the repository root: each test class in a process of its own, half the cores at once, slowest first; `tests.parts` (and so on) to run only some |
+| All tests, in parallel | `python tools/run_tests.py` from the repository root: each test class in a process of its own, half the cores at once, slowest first (by the last run's times, in `tools/.test_times.json`); a class that last took over a minute runs a test per process (`--split-over`); `tests.parts` (and so on) to run only some; `--jobs` to choose how many at once |
 | All tests, everything | `python tools/run_tests.py --git` (the git tests too, on Windows); one at a time, the same as the first row with `LITTERBOX_GIT_TESTS=1` set, takes about 40 minutes |
-| On GitHub | `tests.yml` runs everything on Linux on every push |
+| On GitHub | `tests.yml` runs everything on Linux on every push to a branch (`tools/run_tests.py --jobs 4`); `release.yml` calls it before building |
 | The build | `python app/main.py --self-test` (the release pipeline runs it on the built program) |
 
 - **Git tests** use a real bare "remote" with two clones (Alex and Bea, `tests/support/vault_fixture.py`) and a fake
@@ -373,6 +373,7 @@ litterbox/
         settings.py                       your personal Litterbox settings and log file
         updater.py                        find, check and install a newer Litterbox
     util/                                 Small helpers shared by several areas
+        fast_yaml.py                      reading YAML quickly: PyYAML's C parser (libyaml) when this PyYAML has ...
         file_snapshot.py                  noticing that a file was saved after you pressed Check In
         journal.py                        a small JSON note in the vault's .git folder about an operation that ...
         person_name.py                    PersonName: a person's name as Litterbox writes it in the history ...
@@ -386,6 +387,7 @@ litterbox/
         project_admin.py                  adding, changing and deleting projects
         project_visibility.py             hidden projects (core/projects.py): their parts are left out of the ...
         settings_admin.py                 changing the vault's shared settings (.litterbox/config.yaml) from the ...
+        shared_files.py                   changing the vault's shared settings files (.litterbox/config.yaml ...
     workflows/                            Sign-off workflows: templates, requests, signing, the task list
         signoff_slots.py                  the sign-off slots of a pending request: who is named for each, who ...
         workflow_drafts.py                a rejected request, being changed by whoever asked (a draft)

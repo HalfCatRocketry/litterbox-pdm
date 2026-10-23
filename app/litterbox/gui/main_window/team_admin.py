@@ -17,7 +17,6 @@ from litterbox.gui.logic import error_text
 from litterbox.gui.logic import project_text
 from litterbox.gui.logic import team_text
 from litterbox.gui.logic import workflow_editor
-from litterbox.gui.widgets import release_button
 from litterbox.team import team_editing
 from litterbox.team import team_identity
 from litterbox.team import team_model
@@ -41,10 +40,6 @@ class TeamAdmin:
         text, tone = team_text.identity_banner(self.identity)
         self.identity_label.configure(text=text, text_color=theme.WARN if tone == "warn" else theme.MUTED)
         self._refresh_tasks()
-
-    def show_team(self):
-        release_button.click_log("opening the Team screen")
-        self.show_screen("team")
 
     def who_am_i(self):
         repo = self.repo()

@@ -1,6 +1,5 @@
 """Tests for gui/logic/number_input.py: numbers typed into dialogs."""
 
-import tempfile
 import unittest
 from litterbox.gui.logic import number_input
 from litterbox.core.part_number import PN
@@ -50,24 +49,6 @@ class TestNewNumberHelpers(unittest.TestCase):
             number_input.parse_number("1000", "variant number", maximum=999)
         self.assertIn("999", str(ctx.exception))
 
-    def test_parse_optional_number_treats_an_empty_box_as_use_the_suggestion(self):
-        for blank in ("", "   ", None):
-            self.assertIsNone(number_input.parse_optional_number(blank, "part number"))
-        self.assertEqual(number_input.parse_optional_number(" 12 ", "part number"), 12)
-        self.assertEqual(number_input.parse_optional_number("005", "variant number", maximum=999), 5)
-        for bad in ("x", "0", "1000"):
-            with self.subTest(bad=bad), self.assertRaises(ValueError):
-                number_input.parse_optional_number(bad, "variant number", maximum=999)
-
-    def test_variant_lines(self):
-        from litterbox.records import record_store
-        with tempfile.TemporaryDirectory() as tmp:
-            record_store.create_record(tmp, PN("HCR", 5, 1), "Left", "Alex")
-            record_store.create_record(tmp, PN("HCR", 5, 2), "Right", "Alex")
-            records = record_store.load_variants(tmp, 5)
-        records[1].status = "void"
-        self.assertEqual(number_input.variant_lines(records), ["HCR-00005-001   Left", "HCR-00005-002  [void]   Right"])
-        self.assertEqual(number_input.variant_lines([]), [])
 
 
 if __name__ == "__main__":

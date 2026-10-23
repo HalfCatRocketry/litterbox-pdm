@@ -21,7 +21,6 @@ from litterbox.gui.dialogs.workflow import request_dialog
 from litterbox.gui.dialogs.workflow import review_dialog
 from litterbox.gui.dialogs.workflow import superuser_sign_dialog
 from litterbox.gui.dialogs.workflow import workflows_dialog
-from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import icon_files
 from litterbox.gui.logic import list_columns
 from litterbox.gui.logic import org_menu
@@ -191,14 +190,6 @@ class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateC
         return text_input.InputDialog(text=text, title=title).get_input()
 
     # -- starting a workflow ------------------------------------------------
-    def _one_part_only(self, action, plan):
-        """Without a workflow these actions work on one part at a time. True if that's what was chosen."""
-        if len(plan.targets) == 1:
-            return True
-        self._say(f"Select just one part to {action_rules.NAME[action]}. (This vault has no workflow for it, so it happens "
-                  "directly, one part at a time.)", "warn")
-        return False
-
     def _may(self, action):
         """True if you may do `action`; otherwise says why in the status line."""
         allowed, why = self.identity.allows(action)

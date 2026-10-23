@@ -8,16 +8,14 @@ from pathlib import Path
 
 import yaml
 
-from litterbox import diagnostics
 from litterbox import layout
 from litterbox.errors import LitterboxError
-from litterbox.git import lfs_locks
-from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.team import team_identity
 from litterbox.team import team_model
 from litterbox.team import team_permissions
+from litterbox.util import fast_yaml
 from litterbox.vault import config
 
 
@@ -28,7 +26,7 @@ def load(repo):
         return None
     try:
         with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            data = fast_yaml.safe_load(f) or {}
     except (OSError, yaml.YAMLError) as e:
         raise team_model.PeopleError(f"Could not read {layout.PEOPLE_FILE}: {e}")
     return team_model.from_dict(data)
@@ -73,54 +71,22 @@ def edit_directory(repo, change, message, action="manage_people"):
     """Apply `change(directory, actor_person)` to the people file for everyone: lock it, get the latest,
     change it, commit, push, unlock. If anything fails the file is put back as it was.
     Returns whatever change() returns."""
+    from litterbox.vault import shared_files          # it uploads through guarded_push, which needs this module
     repository.validate_repo(repo)
     identity = team_permissions.require(repo, action)
     if identity.state == team_identity.LEGACY:
         raise team_model.PeopleError("The team has not been set up yet. Use Set Up Team first.")
-    rel = layout.PEOPLE_FILE
-    lfs_locks.lock(repo, rel, "the people file")
-    committed, added_signers, result = False, False, None
-    signers_before_tracked = repository.in_index(repo, layout.ALLOWED_SIGNERS_FILE)
-    try:
-        remote.pull(repo)
+
+    def make_change():
         directory = load(repo)
         actor = directory.find_by_host_name(identity.host_name)
         if actor is None or not actor.active:
             raise team_model.PeopleError("Your access changed while you were working. Run Get Latest.")
         result = change(directory, actor)
         save(repo, directory)
-        paths = [rel]
         signers = _write_allowed_signers(repo, directory)
-        if signers:
-            paths.append(signers)
-            added_signers = not signers_before_tracked
-        runner.run(["git", "add", "--"] + paths, repo)
-        runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
-        committed = True
-        from litterbox.team import guarded_push
-        guarded_push.push(repo)
-    except BaseException:
-        try:
-            if committed:
-                runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
-            runner.run(["git", "restore", "--staged", "--worktree", "--", rel], repo)
-            if signers_before_tracked:
-                runner.run(["git", "restore", "--staged", "--worktree", "--", layout.ALLOWED_SIGNERS_FILE], repo)
-            elif added_signers or (Path(repo) / layout.ALLOWED_SIGNERS_FILE).exists():
-                runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", layout.ALLOWED_SIGNERS_FILE], repo,
-                        quiet=True)
-                try:
-                    (Path(repo) / layout.ALLOWED_SIGNERS_FILE).unlink()
-                except OSError:
-                    pass
-        except LitterboxError as e:
-            diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
-        lfs_locks.force_unlock_quietly(repo, [rel])
-        raise
-    failed = lfs_locks.unlock_mine(repo, [rel])
-    if failed:
-        raise LitterboxError(lfs_locks.unlock_failure_message(failed))
-    return result
+        return [layout.PEOPLE_FILE] + ([signers] if signers else []), message, result
+    return shared_files.edit(repo, [layout.PEOPLE_FILE, layout.ALLOWED_SIGNERS_FILE], "the people file", make_change)
 
 
 def check_before_push(repo):
@@ -137,7 +103,7 @@ def check_before_push(repo):
     except LitterboxError:
         return                                  # offline, or the vault has no people file yet: git will say if the push fails
     try:
-        upstream = team_model.from_dict(yaml.safe_load(text) or {})
+        upstream = team_model.from_dict(fast_yaml.safe_load(text) or {})
     except (yaml.YAMLError, team_model.PeopleError):
         return
     host_name, _checked = team_identity.read_cache(repo)

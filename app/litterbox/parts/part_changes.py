@@ -18,6 +18,7 @@ from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.util import fast_yaml
 
 
 def _record_edited_by_hand(repo, pn, user):
@@ -34,7 +35,7 @@ def _record_edited_by_hand(repo, pn, user):
     except LitterboxError:
         return True                                   # not committed yet, so it is new
     try:
-        committed = record_model.Record.from_dict(yaml.safe_load(head_text))
+        committed = record_model.Record.from_dict(fast_yaml.safe_load(head_text))
     except yaml.YAMLError:
         return True
 
@@ -64,16 +65,19 @@ class ChangeReport:
     unpushed: bool              # commits from an earlier failed attempt still need uploading
 
 
-def build_change_report(repo, pn, user, cad=None, modified=None):
-    """`cad` and `modified` may be handed in when several parts are looked at together (they are read once)."""
+def build_change_report(repo, pn, user, cad=None, modified=None, unpushed_paths=None):
+    """`cad`, `modified` and `unpushed_paths` (repository.paths_changed_in(repo, repository.UNPUSHED)) may be handed
+    in when several parts are looked at together (they are read once)."""
     record_path = record_store.record_relpath(pn)
     if cad is None:
         cad = record_files.cad_files(repo, pn)
     if modified is None:
         modified = repository.get_modified(repo)
+    if unpushed_paths is None:
+        unpushed_paths = repository.paths_changed_in(repo, repository.UNPUSHED)
     changed = [f for f in cad if f.lower() in modified]
     record_edited = _record_edited_by_hand(repo, pn, user)
-    unpushed = (repository.count(repo, "@{u}..HEAD", cad + [record_path]) or 0) > 0
+    unpushed = any(path in unpushed_paths for path in cad + [record_path])
     return ChangeReport(
         has_changes=bool(changed or record_edited or unpushed),
         changed_files=changed,
@@ -97,8 +101,9 @@ def change_reports(repo, pns):
     """change_report() for several parts, reading the vault's state once. Returns [(pn, ChangeReport)]."""
     repository.validate_repo(repo)
     user, modified, index = repository.get_user(repo), repository.get_modified(repo), record_files.cad_index(repo)
+    unpushed = repository.paths_changed_in(repo, repository.UNPUSHED)
     reports = []
     for pn in batch_core.unique_pns(pns):
         cad = index.get(pn, {}).get(record_store.load(repo, pn).revision, [])
-        reports.append((pn, build_change_report(repo, pn, user, cad, modified)))
+        reports.append((pn, build_change_report(repo, pn, user, cad, modified, unpushed)))
     return reports

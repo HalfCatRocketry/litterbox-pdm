@@ -51,8 +51,6 @@ class Table(unittest.TestCase):
         self.assertEqual(what(current), ("Released, up to date: skipped", False))
         self.assertEqual(what(current, force=True), ("STEP and PDF made again and uploaded now", True))
         self.assertTrue(what(missing)[1])
-        self.assertTrue(generate_text.any_up_to_date([current], BOTH))
-        self.assertFalse(generate_text.any_up_to_date([flagged], BOTH))
 
     def test_outside_anything_with_a_model_or_drawing_is_saved(self):
         for kind in ("theirs", "pending", "released", "unclaimed"):

@@ -31,6 +31,7 @@ def _undo_batch(repo, pns):
 
     locks = lfs_locks.get_locks(repo, strict=True)
     index = record_files.cad_index(repo)
+    unpushed = repository.paths_changed_in(repo, repository.UNPUSHED)
     groups = {}
     for pn in pns:
         try:
@@ -39,7 +40,7 @@ def _undo_batch(repo, pns):
             group = index.get(pn, {}).get(revision, []) + part_changes.gone_files(repo, pn, revision) + [record_path]
             if not any(lfs_locks.is_mine(locks, p) for p in group):
                 raise LitterboxError(f"You don't have {pn} checked out.")
-            if (repository.count(repo, "@{u}..HEAD", group) or 0) > 0:
+            if any(path in unpushed for path in group):
                 raise LitterboxError(
                     f"Some changes to {pn} were already saved on your computer but not uploaded yet.\n"
                     "Use Check In to upload them. Undo would leave them stranded."

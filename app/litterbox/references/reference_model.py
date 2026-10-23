@@ -17,21 +17,15 @@ from litterbox.records import record_store
 # Why a reference is flagged
 OK = "ok"
 
-
 STALE = "stale"                 # a newer revision of the part has been released
-
 
 UNRELEASED = "unreleased"       # the revision used is not released yet
 
-
 CANCELLED = "cancelled"         # the revision used was cancelled: its files are gone from cad
-
 
 VOID = "void"
 
-
 MISSING = "missing"             # there is no record for the part
-
 
 STATE_TEXT = {
     OK: "OK",
@@ -77,7 +71,8 @@ def stems_of(record, revision):
 
 def is_added(record, revision, stem):
     """True if the use is a BOM line added by hand rather than one read from the model."""
-    return record is not None and stem in record.bom_items.get(revision, {}) and         stem not in record.references.get(revision, [])
+    return (record is not None and stem in record.bom_items.get(revision, {})
+            and stem not in record.references.get(revision, []))
 
 
 class LazyRecords:

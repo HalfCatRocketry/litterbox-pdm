@@ -16,15 +16,11 @@ from litterbox.errors import LitterboxError
 
 RELEASE, REOPEN, VOID, MAKE_COTS = "release", "reopen", "void", "make_cots"
 
-
 REMOVE_DOC = "remove_document"     # take a document's link off a released part revision (always needs sign-offs)
-
 
 RELEASE_DOC, REOPEN_DOC, VOID_DOC = "release_document", "reopen_document", "void_document"
 
-
 DOC_ACTION = {RELEASE: RELEASE_DOC, REOPEN: REOPEN_DOC, VOID: VOID_DOC}     # a part action -> a document's
-
 
 ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC, VOID_DOC)   # can have templates
 
@@ -33,7 +29,6 @@ ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS, REMOVE_DOC, RELEASE_DOC, REOPEN_DOC
 # record, but it is about documents, so it is with theirs.
 PART_ACTIONS = (RELEASE, REOPEN, VOID, MAKE_COTS)
 DOCUMENT_ACTIONS = (RELEASE_DOC, REOPEN_DOC, VOID_DOC, REMOVE_DOC)
-
 
 ACTION_LABEL = {RELEASE: "Release", REOPEN: "Unrelease", VOID: "Void", MAKE_COTS: "Make COTS",
                 REMOVE_DOC: "Remove document link", RELEASE_DOC: "Release document",
@@ -66,11 +61,9 @@ def for_targets(action, numbers):
 
 MAX_NAME = 40
 
-
 MIN_VERSION = "0.3.0"      # the first Litterbox that understands this format; a vault with a workflow requires it
 ECO_MIN_VERSION = "0.4.0"  # the first that understands "Require ECO" (change_orders/); a vault using it requires it
 DOC_MIN_VERSION = "0.5.1"  # the first that knows the document actions and Remove document link
-
 
 # Offered by "Add standard workflows" in the Workflows window. Those in STANDARD_REQUIRE_ECO ask for an ECO.
 STANDARD_WORKFLOWS = {

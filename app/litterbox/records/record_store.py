@@ -19,6 +19,7 @@ from litterbox.core.numbering import next_base, next_variant
 from litterbox.core.part_number import try_parse
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
+from litterbox.util import fast_yaml
 from litterbox.util import person_name
 
 
@@ -28,10 +29,6 @@ def log_dir(repo):
 
 def cad_dir(repo):
     return Path(repo) / layout.CAD_DIR_NAME
-
-
-def cancelled_dir(repo):
-    return Path(repo) / layout.CANCELLED_DIR_NAME
 
 
 def doc_log_dir(repo):
@@ -51,7 +48,7 @@ def record_relpath(pn):
 def _read(path, expected_pn):
     try:
         with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)      # safe_load only: never plain yaml.load
+            data = fast_yaml.safe_load(f)      # a safe loader only: never plain yaml.load
     except (OSError, yaml.YAMLError) as e:
         raise record_model.RegistryError(f"Could not read {path.name}: {e}")
     if not isinstance(data, dict):
@@ -145,27 +142,26 @@ def save(repo, record):
             os.remove(tmp_path)
 
 
+def _yaml_stems(folder):
+    """The names, without .yaml, of the .yaml files in a folder ([] if there is no folder). scandir: on Windows the
+    listing itself says which entries are files, so no file is looked at one by one."""
+    try:
+        entries = os.scandir(folder)
+    except OSError:
+        return []
+    with entries:
+        return [entry.name[:-5] for entry in entries if entry.name.lower().endswith(".yaml") and entry.is_file()]
+
+
 def list_pns(repo, org=None):
     """Every PN that has a record, sorted. Files that aren't records are ignored."""
-    folder = log_dir(repo)
-    if not folder.is_dir():
-        return []
-    found = set()
-    for path in folder.iterdir():
-        if path.is_file() and path.suffix.lower() == ".yaml":
-            pn = try_parse(path.stem)
-            if pn and (org is None or pn.org == str(org).upper()):
-                found.add(pn)
-    return sorted(found)
+    org = None if org is None else str(org).upper()
+    return sorted({pn for pn in map(try_parse, _yaml_stems(log_dir(repo))) if pn and (org is None or pn.org == org)})
 
 
 def list_docs(repo):
     """Every document number that has a record, sorted."""
-    folder = doc_log_dir(repo)
-    if not folder.is_dir():
-        return []
-    return sorted({number for path in folder.iterdir() if path.is_file() and path.suffix.lower() == ".yaml"
-                   for number in [doc_number.try_parse(path.stem)] if number})
+    return sorted({number for number in map(doc_number.try_parse, _yaml_stems(doc_log_dir(repo))) if number})
 
 
 def used_bases(repo, org=None):

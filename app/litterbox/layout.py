@@ -7,7 +7,7 @@ layout.py - where everything lives inside a vault. One place for every fixed fol
     ECO/ECO-0001.yaml                 engineering change orders           ECO_DIR_NAME
     DOC-logs/PROP-0001.yaml           the document records                DOC_LOG_DIR_NAME
     documents/PROP-0001_A.docx        documents' files (Git LFS, lockable) DOC_DIR_NAME
-    .litterbox/config.yaml            shared vault settings               CONFIG_DIR, CONFIG_FILE
+    .litterbox/config.yaml            shared vault settings               CONFIG_PATH (CONFIG_DIR, CONFIG_FILE)
     .litterbox/people.yaml            the team                            PEOPLE_FILE
     .litterbox/workflows.yaml         sign-off templates                  WORKFLOWS_FILE
     .litterbox/document_types.yaml    the org's document types            DOC_TYPES_FILE
@@ -27,6 +27,7 @@ DOC_DIR_NAME = "documents"                   # documents' files, like cad for pa
 
 CONFIG_DIR = ".litterbox"
 CONFIG_FILE = "config.yaml"                 # a file name inside CONFIG_DIR (the others below are paths)
+CONFIG_PATH = f"{CONFIG_DIR}/{CONFIG_FILE}"
 PEOPLE_FILE = f"{CONFIG_DIR}/people.yaml"
 WHOAMI_FILE = f"{CONFIG_DIR}/whoami"
 ALLOWED_SIGNERS_FILE = f"{CONFIG_DIR}/allowed_signers"

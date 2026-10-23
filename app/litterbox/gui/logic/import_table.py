@@ -15,9 +15,7 @@ from litterbox.importing import import_numbering
 
 IMPORT_KIND_LABELS = {"part": "Part", "assembly": "Assembly", "drawing": "Drawing only"}
 
-
 IMPORT_TAGS = ("conflict", "off", "typed", "warn", "ok")      # strongest first
-
 
 EDITABLE_COLUMNS = ("pn", "name", "description")
 

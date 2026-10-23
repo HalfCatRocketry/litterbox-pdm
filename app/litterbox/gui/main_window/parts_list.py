@@ -283,8 +283,9 @@ class PartsList:
             with ThreadPoolExecutor(max_workers=3) as pool:      # the list, "who am I" and the server are separate
                 who_job = pool.submit(find_out_who)
                 behind_job = pool.submit(remote.commits_behind, repo)
-                rows = part_status.get_status(repo)
-                docs = part_status.get_status(repo, documents=True)
+                state = part_status.read_state(repo)           # one lock list and one git status for both
+                rows = part_status.get_status(repo, state=state)
+                docs = part_status.get_status(repo, documents=True, state=state)
                 who, behind = who_job.result(), behind_job.result()
             if project_visibility.apply(repo, who):           # a hidden project's parts came or went
                 rows = part_status.get_status(repo)

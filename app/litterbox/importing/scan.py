@@ -52,25 +52,19 @@ FORMATS = {
 
 IGNORED_FOLDERS = {".git", "$recycle.bin", "system volume information", "swxauto", "__pycache__"}
 
-
 JUNK_EXTENSIONS = {".bak", ".tmp", ".swp"}
-
 
 LONG_PATH = 240                 # Windows trips over paths much longer than this
 
-
 HASH_BLOCK = 1024 * 1024
 
-
 MAX_NAME_LENGTH = 100
-
 
 OLD_FOLDER_WORDS = {"old", "backup", "backups", "bak", "archive", "archived", "obsolete", "deprecated",
                     "unused", "trash", "temp", "tmp", "superseded", "discard", "discarded"}
 
 
 COPY_WORDS = {"old", "bak", "backup", "copy", "obsolete", "deprecated", "unused"}
-
 
 COPY_NUMBER = re.compile(r"\(\d+\)$")
 

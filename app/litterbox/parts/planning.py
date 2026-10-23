@@ -35,13 +35,15 @@ class ReleasePlan:
 
 class PlanContext:
     """What the checks on several parts share, so a batch looks at the vault once: one fetch, one lock list, one
-    list of modified files, one set of records."""
+    list of modified files, one look at the cad folder, one look at the commits not uploaded (or not got) yet, one
+    set of records."""
 
     def __init__(self, repo, draft_ok=None):
         self.repo = repo
         self.draft_ok = draft_ok        # the id of the draft being resubmitted: its parts may go ahead
         self._fetched = False
-        self._locks = self._modified = self._records = None
+        self._locks = self._modified = self._records = self._index = None
+        self._changed_in = {}
 
     def fetch(self):
         if not self._fetched:
@@ -61,6 +63,17 @@ class PlanContext:
             self._modified = repository.get_modified(self.repo)
         return self._modified
 
+    def cad_index(self):
+        if self._index is None:
+            self._index = record_files.cad_index(self.repo)
+        return self._index
+
+    def changed_in(self, rev_range):
+        """The paths the commits in rev_range change (repository.paths_changed_in); asked after the fetch."""
+        if rev_range not in self._changed_in:
+            self._changed_in[rev_range] = repository.paths_changed_in(self.repo, rev_range)
+        return self._changed_in[rev_range]
+
     def records(self):
         if self._records is None:
             from litterbox.references import reference_model
@@ -74,7 +87,7 @@ def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK
     the part can't go ahead yet (checked out, modified, behind the vault...)."""
     ctx = ctx or PlanContext(repo)
     record_path = record_store.record_relpath(pn)
-    cad = record_files.cad_files(repo, pn, record.revision)
+    cad = ctx.cad_index().get(pn, {}).get(record.revision, [])
     group = cad + [record_path]
     problems = []
 
@@ -101,9 +114,9 @@ def blockers(repo, pn, record, verb, fetch, required=record_model.STATUS_IN_WORK
             problems.append(f"{f} has changes that are not checked in.")
         # A file that is not downloaded is fine: releasing only changes the record (download on demand).
 
-    if (repository.count(repo, "@{u}..HEAD", group) or 0) > 0:
+    if any(path in ctx.changed_in(repository.UNPUSHED) for path in group):
         problems.append("Some changes have not been uploaded yet.")
-    if (repository.count(repo, "HEAD..@{u}", group) or 0) > 0:
+    if any(path in ctx.changed_in(repository.INCOMING) for path in group):
         problems.append("A newer version is in the vault. Run Get Latest first.")
     return cad, problems
 

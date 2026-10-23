@@ -6,8 +6,6 @@ If someone else takes the same number first, the push fails and Litterbox takes 
 New Part does. The document starts with no files: check it out and use Add Files... (doc_files.py).
 """
 
-import os
-from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.core import doc_number
@@ -43,22 +41,6 @@ def next_number(repo, prefix):
     return doc_number.next_number(prefix, record_store.list_docs(repo))
 
 
-def _undo(repo, rel, committed):
-    try:
-        if committed:
-            runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
-        runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", rel], repo)
-    except LitterboxError as e:
-        diagnostics.LOG(f"WARNING: could not fully undo the creation of {rel}: {e}")
-    path = Path(repo) / rel
-    try:
-        if path.exists():
-            os.chmod(path, 0o644)
-            path.unlink()
-    except OSError as e:
-        diagnostics.LOG(f"WARNING: could not delete {rel}: {e}")
-
-
 @converts_errors
 def new_document(repo, type_key, title, description=""):
     """Create a document of this type and return its DocNumber. The title is required."""
@@ -87,7 +69,7 @@ def new_document(repo, type_key, title, description=""):
             committed = True
             runner.run(["git", "push"], repo)
         except LitterboxError as e:
-            _undo(repo, rel, committed)
+            create.undo_creation(repo, rel, committed)
             if not committed:
                 raise
             last_error = e
@@ -95,7 +77,7 @@ def new_document(repo, type_key, title, description=""):
             remote.sync(repo)
             continue
         except BaseException:
-            _undo(repo, rel, committed)
+            create.undo_creation(repo, rel, committed)
             raise
         read_only.enforce_read_only(repo)
         return number

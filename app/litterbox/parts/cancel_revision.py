@@ -128,14 +128,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     except BaseException:
         if pushed:
             raise
-        try:
-            if journal is not None:
-                journal["locked"] = locked
-                revision_files.undo_attempt(repo, journal, log)
-            else:
-                lfs_locks.force_unlock_quietly(repo, locked)
-        finally:
-            revision_files.clear_journal(repo)
+        revision_files.give_up(repo, journal, locked, log)
         raise
     finally:
         if owns_backend:

@@ -8,10 +8,6 @@ from pathlib import PurePosixPath
 from litterbox.gui.logic import action_rules
 
 
-def make_cots_problem_text(pn, problems):
-    return f"{pn} can't be made COTS yet:\n\n" + "\n".join("- " + p for p in problems)
-
-
 def make_cots_confirm_text(pn, name, files):
     listing = "\n".join("  " + f for f in files)
     return (f"Record {pn} ({name}) as COTS, a purchased part?\n\nThese files are covered:\n{listing}\n\n"

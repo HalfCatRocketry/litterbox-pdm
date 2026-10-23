@@ -14,6 +14,7 @@ import yaml
 
 from litterbox import layout
 from litterbox.change_orders import eco_model
+from litterbox.util import fast_yaml
 
 
 def eco_dir(repo):
@@ -51,7 +52,7 @@ def next_number(repo):
 def load(repo, number):
     file = path(repo, number)
     try:
-        data = yaml.safe_load(file.read_text(encoding="utf-8"))
+        data = fast_yaml.safe_load(file.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise eco_model.EcoError(f"There is no {number} in your copy of the vault. Try Get Latest.") from None
     except (OSError, yaml.YAMLError) as e:
@@ -69,10 +70,14 @@ def save(repo, eco):
     text = yaml.safe_dump(eco.to_dict(), sort_keys=False, allow_unicode=True, width=100)
     if file.exists():
         os.chmod(file, file.stat().st_mode | stat.S_IWUSR)
-    handle = tempfile.NamedTemporaryFile("w", dir=file.parent, suffix=".tmp", delete=False, encoding="utf-8",
-                                         newline="\n")
-    with handle:
-        handle.write(text)
+    with tempfile.NamedTemporaryFile("w", dir=file.parent, suffix=".tmp", delete=False, encoding="utf-8",
+                                     newline="\n") as handle:
+        try:
+            handle.write(text)
+        except BaseException:
+            handle.close()
+            os.unlink(handle.name)                  # never leave a half-written file in the ECO folder
+            raise
     os.replace(handle.name, file)
     os.chmod(file, stat.S_IREAD)
     return relpath(eco.number)

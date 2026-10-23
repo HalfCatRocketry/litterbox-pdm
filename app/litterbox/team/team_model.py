@@ -15,12 +15,9 @@ from litterbox.errors import LitterboxError
 
 OWNER, ADMIN, MEMBER = "owner", "admin", "member"
 
-
 ACCESS_LEVELS = (OWNER, ADMIN, MEMBER)
 
-
 ACCESS_LABEL = {OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member"}
-
 
 # What read-only people may still do
 READ_ACTIONS = frozenset({"open", "open_drawing", "open_pdf", "references", "history", "view", "export_files",
@@ -33,13 +30,10 @@ ADMIN_ACTIONS = frozenset({"manage_people", "manage_workflows", "manage_settings
 
 OWNER_ACTIONS = frozenset({"transfer_owner", "rename_org"})
 
-
 STANDARD_ROLES = ["Responsible Engineer", "Manufacturing", "Quality", "Analysis", "Manager", "Chief"]
-
 
 # Standard roles that are superuser roles when they are added: someone at the top who may sign for anyone
 STANDARD_SUPERUSER_ROLES = ["Chief"]
-
 
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 
@@ -107,7 +101,6 @@ class Directory:
 
 
 PERSON_FIELDS = {"id", "name", "email", "host_names", "access", "roles", "active", "signing_keys"}
-
 
 DIRECTORY_FIELDS = {"roles", "people", "superuser_roles"}
 

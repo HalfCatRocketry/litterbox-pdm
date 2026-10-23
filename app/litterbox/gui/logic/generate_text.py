@@ -81,11 +81,6 @@ def table(rows, kinds, where, force=False):
     return result
 
 
-def any_up_to_date(rows, kinds):
-    """True if a released part among these would be skipped as up to date (so the Admin tick matters)."""
-    return any(row_text(row, kinds, IN_VAULT)[0].startswith("Released, up to date") for row in rows)
-
-
 def count_text(table_rows):
     runs = sum(1 for row in table_rows if row.runs)
     skipped = len(table_rows) - runs

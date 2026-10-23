@@ -1,5 +1,5 @@
 """
-read_only.py - Git LFS pointer files, and keeping other people's files
+read_only.py - Git LFS pointer files, keeping other people's files read-only, and deleting files that may be
 read-only.
 
 Read-only is the safety net: only the person who holds a part's lock gets writable files. enforce_read_only runs
@@ -18,10 +18,13 @@ from litterbox.records import record_files
 from litterbox.records import record_store
 
 
+POINTER_MAX_SIZE = 300          # bytes: an LFS pointer file is never bigger
+
+
 def is_pointer(path):
     """True if the file is a tiny LFS pointer, meaning the real file wasn't downloaded."""
     try:
-        if path.stat().st_size > 300:
+        if path.stat().st_size > POINTER_MAX_SIZE:
             return False
         with open(path, "rb") as f:
             return f.read(40).startswith(b"version https://git-lfs")
@@ -30,8 +33,36 @@ def is_pointer(path):
 
 
 def _set_read_only(path):
-    if path.is_file():
+    """Make a file read-only, unless it already is: changing nothing keeps its times as they are, so git doesn't
+    have to look at the file again (on Linux every chmod changes a file's ctime)."""
+    try:
+        mode = os.stat(path).st_mode
+    except OSError:
+        return
+    if stat.S_ISREG(mode) and mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH):
         os.chmod(path, stat.S_IREAD)
+
+
+def delete_file(path):
+    """Delete a file, even a read-only one (Windows refuses to delete those). Nothing happens if it isn't there.
+    Raises OSError if it can't be deleted (open in SolidWorks, say)."""
+    path = Path(path)
+    try:
+        os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+    except FileNotFoundError:
+        return
+    path.unlink()
+
+
+def delete_files(repo, rels):
+    """delete_file() for each of these vault files. Returns a line for each one that couldn't be ("cad/x: why")."""
+    problems = []
+    for rel in rels:
+        try:
+            delete_file(Path(repo) / rel)
+        except OSError as e:
+            problems.append(f"{rel}: {e}")
+    return problems
 
 
 def enforce_read_only(repo):

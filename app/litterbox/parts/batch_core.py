@@ -6,8 +6,6 @@ getting its own history entry, and everything put back if the push fails. A part
 and the rest carry on.
 """
 
-import os
-import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -183,7 +181,7 @@ def edit_records(repo, items, atomic=False, prepare=None, finish=None):
                 runner.run(["git", "reset", "--soft", f"HEAD~{committed}"], repo)       # take back our unpushed commits
             runner.run_chunked(["git", "restore", "--staged", "--worktree"], paths, repo)
             _take_back(repo, extra)
-        except LitterboxError as e:
+        except (LitterboxError, OSError) as e:
             diagnostics.LOG(f"WARNING: could not fully undo the change to {', '.join(paths)}: {e}")
         lfs_locks.force_unlock_quietly(repo, paths)
         raise
@@ -204,10 +202,7 @@ def _take_back(repo, rels):
             runner.run(["git", "restore", "--staged", "--worktree", "--", rel], repo, quiet=True)
         else:
             runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--", rel], repo, quiet=True)
-            file = Path(repo) / rel
-            if file.exists():
-                os.chmod(file, stat.S_IWUSR | stat.S_IREAD)
-                file.unlink()
+            read_only.delete_file(Path(repo) / rel)
 
 
 def edit_record(repo, pn, action, edit, message):

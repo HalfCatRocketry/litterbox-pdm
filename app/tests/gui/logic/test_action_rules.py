@@ -8,7 +8,6 @@ from litterbox.gui.logic import history_text
 from litterbox.gui.logic import list_view
 from litterbox.gui.logic import opening_text
 from litterbox.gui.logic import team_text
-from litterbox.errors import LitterboxError
 from litterbox.core.part_number import PN
 from tests.support.part_rows import row, ROWS, BY_PN
 
@@ -102,7 +101,6 @@ class TestPlanAction(unittest.TestCase):
         text = confirmations.make_cots_confirm_text("HCR-00001-001", "Bolt", ["cad/a.SLDPRT"])
         self.assertIn("NOT modified", text)
         self.assertIn("cad/a.SLDPRT", text)
-        self.assertIn("- It is checked out", confirmations.make_cots_problem_text("HCR-00001-001", ["It is checked out"]))
 
     def test_part_not_in_list(self):
         plan = action_rules.plan_action("checkout", [PN("HCR", 99, 1)], BY_PN)
@@ -115,19 +113,6 @@ class TestPlanAction(unittest.TestCase):
 
 
 class TestBatchAndSummary(unittest.TestCase):
-    def test_run_batch_carries_on_after_a_failure(self):
-        def func(pn):
-            if pn == "bad":
-                raise LitterboxError("nope")
-            return pn.upper()
-        done, failed = action_rules.run_batch(["a", "bad", "c"], func)
-        self.assertEqual(done, [("a", "A"), ("c", "C")])
-        self.assertEqual(failed, [("bad", "nope")])
-
-    def test_run_batch_does_not_hide_programming_errors(self):
-        with self.assertRaises(ZeroDivisionError):
-            action_rules.run_batch([1], lambda pn: 1 / 0)
-
     def test_summary(self):
         self.assertEqual(action_rules.summary("checkout", 1), "Checked out 1 part")
         self.assertEqual(action_rules.summary("checkout", 3), "Checked out 3 parts")

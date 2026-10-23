@@ -20,9 +20,7 @@ from litterbox.team import team_store
 
 IDENTITY_CACHE = "litterbox-identity.json"
 
-
 IDENTITY_MAX_AGE = 24 * 3600
-
 
 # States of the current user
 LEGACY, OK, NOT_LISTED, INACTIVE, UNVERIFIED = "legacy", "ok", "not_listed", "inactive", "unverified"
