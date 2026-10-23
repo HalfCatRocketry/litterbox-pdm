@@ -20,7 +20,8 @@ from litterbox.vault import config
 
 
 class CheckoutActions:
-    """Check Out, Undo Checkout and Break Checkout. (a part of the main window, App)."""
+    """Check Out (and making files SolidWorks already has open writable), Undo Checkout and Break Checkout. One part of
+    the main window (App)."""
 
     def break_checkout(self):
         """Break Checkout... (Admin and Owner): take a part back from whoever has it checked out."""

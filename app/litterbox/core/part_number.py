@@ -12,34 +12,24 @@ from dataclasses import dataclass
 
 DEFAULT_BASE_DIGITS = 5          # what a vault with no setting uses (so existing vaults never change)
 
-
 NEW_VAULT_BASE_DIGITS = 6        # what the Create new org dialog suggests for a new one
-
 
 DEFAULT_VARIANT_DIGITS = 3
 
-
 BASE_DIGITS_RANGE = (1, 9)
-
 
 VARIANT_DIGITS_RANGE = (1, 4)
 
-
 MIN_BASE = 1
 
-
 MIN_VARIANT = 1
-
 
 # The active settings. Change them only through configure().
 BASE_DIGITS = DEFAULT_BASE_DIGITS
 
-
 VARIANT_DIGITS = DEFAULT_VARIANT_DIGITS
 
-
 MAX_BASE = 10 ** BASE_DIGITS - 1
-
 
 MAX_VARIANT = 10 ** VARIANT_DIGITS - 1
 
@@ -48,7 +38,6 @@ MAX_VARIANT = 10 ** VARIANT_DIGITS - 1
 # Bases with the right number of digits OR MORE are read, so a part that has
 # outgrown the digit count still shows up instead of silently disappearing.
 _ORG_RE = re.compile(r"[A-Za-z]{2,4}")
-
 
 _PN_RE = FILE_RE = _SHORT_RE = None
 

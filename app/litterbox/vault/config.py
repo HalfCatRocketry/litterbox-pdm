@@ -38,6 +38,7 @@ from litterbox.core import part_number
 from litterbox.core import projects as project_rules
 from litterbox.core.part_number import PNError, check_org
 from litterbox.records import record_store
+from litterbox.util import fast_yaml
 from litterbox.vault import compatibility
 
 
@@ -60,13 +61,13 @@ def load(repo):
         return {}
     try:
         with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+            data = fast_yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
-        raise ConfigError(f"Could not read {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}")
+        raise ConfigError(f"Could not read {layout.CONFIG_PATH}: {e}")
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise ConfigError(f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE} should contain settings like 'org: HCR'.")
+        raise ConfigError(f"{layout.CONFIG_PATH} should contain settings like 'org: HCR'.")
     return data
 
 
@@ -80,7 +81,7 @@ def get_org(repo):
         try:
             return check_org(configured)
         except PNError as e:
-            raise ConfigError(f"The org code in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} is not valid. {e}")
+            raise ConfigError(f"The org code in {layout.CONFIG_PATH} is not valid. {e}")
 
     orgs = sorted({pn.org for pn in record_store.list_pns(repo)})
     if len(orgs) == 1:
@@ -88,10 +89,10 @@ def get_org(repo):
     if not orgs:
         raise NoOrgError(
             "This vault doesn't have an org code yet. Create the file "
-            f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE} in the vault, containing a line like:\n  org: HCR")
+            f"{layout.CONFIG_PATH} in the vault, containing a line like:\n  org: HCR")
     raise ConfigError(
         f"This vault has part numbers from several orgs ({', '.join(orgs)}), so Litterbox can't "
-        f"tell which to use. Set one in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}, for example:\n  org: {orgs[0]}")
+        f"tell which to use. Set one in {layout.CONFIG_PATH}, for example:\n  org: {orgs[0]}")
 
 
 ORG_NAME_MAX = 80               # characters in an org's full name
@@ -125,7 +126,7 @@ def get_start_number(repo):
     if value in (None, ""):
         return 1
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise ConfigError(f"start_number in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be a whole number, 1 or higher "
+        raise ConfigError(f"start_number in {layout.CONFIG_PATH} must be a whole number, 1 or higher "
                           f"(for example 10001), not {value!r}.")
     return value
 
@@ -162,7 +163,7 @@ def get_digits(repo):
         if value in (None, ""):
             value = default
         if isinstance(value, bool) or not isinstance(value, int) or not (low <= value <= high):
-            raise ConfigError(f"{key} in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be a whole number from {low} to {high}, "
+            raise ConfigError(f"{key} in {layout.CONFIG_PATH} must be a whole number from {low} to {high}, "
                               f"not {value!r}.")
         result.append(value)
     return tuple(result)
@@ -179,7 +180,7 @@ def get_release_rule(repo):
         return "warn"
     value = str(value).strip().lower()
     if value not in RELEASE_RULES:
-        raise ConfigError(f"release_rule in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be one of "
+        raise ConfigError(f"release_rule in {layout.CONFIG_PATH} must be one of "
                           f"{', '.join(RELEASE_RULES)}, not {value!r}.")
     return value
 
@@ -195,7 +196,7 @@ def get_commit_style(repo):
         return "per_part"
     value = str(value).strip().lower()
     if value not in COMMIT_STYLES:
-        raise ConfigError(f"commit_style in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be one of "
+        raise ConfigError(f"commit_style in {layout.CONFIG_PATH} must be one of "
                           f"{', '.join(COMMIT_STYLES)}, not {value!r}.")
     return value
 
@@ -206,7 +207,7 @@ def get_projects(repo):
     try:
         return project_rules.from_data(load(repo).get("projects"), base_digits)
     except project_rules.ProjectError as e:
-        raise ConfigError(f"projects in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
+        raise ConfigError(f"projects in {layout.CONFIG_PATH}: {e}") from None
 
 
 def default_assembly_variant(variant_digits=None):
@@ -233,14 +234,14 @@ def get_assembly_variant_start(repo):
     try:
         return check_assembly_variant(value, variant_digits)
     except ConfigError as e:
-        raise ConfigError(f"assembly_variant_start in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
+        raise ConfigError(f"assembly_variant_start in {layout.CONFIG_PATH}: {e}") from None
 
 
 def get_require_signatures(repo):
     """True if this vault refuses uploads of commits that aren't signed by a key on the team list."""
     value = load(repo).get("require_signatures", False)
     if not isinstance(value, bool):
-        raise ConfigError(f"require_signatures in {layout.CONFIG_DIR}/{layout.CONFIG_FILE} must be true or false.")
+        raise ConfigError(f"require_signatures in {layout.CONFIG_PATH} must be true or false.")
     return value
 
 
@@ -259,7 +260,7 @@ def get_solidworks_version(repo):
     try:
         return check_solidworks_version(load(repo).get("solidworks_version"))
     except ConfigError as e:
-        raise ConfigError(f"solidworks_version in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
+        raise ConfigError(f"solidworks_version in {layout.CONFIG_PATH}: {e}") from None
 
 
 def check_currency(value):
@@ -275,7 +276,7 @@ def get_currency(repo):
     try:
         return check_currency(load(repo).get("currency"))
     except ConfigError as e:
-        raise ConfigError(f"currency in {layout.CONFIG_DIR}/{layout.CONFIG_FILE}: {e}") from None
+        raise ConfigError(f"currency in {layout.CONFIG_PATH}: {e}") from None
 
 
 def currency_or_none(repo):

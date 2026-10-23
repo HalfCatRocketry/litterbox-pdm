@@ -83,8 +83,6 @@ def file_types(files):
     return ", ".join(kinds)
 
 
-TICK_ON, TICK_OFF = "\u2611", "\u2610"          # the box glyphs in the list's first column
-
 
 def range_between(shown, anchor, iid):
     """Shift-click in a list with tick boxes: the rows from the last one clicked (`anchor`) to this one, in the

@@ -22,6 +22,7 @@ from litterbox.parts import checkin
 from litterbox.parts import checkout
 from litterbox.parts import get_latest
 from litterbox.team import guarded_push
+from tests.support import temp_folders
 
 
 @SKIP_ON_WINDOWS
@@ -53,7 +54,9 @@ class SigningSettings(TeamFixture, unittest.TestCase):
     def test_a_missing_openssh_is_explained(self):
         with mock.patch.object(signing, "ssh_keygen", return_value=None):
             with self.assertRaises(signing.SigningError) as ctx:
-                signing.create_key(Path(tempfile.mkdtemp()) / "k")
+                folder = Path(tempfile.mkdtemp())
+                self.addCleanup(temp_folders.remove, folder)
+                signing.create_key(folder / "k")
         self.assertIn("OpenSSH", str(ctx.exception))
 
     def test_an_existing_key_is_reused_not_replaced(self):

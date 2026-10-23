@@ -47,12 +47,25 @@ def get_user(repo):
 
 
 def get_modified(repo):
-    """Return the set of lowercase paths with uncommitted changes (including brand-new files)."""
-    out = runner.run(["git", "status", "--porcelain", "--untracked-files=all"], repo, quiet=True)
-    modified = set()
-    for line in out.splitlines():
-        _flag, _, path = line.strip().partition(" ")
-        modified.add(path.strip().strip('"').lower())
+    """Return the set of lowercase paths with uncommitted changes (including brand-new files; a renamed file under
+    both its names).
+
+    git's machine-readable status (version 2, entries ended by NUL) is used, so a name with spaces or letters like
+    é comes back exactly as it is, never quoted or escaped."""
+    out = runner.run(["git", "status", "--porcelain=v2", "-z", "--untracked-files=all"], repo, quiet=True)
+    modified, entries = set(), iter(out.split("\0"))
+    for entry in entries:
+        kind = entry[:1]
+        if kind == "1":                         # changed: 1 XY sub mH mI mW hH hI path
+            modified.add(entry.split(" ", 8)[-1].lower())
+        elif kind == "2":                       # renamed or copied: 2 XY sub mH mI mW hH hI Xscore path, then the old path
+            modified.add(entry.split(" ", 9)[-1].lower())
+            modified.add(next(entries, "").lower())
+        elif kind == "u":                       # unmerged: u XY sub m1 m2 m3 mW h1 h2 h3 path
+            modified.add(entry.split(" ", 10)[-1].lower())
+        elif kind == "?":                       # untracked: ? path
+            modified.add(entry[2:].lower())
+    modified.discard("")
     return modified
 
 
@@ -68,13 +81,19 @@ def changed_between(repo, before, after):
     return [line for line in out.splitlines() if line]
 
 
-def count(repo, rev_range, paths):
-    """How many commits in rev_range touch these paths? None if git can't tell
-    (for example, no upstream branch is set)."""
+UNPUSHED = "@{u}..HEAD"          # your commits that are not uploaded yet
+INCOMING = "HEAD..@{u}"          # the vault's commits you haven't got yet (as of the last fetch)
+
+
+def paths_changed_in(repo, rev_range):
+    """Every path that the commits in rev_range (UNPUSHED, INCOMING) change, in one look at git, so a batch of parts
+    asks once ("does any of these commits touch this part's files?" is then a set lookup). An empty set when there
+    are none, or when git can't tell (no upstream branch, say)."""
     try:
-        return int(runner.run(["git", "rev-list", "--count", rev_range, "--"] + list(paths), repo, quiet=True))
-    except (LitterboxError, ValueError):
-        return None
+        out = runner.run(["git", "log", "--format=", "--name-only", "--no-renames", "-z", rev_range], repo, quiet=True)
+    except LitterboxError:
+        return set()
+    return set(out.replace("\n", "\0").split("\0")) - {""}
 
 
 def quiet_output(repo, *args):
@@ -88,6 +107,19 @@ def quiet_output(repo, *args):
 def in_head(repo, rel):
     """True if the latest commit has this file (so it belongs to the vault, not to a half-finished import)."""
     return bool(quiet_output(repo, "ls-tree", "HEAD", "--", rel))
+
+
+def in_head_many(repo, rels):
+    """The ones of these files the latest commit has (in_head for many), asking git once for every 100."""
+    rels = list(rels)
+    if not rels:
+        return set()
+    try:
+        out = runner.run_chunked(["git", "ls-tree", "--name-only", "-z", "HEAD"], rels, repo, quiet=True)
+    except LitterboxError:
+        return set()
+    found = set(out.replace("\n", "\0").split("\0"))
+    return {rel for rel in rels if rel in found}
 
 
 def tracked(repo, pattern):

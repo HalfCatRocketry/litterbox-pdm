@@ -1,7 +1,6 @@
 """Tests for counting an assembly's parts (reference_reader.read_assembly_quantities and the check-in reader), with a
 pretend SolidWorks and no git."""
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 from litterbox.cad.solidworks import sw_backend
 from litterbox.core.part_number import PN
 from litterbox.references import reference_reader
+from tests.support import temp_folders
 
 ASM = PN("HCR", 2, 1)
 COUNTED, SUPPRESSED, EXCLUDED = sw_backend.COUNTED, sw_backend.SUPPRESSED, sw_backend.EXCLUDED
@@ -32,7 +32,7 @@ class Pretend:
 class Counting(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, self.repo)
         self.cad = self.repo / "cad"
         self.cad.mkdir()
         for name in ("HCR-00002-001_A.SLDASM", "HCR-00004-001_A.SLDPRT", "HCR-00005-001_B.SLDPRT"):

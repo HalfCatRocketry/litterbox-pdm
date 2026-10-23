@@ -1,21 +1,23 @@
-# Runs the full test suite on every push, on any branch. It runs on Linux because the Git LFS tests use a stand-in
-# git-lfs script that needs a Unix-like system (on Windows those tests are skipped). The release workflow runs the
-# same suite again before it builds anything.
+# Runs the full test suite on every push to a branch, and for the release workflow (which calls this before it
+# builds anything, so a tag push runs the tests once, there). It runs on Linux because the Git LFS tests use a
+# stand-in git-lfs script that needs a Unix-like system (on Windows those tests are skipped).
 
 name: Tests
 
 on:
   push:
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -25,6 +27,8 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Run the tests
+        # One process: on this private repository's two-core runner, tools/run_tests.py (a process per test class)
+        # was slower than this (about 420 s against 340 s).
         working-directory: app
         env:
           PYTHONPATH: "."

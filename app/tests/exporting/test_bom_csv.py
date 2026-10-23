@@ -1,7 +1,6 @@
 """Tests for writing a BOM as a .csv spreadsheet."""
 
 import csv
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +9,7 @@ from litterbox.core.part_number import PN
 from litterbox.exporting import bom_csv
 from litterbox.exporting import export_folder
 from litterbox.references import bom
+from tests.support import temp_folders
 
 
 def line(level, base, name, **fields):
@@ -19,7 +19,7 @@ def line(level, base, name, **fields):
 class BomCsv(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(temp_folders.remove, self.tmp)
         self.root = self.tmp / "Litterbox"
         self.root.mkdir()
 

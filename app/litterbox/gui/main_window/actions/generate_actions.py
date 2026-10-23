@@ -17,7 +17,7 @@ from litterbox.user import settings
 
 
 class GenerateActions:
-    """Generate STEP/PDF, and the files made after a release. (a part of the main window, App)."""
+    """Generate STEP/PDF, and the files made after a release. One part of the main window (App)."""
 
     def generate_step_pdf(self, pns=None):
         """The Generate STEP/PDF window for the ticked parts (or the highlighted one), or for `pns` (the Details

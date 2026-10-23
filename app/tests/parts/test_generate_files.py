@@ -5,7 +5,6 @@ need Linux, macOS or WSL and are skipped on Windows. SolidWorks is a stand-in (t
 import unittest
 
 from litterbox.core.part_number import PN
-from litterbox.errors import LitterboxError
 from litterbox.parts import checkin
 from litterbox.parts import checkout
 from litterbox.parts import generate_files

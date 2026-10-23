@@ -12,7 +12,6 @@ from litterbox.core.part_number import PN
 from litterbox.gui.logic import list_columns
 from litterbox.gui.logic import number_input
 from litterbox.gui.logic import project_text
-from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.vault import config
 from litterbox.vault import config_write

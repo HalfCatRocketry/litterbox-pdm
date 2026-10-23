@@ -11,7 +11,7 @@ from litterbox.parts import revise
 
 
 class ReviseActions:
-    """Revise and Cancel Revision. (a part of the main window, App)."""
+    """Revise and Cancel Revision. One part of the main window (App)."""
 
     def revise(self):
         plan = self._plan("revise")

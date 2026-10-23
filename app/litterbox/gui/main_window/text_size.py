@@ -10,7 +10,7 @@ from litterbox.user import settings
 
 
 class TextSize:
-    """Text size and display scaling (a part of the main window, App)."""
+    """Text size and display scaling. One part of the main window (App)."""
 
     def _bind_text_size_keys(self):
         for keys, direction in (("<Control-equal>", 1), ("<Control-plus>", 1), ("<Control-KP_Add>", 1),

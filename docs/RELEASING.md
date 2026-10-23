@@ -20,7 +20,7 @@ installed copies see it at start-up (or Help > Check for updates), ask "Update n
 |---|---|
 | The version number | `app/litterbox/version.py`: `VERSION = "0.4.4"` |
 | What changed, which becomes the release notes | `CHANGELOG.md`: one `## 0.4.4` section per version, newest first |
-| The pipeline | `.github/workflows/release.yml` (on a tag) and `.github/workflows/tests.yml` (on every push) |
+| The pipeline | `.github/workflows/release.yml` (on a tag; it runs `tests.yml` first) and `.github/workflows/tests.yml` (on every push to a branch) |
 | The build recipe | `packaging/litterbox.spec` (PyInstaller; it starts from `app/main.py` and finds every module itself) |
 | The installer | `packaging/installer.iss` (Inno Setup; installs for the current user, no administrator needed) |
 | Pipeline helpers | `packaging/check_version.py`, `write_build_info.py`, `make_manifest.py` |
@@ -135,8 +135,8 @@ For a fork, or if the repository ever has to be set up again:
 
 - **A build that can't start is never published:** the pipeline runs the built `Litterbox.exe --self-test` and
   stops if it fails.
-- **The Windows tests in the release job are informational** (`continue-on-error` in `release.yml`); the Linux
-  tests block. Once the Windows run is reliably green, remove that line so it blocks too.
+- **The Windows tests in the release job block a release too**, like the Linux ones (they were informational until
+  they had passed in eight releases in a row, up to 0.5.5).
 - **Rolling back** means publishing a newer version with the fix. Installed copies only move forward.
 - **Running from source:** `pip install -r requirements.txt`, then `python app/main.py`. A copy run from source
   never checks for updates (it has no `build_info.py` with a repository in it).

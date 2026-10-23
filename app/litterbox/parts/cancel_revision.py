@@ -128,14 +128,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     except BaseException:
         if pushed:
             raise
-        try:
-            if journal is not None:
-                journal["locked"] = locked
-                revision_files.undo_attempt(repo, journal, log)
-            else:
-                lfs_locks.force_unlock_quietly(repo, locked)
-        finally:
-            revision_files.clear_journal(repo)
+        revision_files.give_up(repo, journal, locked, log)
         raise
     finally:
         if owns_backend:
@@ -143,8 +136,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     revision_files.clear_journal(repo)
     # the cancelled files are gone from cad, so their locks (and the record's) can go
     lfs_locks.force_unlock_quietly(repo, [rel for rel in locked if rel != record_path])
-    failed = lfs_locks.unlock_mine(repo, [record_path])
-    read_only.enforce_read_only(repo)
+    failed = read_only.give_back_locks(repo, [record_path])
     if failed:
         raise revision_files.RevisionFailed(lfs_locks.unlock_failure_message(failed))
     return kept

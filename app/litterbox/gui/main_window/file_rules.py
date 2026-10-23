@@ -11,7 +11,7 @@ from litterbox.vault import git_attributes
 
 
 class FileRules:
-    """the vault's file rules (a part of the main window, App)."""
+    """Keeping the vault's file rules up to date. One part of the main window (App)."""
 
     file_rules_outdated = False
 

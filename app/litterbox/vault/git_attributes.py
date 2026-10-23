@@ -43,7 +43,6 @@ from litterbox.vault import config_write
 
 FILE_NAME = ".gitattributes"
 
-
 LFS = "filter=lfs diff=lfs merge=lfs -text"
 
 
@@ -104,15 +103,12 @@ RULES = (
 
 VERSION = 2
 
-
 MIN_LITTERBOX = "0.5.1"         # the oldest Litterbox that knows every lockable rule in RULES
-
 
 BEGIN = "# >>> Litterbox rules, version {version}. Litterbox updates the lines down to '# <<< Litterbox'; don't " \
         "edit them."
 END = "# <<< Litterbox"
 BEGIN_PATTERN = re.compile(r"^# >>> Litterbox rules, version (\d+)\b")
-
 
 # What Litterbox 0.4.1 and older wrote, without markers: a header comment, then its rules.
 LEGACY_HEADERS = (
@@ -238,7 +234,7 @@ def update(repo):
     if new_text == old_text.replace("\r\n", "\n"):
         return []
     added = added_rules(old_text, new_text)
-    config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
+    config_rel = layout.CONFIG_PATH
     config_before = config.config_path(repo).read_bytes()
     touched, committed = [FILE_NAME], False
     try:

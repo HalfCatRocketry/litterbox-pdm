@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (branch have_fun)
+
+Rename this heading to the next version when releasing. Nothing in the window changes.
+
+- **Faster.** The parts list refreshes sooner: it reads each part's record about six times faster, asks the vault's server for the lock list once instead of twice, and looks at the vault's folders faster on Windows. Every upload (Check In, Release, a sign-off, a settings change) asks the server one thing less, and Check In, Undo and the other actions that give locks back ask for the lock list once instead of twice. Checking in, undoing or releasing many parts at once asks git once for the whole batch where it asked once per part.
+- **Files with letters like é or spaces in their names** are now seen as changed when they are. Litterbox asked git which files had changed in a form where git writes such names with escape codes, so they never matched.
+- **Importing** no longer reads every file just to look for copies of files already in the vault: only files the same size and type as another are read. A source file whose path is longer than Windows usually allows no longer fails there.
+- When something goes wrong part way through changing the vault's settings, team, workflows or document types, a settings file that git doesn't track is always put back as it was (one of these deleted it).
+- The release pipeline runs the tests once for a tag, not twice, and the Windows tests now stop a release if they fail.
+
 ## 0.5.5
 
 - **Rev comes second in the parts list**, right after the part number.

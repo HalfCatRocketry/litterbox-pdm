@@ -1,10 +1,10 @@
 """Tests for cad/solidworks/sw_backend.py with a pretend SolidWorks (COM itself can only be tried on Windows with SolidWorks)."""
 
 import unittest
-import shutil
 from pathlib import Path
 from litterbox.cad.solidworks import sw_backend
 from litterbox.cad.solidworks import sw_errors
+from tests.support import temp_folders
 
 
 class PairReferences(unittest.TestCase):
@@ -28,7 +28,7 @@ class CopyingWhenSolidWorksRefuses(unittest.TestCase):
         import tempfile
         import types
         self.dir = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, self.dir)
         fake_pythoncom = types.ModuleType("pythoncom")
         fake_pythoncom.VT_ARRAY, fake_pythoncom.VT_BSTR = 0x2000, 8
         client = types.ModuleType("win32com.client")

@@ -45,6 +45,7 @@ import yaml
 
 from litterbox.parts import create_batch
 from litterbox.parts import create
+from litterbox.util import fast_yaml
 
 VERSION = 1
 KINDS = ("part", "assembly", "drawing")
@@ -172,7 +173,7 @@ def load(path):
     path = Path(path)
     try:
         with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+            data = fast_yaml.safe_load(f)
     except OSError as e:
         raise ManifestError(f"Could not read the manifest {path}: {e}")
     except yaml.YAMLError as e:

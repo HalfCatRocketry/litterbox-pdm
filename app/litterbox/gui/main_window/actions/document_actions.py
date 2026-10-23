@@ -32,7 +32,8 @@ from litterbox.workflows import workflow_templates
 
 
 class DocumentActions:
-    """Documents and their links to parts. (a part of the main window, App)."""
+    """Documents: New Document, opening, a document's Details window, its files, and links to parts. One part of the
+    main window (App)."""
 
     def _doc_types(self):
         try:

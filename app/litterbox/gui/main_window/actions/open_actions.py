@@ -23,7 +23,7 @@ from litterbox.vault import config
 
 
 class OpenActions:
-    """Open, Open Drawing, Open PDF, an older revision, Details/History and ECOs. (a part of the main window, App)."""
+    """Open, Open Drawing, Open PDF, an older revision, Details/History and ECOs. One part of the main window (App)."""
 
     def open_part(self, drawing=False):
         """Open the part's model, or (drawing=True) its drawing, in the program for that file type.

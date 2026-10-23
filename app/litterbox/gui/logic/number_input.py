@@ -82,17 +82,3 @@ def in_use_text(check):
     return text + (" (void)" if check.status == "void" else "")
 
 
-def parse_optional_number(text, label, minimum=1, maximum=None):
-    """Like parse_number, but an empty box gives None (meaning: use the suggested number)."""
-    if not str(text or "").strip():
-        return None
-    return parse_number(text, label, minimum, maximum)
-
-
-def variant_lines(records):
-    """One line per existing variant, for the New Variant list."""
-    lines = []
-    for record in records:
-        status = "" if record.status == "in_work" else f"  [{record.status}]"
-        lines.append(f"{record.pn}{status}   {record.name}")
-    return lines

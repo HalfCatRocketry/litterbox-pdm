@@ -20,6 +20,7 @@ number is in the project's block.
 from dataclasses import dataclass, field
 
 from litterbox import diagnostics
+from litterbox import layout
 from litterbox.core import projects as project_rules
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
@@ -221,7 +222,7 @@ def _apply(repo, name, new_name=None, new_prefix=None, delete=False, team=None):
         settings_admin.change_file(repo, lambda: same_again() or what, check)
         return change
 
-    path = settings_admin.CONFIG_REL
+    path = layout.CONFIG_PATH
     tracked = repository.in_index(repo, path)
     if tracked:
         lfs_locks.lock(repo, path, "the vault settings")

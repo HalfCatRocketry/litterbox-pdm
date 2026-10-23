@@ -59,11 +59,6 @@ def where_used(repo, pn, records=None):
                   key=lambda u: (str(u.parent), revision_letters.revision_number(u.parent_revision), u.child_revision))
 
 
-def stale_uses(repo, pn, records=None):
-    """The references of the part's working revision that are not OK."""
-    return [u for u in uses(repo, pn, None, records) if u.state != reference_model.OK]
-
-
 def stale_everywhere(repo, records=None):
     """Every reference, in every assembly still in work, that Litterbox could point at a newer revision."""
     records = records if records is not None else reference_model.load_records(repo)

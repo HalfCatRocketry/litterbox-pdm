@@ -68,7 +68,7 @@ def read_assembly_quantities(repo, pn, revision, backend, files=None, references
     `references` gets a count (0 if no copy counts). Raises LitterboxError if a component's file is missing
     or not downloaded, since the count would be wrong."""
     own = filenames.file_stem(pn, revision)
-    counts = {stem: 0 for stem in references}
+    counts = dict.fromkeys(references, 0)
     for rel in _assembly_files(repo, pn, revision, files):
         for path, state in backend.components(os.path.join(str(repo), rel)):
             stem = reference_model.stem_of_path(path)

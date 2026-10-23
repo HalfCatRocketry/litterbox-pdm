@@ -12,7 +12,8 @@ from litterbox.user import updater
 
 
 class UpdateChecks:
-    """looking for a newer Litterbox at start-up, and installing it (see user/updater.py). (a part of the main window, App)."""
+    """Looking for a newer Litterbox at start-up, and installing it (see user/updater.py). One part of the main window
+    (App)."""
 
     def _start_update_check(self):
         """On start-up, quietly look for a newer release. Only the installed program does; never blocks the window."""

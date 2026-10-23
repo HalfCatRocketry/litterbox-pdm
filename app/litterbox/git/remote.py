@@ -11,7 +11,6 @@ of a checkout an Admin broke are put back (set_aside_broken_checkouts), so they 
 only time the vault's server is asked anything.
 """
 
-import os
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +20,7 @@ from litterbox import layout
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
+from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.util import file_snapshot
@@ -73,13 +73,12 @@ def set_aside_broken_checkouts(repo):
         for path in saved:
             (folder / path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(Path(repo) / path, folder / path)
-        tracked = [path for path in stale if repository.in_head(repo, path)]
+        tracked = repository.in_head_many(repo, stale)
         if tracked:
-            runner.run(["git", "restore", "--staged", "--worktree", "--"] + tracked, repo, quiet=True)
+            runner.run(["git", "restore", "--staged", "--worktree", "--"] + sorted(tracked), repo, quiet=True)
         for path in stale:
-            if path not in tracked and (Path(repo) / path).is_file():
-                os.chmod(Path(repo) / path, 0o644)
-                (Path(repo) / path).unlink()                # new here, and also new in the vault: the copy is kept
+            if path not in tracked:
+                read_only.delete_file(Path(repo) / path)    # new here, and also new in the vault: the copy is kept
     except (OSError, LitterboxError) as e:
         diagnostics.LOG(f"WARNING: could not put back the files of a broken checkout ({e}); syncing anyway.")
         return []

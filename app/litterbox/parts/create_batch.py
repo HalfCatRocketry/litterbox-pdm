@@ -2,13 +2,12 @@
 create_batch.py - creating many part records at once, in one commit and one push (the importer uses
 this).
 
-plan_numbers says which numbers a batch would get right now; create_planned creates exactly those, or raises
-NumbersTaken if someone took one first (nothing of ours is left in git); create_many does both, retrying.
+create_planned creates exactly the numbers it is given, or raises NumbersTaken if someone took one first (nothing
+of ours is left in git); create_many numbers a batch from the newest records and creates it, retrying.
 """
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
 
 from litterbox import diagnostics
 from litterbox.core import part_number
@@ -104,14 +103,8 @@ def _undo_batch(repo, record_paths, committed, pathspec):
         runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", f"--pathspec-from-file={pathspec}"], repo)
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: could not fully undo the batch: {e}")
-    for record_path in record_paths:
-        path = Path(repo) / record_path
-        try:
-            if path.exists():
-                os.chmod(path, 0o644)
-                path.unlink()
-        except OSError as e:
-            diagnostics.LOG(f"WARNING: could not delete {record_path}: {e}")
+    for problem in read_only.delete_files(repo, record_paths):
+        diagnostics.LOG(f"WARNING: could not delete {problem}")
 
 
 def clean_specs(specs):
@@ -140,14 +133,6 @@ def sync_latest(repo):
     except LitterboxError as e:
         raise create.CreateError(f"Could not get the latest records from the vault, so nothing was created. "
                           f"Are you online?\n\n{e}") from e
-
-
-@create.friendly
-def plan_numbers(repo, specs, org=None):
-    """The PNs a batch would get right now, in order. Reads the local copy only and writes nothing,
-    so nothing is reserved: the numbers become yours only when create_planned pushes them."""
-    repository.validate_repo(repo)
-    return _plan_batch(repo, list(specs), create.resolve_org(repo, org))
 
 
 @create.friendly

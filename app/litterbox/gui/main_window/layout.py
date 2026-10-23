@@ -35,7 +35,7 @@ EVERYDAY = (("Check Out", "check_out", theme.ACCENT, "#18527f"),
 
 
 class WindowLayout:
-    """building the main window (a part of the main window, App)."""
+    """Building the main window. One part of the main window (App)."""
 
     def _build_ui(self):
         self.configure(fg_color=theme.BG)

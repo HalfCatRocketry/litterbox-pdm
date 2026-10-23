@@ -56,10 +56,13 @@ def pointer_oid(path):
 
 def downloaded_cad_files(repo):
     """Every file in the cad folder that is on disk for real (not a pointer), relative to the vault."""
-    folder = Path(repo) / layout.CAD_DIR_NAME
-    if not folder.is_dir():
+    try:
+        entries = os.scandir(Path(repo) / layout.CAD_DIR_NAME)
+    except OSError:                                    # no cad folder
         return []
-    return [f"{layout.CAD_DIR_NAME}/{p.name}" for p in folder.iterdir() if p.is_file() and not read_only.is_pointer(p)]
+    with entries:                                      # a big file can't be a pointer: only small ones are opened
+        return [f"{layout.CAD_DIR_NAME}/{entry.name}" for entry in entries if entry.is_file()
+                and (entry.stat().st_size > read_only.POINTER_MAX_SIZE or not read_only.is_pointer(Path(entry.path)))]
 
 
 def download(repo, rels, label="files"):

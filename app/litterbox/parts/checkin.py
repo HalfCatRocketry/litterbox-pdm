@@ -67,6 +67,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
 
     locks = lfs_locks.get_locks(repo, strict=True)
     modified = repository.get_modified(repo)
+    unpushed = repository.paths_changed_in(repo, repository.UNPUSHED)
     index = record_files.cad_index(repo)
     groups, cads = {}, {}                                    # the parts to upload: pn -> every path / the CAD files
     to_commit = []                                           # (pn, message, paths) in the order checked in
@@ -86,7 +87,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                         "uploaded for this part. It is still checked out to you. Check In again when you have "
                         "finished saving it.")
 
-            report = part_changes.build_change_report(repo, pn, user, cad, modified)
+            report = part_changes.build_change_report(repo, pn, user, cad, modified, unpushed)
             changed = report.changed_files
             if not report.has_changes and not _allowed(allow_unchanged, pn):
                 if keep_lock:
@@ -183,8 +184,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                 batch.errors[pn] = bad
                 batch.results.pop(pn, None)
     else:
-        failed = lfs_locks.unlock_mine(repo, [path for group in groups.values() for path in group])
-        read_only.enforce_read_only(repo)
+        failed = read_only.give_back_locks(repo, [path for group in groups.values() for path in group])
         if failed:
             batch.notice = lfs_locks.unlock_failure_message(failed)
     return batch

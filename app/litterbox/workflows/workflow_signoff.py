@@ -124,7 +124,7 @@ def _sign(repo, pns, comment, me, slots_for, superuser):
         try:
             done, failed, _files = _finish_many(repo, finishing)
         except LitterboxError as e:
-            failed, done = {pn: e for pn in finishing}, []
+            failed, done = dict.fromkeys(finishing, e), []
         result.completed = done
         result.errors.update({pn: str(e) for pn, e in failed.items()})
     if not result.signed and not result.errors:

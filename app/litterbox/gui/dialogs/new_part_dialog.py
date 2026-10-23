@@ -64,10 +64,8 @@ class NewPartDialog(modal_dialog.ModalDialog):
         self.projects, self.project = [], None
         self.variants = (part_number.MIN_VARIANT, part_number.MAX_VARIANT)    # the kind's range, read from the vault
         width, height = 500, 620
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title("New Assembly" if kind == create.ASSEMBLY else "New Part")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

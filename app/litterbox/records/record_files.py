@@ -3,18 +3,15 @@ record_files.py - which files belong to which part and revision, by their Litter
 folder (HCR-00042-001_A.SLDPRT), and documents' files in the documents folder (PROP-0001_A.docx).
 """
 
+import os
+from pathlib import Path
+
 from litterbox import layout
 from litterbox.core import doc_number
-from litterbox.core.doc_number import DocNumber
 from litterbox.core.filenames import parse_filename
 from litterbox.core.part_number import PNError
 from litterbox.core.revision_letters import check_revision
 from litterbox.records import record_store
-
-
-def folder_name(pn):
-    """The folder a number's files live in: 'cad' for a part, 'documents' for a document."""
-    return layout.DOC_DIR_NAME if isinstance(pn, DocNumber) else layout.CAD_DIR_NAME
 
 
 def cad_index(repo):
@@ -27,17 +24,19 @@ def cad_index(repo):
     """
     index = {}
     for folder_text, parse in ((layout.CAD_DIR_NAME, parse_filename), (layout.DOC_DIR_NAME, doc_number.parse_filename)):
-        folder = record_store.cad_dir(repo).parent / folder_text
-        if not folder.is_dir():
+        try:
+            entries = os.scandir(Path(repo) / folder_text)    # scandir: on Windows the listing says what is a file
+        except OSError:                                    # no such folder (yet)
             continue
-        for path in folder.iterdir():
-            if not path.is_file():
-                continue
-            try:
-                number, revision, _ext = parse(path.name)
-            except PNError:
-                continue
-            index.setdefault(number, {}).setdefault(revision, []).append(f"{folder_text}/{path.name}")
+        with entries:
+            for entry in entries:
+                if not entry.is_file():
+                    continue
+                try:
+                    number, revision, _ext = parse(entry.name)
+                except PNError:
+                    continue
+                index.setdefault(number, {}).setdefault(revision, []).append(f"{folder_text}/{entry.name}")
     for revisions in index.values():
         for files in revisions.values():
             files.sort()

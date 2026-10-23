@@ -64,7 +64,7 @@ def rescan(repo, pns=None, backend=None, log=print):
                                                  for pn, (edit, _problem) in edits.items()])
                 errors, notice = batch.errors, batch.notice
             except LitterboxError as e:
-                errors, notice = {pn: e for pn in edits}, ""
+                errors, notice = dict.fromkeys(edits, e), ""
             if notice:
                 log(notice)
             for pn, (_edit, problem) in edits.items():

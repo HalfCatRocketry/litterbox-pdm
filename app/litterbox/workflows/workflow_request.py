@@ -6,7 +6,6 @@ fingerprints).
 """
 
 import copy
-import hashlib
 import uuid
 from pathlib import Path
 
@@ -27,6 +26,7 @@ from litterbox.team import project_access
 from litterbox.team import team_identity
 from litterbox.team import team_permissions
 from litterbox.team import team_store
+from litterbox.util import file_hash
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_drafts
 from litterbox.workflows import workflow_ecos
@@ -43,14 +43,10 @@ def file_hashes(repo, files):
         if oid is not None:                 # not downloaded: the pointer holds the file's SHA-256 already
             result[rel] = oid
             continue
-        digest = hashlib.sha256()
         try:
-            with open(path, "rb") as f:
-                for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                    digest.update(chunk)
+            result[rel] = file_hash.sha256(path)
         except OSError as e:
             raise workflow_templates.WorkflowError(f"Could not read {rel}: {e}")
-        result[rel] = digest.hexdigest()
     return result
 
 

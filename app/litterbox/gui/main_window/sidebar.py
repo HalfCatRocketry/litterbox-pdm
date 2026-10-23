@@ -31,7 +31,7 @@ NAV_ICON = 18                   # the sidebar's icons, at 100%
 
 
 class Sidebar:
-    """the sidebar and switching between screens (a part of the main window, App)."""
+    """The sidebar and switching between screens. One part of the main window (App)."""
 
     def _nav_images(self, shape):
         size = self._px(NAV_ICON)

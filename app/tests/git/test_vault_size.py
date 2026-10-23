@@ -1,7 +1,6 @@
 """Tests for Vault > Vault Size...: reading what git and Git LFS say, and the words shown. Git itself is replaced."""
 
 import json
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +9,7 @@ from litterbox.errors import LitterboxError
 from litterbox.git import runner
 from litterbox.git import vault_size
 from litterbox.gui.logic import vault_size_text
+from tests.support import temp_folders
 
 COUNT_OBJECTS = "count: 202\nsize: 58\nin-pack: 10\npacks: 1\nsize-pack: 100\nprune-packable: 0\n"
 LS_FILES = json.dumps({"files": [{"name": "cad/a_A.SLDPRT", "size": 1000, "oid": "ab" + "0" * 62},
@@ -27,7 +27,7 @@ class Reading(unittest.TestCase):
 
     def test_measure_fetches_then_counts_what_is_downloaded_here(self):
         repo = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, repo, True)
+        self.addCleanup(temp_folders.remove, repo)
         here = repo / ".git" / "lfs" / "objects" / "cd" / "11" / ("cd" + "1" * 62)
         here.parent.mkdir(parents=True)
         here.write_bytes(b"x")

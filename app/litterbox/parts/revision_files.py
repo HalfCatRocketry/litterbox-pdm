@@ -67,7 +67,8 @@ def read_journal(repo):
             raise RevisionFailed(f"The note about an unfinished revise lists a file outside the cad and "
                                  f"cancelled-revs folders ({rel}). Litterbox will not touch it. "
                                  f"Check {path} by hand.")
-    if not journal["record"].startswith((f"{layout.LOG_DIR_NAME}/", f"{layout.DOC_LOG_DIR_NAME}/"))             or ".." in journal["record"]:
+    if not journal["record"].startswith((f"{layout.LOG_DIR_NAME}/", f"{layout.DOC_LOG_DIR_NAME}/")) \
+            or ".." in journal["record"]:
         raise RevisionFailed(f"The note about an unfinished revise lists a record outside PN-logs. Check {path}.")
     return journal
 
@@ -86,7 +87,8 @@ def undo_attempt(repo, journal, log=print):
         runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
     record, added, removed = journal["record"], journal["added"], journal["removed"]
     # put back anything the attempt took out of the vault, and the record
-    gone = [rel for rel in removed if repository.in_head(repo, rel)]
+    in_head = repository.in_head_many(repo, added + removed)
+    gone = [rel for rel in removed if rel in in_head]
     try:
         if gone:
             runner.run(["git", "reset", "-q", "HEAD", "--"] + gone, repo)
@@ -95,21 +97,13 @@ def undo_attempt(repo, journal, log=print):
     except LitterboxError as e:
         log(f"WARNING: could not fully restore the vault's files: {e}")
     # remove the new files, but only ones the vault does not own
-    ours = [rel for rel in added if not repository.in_head(repo, rel)]
+    ours = [rel for rel in added if rel not in in_head]
     if ours:
         try:
             runner.run(["git", "rm", "--cached", "-q", "--ignore-unmatch", "--"] + ours, repo)
         except LitterboxError as e:
             log(f"WARNING: could not fully clean git's index: {e}")
-    problems = []
-    for rel in ours:
-        path = Path(repo) / rel
-        try:
-            if path.exists():
-                os.chmod(path, 0o644)
-                path.unlink()
-        except OSError as e:
-            problems.append(f"{rel}: {e}")
+    problems = read_only.delete_files(repo, ours)
     if problems:
         raise RevisionFailed("Some files from an unfinished revise could not be deleted (are they open in "
                              "SolidWorks?). Close them and try again:\n" + "\n".join(problems[:8]))
@@ -120,6 +114,19 @@ def undo_attempt(repo, journal, log=print):
     lfs_locks.force_unlock_quietly(repo, journal["locked"] + [record])
     read_only.enforce_read_only(repo)
     return "cleaned"
+
+
+def give_up(repo, journal, locked, log=print):
+    """After a Revise or Cancel Revision failed before its upload: put back what the attempt did (or, if it had not
+    started changing files yet, just give back the locks taken), then forget the journal."""
+    try:
+        if journal is not None:
+            journal["locked"] = locked
+            undo_attempt(repo, journal, log)
+        else:
+            lfs_locks.force_unlock_quietly(repo, locked)
+    finally:
+        clear_journal(repo)
 
 
 def recover(repo, log=print):

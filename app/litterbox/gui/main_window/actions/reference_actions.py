@@ -17,7 +17,8 @@ from litterbox.references import reference_rescan
 
 
 class ReferenceActions:
-    """References...: showing what a part uses and where it is used, and (a part of the main window, App)."""
+    """References...: what a part uses and where it is used, updating out-of-date references, and Update BOM. One part
+    of the main window (App)."""
 
     def _offer_reference_review(self, pn, row, rev):
         """An assembly in work that uses out-of-date parts: offer to review them first. True if the review opened."""

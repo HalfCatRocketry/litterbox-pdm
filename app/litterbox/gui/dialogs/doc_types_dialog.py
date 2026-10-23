@@ -27,10 +27,8 @@ class DocTypesDialog(modal_dialog.ModalDialog):
         self.types = [doc_types.DocType(t.key, t.name, t.prefix, t.hidden, dict(t.extra)) for t in types]
         self.before = [t.to_dict() | {"key": t.key} for t in self.types]
         width, height = 640, 520
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Document Types")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height, down=4)
         self.minsize(520, 420)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

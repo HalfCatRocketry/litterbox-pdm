@@ -38,10 +38,8 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         current = current or {}
         self.result, self.may_rename = None, may_rename
         width, height = 560, 820
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 4, 0)
         self.title("Vault settings")
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height, down=4)
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

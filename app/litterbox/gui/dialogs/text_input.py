@@ -32,10 +32,8 @@ class ReasonDialog(modal_dialog.ModalDialog):
         window_chrome.set_window_icon(self)
         self.result = None
         width, height = 540, 440
-        x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-        y = parent.winfo_rooty() + max((parent.winfo_height() - height) // 3, 0)
         self.title(title)
-        self.geometry(f"{width}x{height}+{x}+{y}")
+        window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)
         self.transient(parent)
         self.columnconfigure(0, weight=1)

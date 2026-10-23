@@ -22,12 +22,9 @@ ASSETS_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "
 # "icon: black" to C:\Litterbox\settings.yaml.
 ICON_SETTING = {"choice": icon_files.DEFAULT_ICON}
 
-
 FADE_IN_MS = 160            # how long a window takes to fade in, and out
 
-
 FADE_OUT_MS = 120
-
 
 FADE_STEPS = 8
 
@@ -166,3 +163,11 @@ def set_app_id():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Litterbox.Vault")
     except Exception:
         pass
+
+
+def place_over(window, parent, width, height, down=3):
+    """Size a window and put it over its parent: centred across, and a third (down=3) or a quarter (down=4) of the
+    way down. It never starts above or left of the parent."""
+    x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
+    y = parent.winfo_rooty() + max((parent.winfo_height() - height) // down, 0)
+    window.geometry(f"{width}x{height}+{x}+{y}")

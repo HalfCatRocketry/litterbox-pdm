@@ -18,21 +18,18 @@ from pathlib import Path
 
 import yaml
 
-from litterbox import diagnostics
 from litterbox import layout
 from litterbox.core import doc_number
 from litterbox.core.part_number import PNError
 from litterbox.errors import LitterboxError
-from litterbox.git import lfs_locks
-from litterbox.git import remote
 from litterbox.git import repository
-from litterbox.git import runner
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
-from litterbox.team import guarded_push
 from litterbox.team import team_permissions
+from litterbox.util import fast_yaml
 from litterbox.vault import config_write
+from litterbox.vault import shared_files
 
 
 MIN_VERSION = "0.5.1"           # the first Litterbox that knows documents
@@ -98,7 +95,7 @@ def load(repo):
     if not path.is_file():
         return []
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = fast_yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except (OSError, yaml.YAMLError) as e:
         raise DocTypeError(f"Could not read {layout.DOC_TYPES_FILE}: {e}") from None
     body = data.get("document_types") if isinstance(data, dict) else None
@@ -129,10 +126,6 @@ def by_key(types):
     return {t.key: t for t in types}
 
 
-def by_prefix(types):
-    return {t.prefix: t for t in types}
-
-
 def in_use(repo):
     """{type key: how many documents} for the types documents use."""
     counts = {}
@@ -160,14 +153,8 @@ def edit_types(repo, change, message):
     place), check, commit, push, unlock. If anything fails it is put back. Admins and the Owner only."""
     repository.validate_repo(repo)
     team_permissions.require(repo, "manage_doc_types")
-    rel, config_rel = layout.DOC_TYPES_FILE, f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
-    existed = repository.in_index(repo, rel)
-    config_tracked = repository.in_index(repo, config_rel)
-    if existed:
-        lfs_locks.lock(repo, rel, "the document types file")
-    committed, result = False, None
-    try:
-        remote.pull(repo)
+
+    def make_change():
         before = load(repo)
         types = [DocType(t.key, t.name, t.prefix, t.hidden, dict(t.extra)) for t in before]
         result = change(types)
@@ -175,28 +162,6 @@ def edit_types(repo, change, message):
         check_kept(before, types, in_use(repo))
         save(repo, types)
         config_write.stamp(repo, min_version=MIN_VERSION)
-        paths = [rel, config_rel]
-        runner.run(["git", "add", "--"] + paths, repo)
-        runner.run(["git", "commit", "-m", message, "--"] + paths, repo)
-        committed = True
-        guarded_push.push(repo)
-    except BaseException:
-        try:
-            if committed:
-                runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
-            for path, tracked in ((rel, existed), (config_rel, config_tracked)):
-                if tracked:
-                    runner.run(["git", "restore", "--staged", "--worktree", "--", path], repo)
-                else:
-                    runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", path], repo, quiet=True)
-                    (Path(repo) / path).unlink(missing_ok=True)
-        except (LitterboxError, OSError) as e:
-            diagnostics.LOG(f"WARNING: could not fully undo the change to {rel}: {e}")
-        if existed:
-            lfs_locks.force_unlock_quietly(repo, [rel])
-        raise
-    if existed:
-        failed = lfs_locks.unlock_mine(repo, [rel])
-        if failed:
-            raise LitterboxError(lfs_locks.unlock_failure_message(failed))
-    return result
+        return [layout.DOC_TYPES_FILE, layout.CONFIG_PATH], message, result
+    return shared_files.edit(repo, [layout.DOC_TYPES_FILE, layout.CONFIG_PATH], "the document types file",
+                             make_change)

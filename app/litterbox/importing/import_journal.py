@@ -4,7 +4,6 @@ puts the vault back if an import stopped half way (or finishes it, if its commit
 """
 
 import os
-from pathlib import Path
 
 from litterbox import layout
 from litterbox.errors import LitterboxError
@@ -94,7 +93,8 @@ def recover(repo, log=print):
             raise import_errors.ImportFailed("An unfinished import left a commit that has not been pushed, but it is no longer "
                                "the latest commit, so Litterbox will not undo it. Ask for help before continuing.")
         runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
-    ours = [rel for rel in files + records if not repository.in_head(repo, rel)]
+    in_head = repository.in_head_many(repo, files + records)
+    ours = [rel for rel in files + records if rel not in in_head]
     log(f"Removing {len(ours)} file(s) left by an unfinished import...")
     if ours:
         pathspec = committing.write_pathspec(ours)
@@ -107,15 +107,7 @@ def recover(repo, log=print):
                 os.unlink(pathspec)
             except OSError:
                 pass
-    problems = []
-    for rel in ours:
-        path = Path(repo) / rel
-        try:
-            if path.exists():
-                os.chmod(path, 0o644)
-                path.unlink()
-        except OSError as e:
-            problems.append(f"{rel}: {e}")
+    problems = read_only.delete_files(repo, ours)
     if problems:
         raise import_errors.ImportFailed("Some files from an unfinished import could not be deleted (are they open in "
                            "SolidWorks?). Close them and try again:\n" + "\n".join(problems[:8]))

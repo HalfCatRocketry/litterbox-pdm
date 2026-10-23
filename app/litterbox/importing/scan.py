@@ -29,7 +29,6 @@ It never opens the files with SolidWorks, so it works with any SolidWorks versio
 Working out what each assembly REFERENCES needs SolidWorks and comes later.
 """
 
-import hashlib
 import os
 import re
 from collections import defaultdict
@@ -37,6 +36,7 @@ from collections import defaultdict
 from litterbox.importing import manifest as mf
 from litterbox.records import record_model
 from litterbox.records import record_store
+from litterbox.util import file_hash
 
 
 # extension (lowercase) -> (kind, display type). Add other CAD programs here.
@@ -52,25 +52,17 @@ FORMATS = {
 
 IGNORED_FOLDERS = {".git", "$recycle.bin", "system volume information", "swxauto", "__pycache__"}
 
-
 JUNK_EXTENSIONS = {".bak", ".tmp", ".swp"}
-
 
 LONG_PATH = 240                 # Windows trips over paths much longer than this
 
-
-HASH_BLOCK = 1024 * 1024
-
-
 MAX_NAME_LENGTH = 100
-
 
 OLD_FOLDER_WORDS = {"old", "backup", "backups", "bak", "archive", "archived", "obsolete", "deprecated",
                     "unused", "trash", "temp", "tmp", "superseded", "discard", "discarded"}
 
 
 COPY_WORDS = {"old", "bak", "backup", "copy", "obsolete", "deprecated", "unused"}
-
 
 COPY_NUMBER = re.compile(r"\(\d+\)$")
 
@@ -100,13 +92,8 @@ def _open_path(path):
 
 
 def hash_file(path):
-    digest = hashlib.sha256()
-    with open(_open_path(path), "rb") as f:
-        while True:
-            block = f.read(HASH_BLOCK)
-            if not block:
-                return digest.hexdigest()
-            digest.update(block)
+    """The SHA-256 of a file to import (its path may be longer than Windows usually allows)."""
+    return file_hash.sha256(_open_path(str(path)))
 
 
 def propose_name(stem):

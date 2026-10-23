@@ -35,7 +35,7 @@ FIRST_COLUMN = "#0"             # the tick box and status icon
 
 
 class PartsList:
-    """the parts list (a part of the main window, App)."""
+    """The parts list. One part of the main window (App)."""
 
     doc_rows = ()           # every document's PartStatus (they share rows_by_pn with the parts, see _index_rows)
     _acting_on = None       # the parts or documents act_on() points the actions at, while it runs
@@ -283,8 +283,9 @@ class PartsList:
             with ThreadPoolExecutor(max_workers=3) as pool:      # the list, "who am I" and the server are separate
                 who_job = pool.submit(find_out_who)
                 behind_job = pool.submit(remote.commits_behind, repo)
-                rows = part_status.get_status(repo)
-                docs = part_status.get_status(repo, documents=True)
+                state = part_status.read_state(repo)           # one lock list and one git status for both
+                rows = part_status.get_status(repo, state=state)
+                docs = part_status.get_status(repo, documents=True, state=state)
                 who, behind = who_job.result(), behind_job.result()
             if project_visibility.apply(repo, who):           # a hidden project's parts came or went
                 rows = part_status.get_status(repo)

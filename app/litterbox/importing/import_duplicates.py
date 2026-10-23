@@ -8,18 +8,10 @@ from pathlib import Path
 
 from litterbox.git import lfs_download
 from litterbox.importing import import_paths
+from litterbox.importing import scan
 from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
-
-
-def _sha256(path):
-    import hashlib
-    digest = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def find_duplicates(repo, prepared):
@@ -56,7 +48,7 @@ def find_duplicates(repo, prepared):
         except OSError:
             continue
         wanted.setdefault((size, import_paths.ext_of(main_file.path)), []).append(index)
-    hashes = {}
+    hashes, in_vault = {}, set()
     for pn, revisions in record_files.cad_index(repo).items():
         for rel in sorted(f for files in revisions.values() for f in files):
             path = Path(repo) / rel
@@ -68,15 +60,22 @@ def find_duplicates(repo, prepared):
             if key not in wanted:
                 continue
             try:
-                hashes.setdefault(pointer[0] if pointer else _sha256(path), []).append(pn)
+                hashes.setdefault(pointer[0] if pointer else scan.hash_file(path), []).append(pn)
+                in_vault.add(key)
             except OSError:
                 continue
+    # Only a file that shares its size and type with another (in the vault, or in this import) can be a copy, so
+    # only those are read: the rest of an import can be gigabytes.
+    could_match = {index for key, indexes in wanted.items() if key in in_vault or len(indexes) > 1 for index in indexes}
     digests = {}
     for index, entry in enumerate(entries):
-        main_file = entry.item.files[0]
-        if (os.path.getsize(main_file.path) if os.path.isfile(main_file.path) else -1, import_paths.ext_of(main_file.path)) not in wanted:
+        if index not in could_match:
             continue
-        digest = main_file.sha256 or _sha256(main_file.path)
+        main_file = entry.item.files[0]
+        try:
+            digest = main_file.sha256 or scan.hash_file(main_file.path)
+        except OSError:                                 # gone or unreadable since the scan: nothing to compare
+            continue
         digests[index] = digest
         for pn in hashes.get(digest, []):
             warn(index, f"The file is identical to the one in the vault for {pn}.")

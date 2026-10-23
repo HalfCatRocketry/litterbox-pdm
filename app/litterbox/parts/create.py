@@ -17,7 +17,6 @@ never takes (or accepts) a number inside a block. Every record is given the proj
 so a new variant of a project's part is in that project too.
 """
 
-import os
 from functools import wraps
 from pathlib import Path
 
@@ -42,18 +41,13 @@ from litterbox.vault import config_write
 
 MAX_NAME = 100
 
-
 MAX_DESCRIPTION = 500
-
 
 ATTEMPTS = 5            # how many times to pick a number again if someone else got there first
 
-
 NONCAD_MIN_VERSION = "0.5.1"    # the first Litterbox that knows non-CAD parts
 
-
 ANY = "*any project*"   # new_part(project=ANY): a new variant, whose base decides its project
-
 
 PART, ASSEMBLY = "part", "assembly"     # new_part(kind=...): which variants it takes
 
@@ -169,7 +163,7 @@ def describe_number(repo, org, base, variant=None):
     return f" ({shown})" if shown else ""
 
 
-def _undo_creation(repo, record_path, committed, config_rel=None):
+def undo_creation(repo, record_path, committed, config_rel=None):
     """Take back a creation that did not get pushed: our commit, and the file. Never raises.
 
     Only our one commit and our one new file are touched. Anything else in the
@@ -187,11 +181,8 @@ def _undo_creation(repo, record_path, committed, config_rel=None):
                 (Path(repo) / config_rel).unlink(missing_ok=True)
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: could not fully undo the creation of {record_path}: {e}")
-    path = Path(repo) / record_path
     try:
-        if path.exists():
-            os.chmod(path, 0o644)
-            path.unlink()
+        read_only.delete_file(Path(repo) / record_path)
     except OSError as e:
         diagnostics.LOG(f"WARNING: could not delete {record_path}: {e}")
 
@@ -227,7 +218,7 @@ def _create(repo, name, description, org, choose, noncad=False):
             raise CreateError(f"{pn} already exists in your copy of the vault.") from None
         paths, config_rel = [record_path], None
         if noncad and _needs_newer(repo):
-            config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
+            config_rel = layout.CONFIG_PATH
             config_write.stamp(repo, NONCAD_MIN_VERSION)
             paths.append(config_rel)
 
@@ -238,7 +229,7 @@ def _create(repo, name, description, org, choose, noncad=False):
             committed = True
             runner.run(["git", "push"], repo)
         except LitterboxError as e:
-            _undo_creation(repo, record_path, committed, config_rel)
+            undo_creation(repo, record_path, committed, config_rel)
             if not committed:
                 raise
             last_error = e
@@ -251,7 +242,7 @@ def _create(repo, name, description, org, choose, noncad=False):
                     f"Nothing was changed. Are you online?\n\n{sync_error}") from e
             continue
         except BaseException:
-            _undo_creation(repo, record_path, committed, config_rel)
+            undo_creation(repo, record_path, committed, config_rel)
             raise
 
         read_only.enforce_read_only(repo)          # the new record is read-only until someone checks it out

@@ -1,7 +1,6 @@
 """Tests for the wiring of Generate STEP/PDF and the files made after a release, in the main window. The window
 itself is replaced by stand-ins (tests/support/gui_fakes.py): these check the wiring, not the look."""
 
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,6 +10,7 @@ from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
 from litterbox.parts.part_status import PartStatus
 from tests.support.gui_fakes import FakeBox, load_gui_with_fakes, replace
+from tests.support import temp_folders
 
 PART = PN("HCR", 7, 1)
 FILES = ["cad/HCR-00007-001_A.SLDDRW", "cad/HCR-00007-001_A.SLDPRT"]
@@ -38,7 +38,7 @@ class Harness(unittest.TestCase):
         self.app = app
         replace(self, self.gui.settings, "save", lambda data, path=None: None)
         self.out = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.out, True)
+        self.addCleanup(temp_folders.remove, self.out)
 
     def answer_dialog(self, answer):
         asked = []

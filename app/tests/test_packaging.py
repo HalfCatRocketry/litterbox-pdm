@@ -15,6 +15,7 @@ PACKAGING = next((p for p in (APP.parent / "packaging", APP / "litterbox-pdm" / 
 
 from litterbox.user import updater
 from litterbox import version
+from tests.support import temp_folders
 
 
 @unittest.skipIf(PACKAGING is None, "packaging folder not found next to the app")
@@ -29,6 +30,7 @@ class ReleaseScripts(unittest.TestCase):
 
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(temp_folders.remove, self.dir)
         self.private, self.public = updater.generate_keypair()
 
     def test_notes_come_from_the_changelog_section_of_that_version(self):

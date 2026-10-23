@@ -18,6 +18,8 @@ from pathlib import Path
 
 import yaml
 
+from litterbox.util import fast_yaml
+
 ROOT = Path("C:/Litterbox")
 SETTINGS_FILE = ROOT / "settings.yaml"
 LOG_FILE = ROOT / "logs" / "litterbox.log"
@@ -77,7 +79,7 @@ def load(path=None):
     data = dict(DEFAULTS)
     try:
         with open(path, encoding="utf-8") as f:
-            loaded = yaml.safe_load(f)
+            loaded = fast_yaml.safe_load(f)
         if isinstance(loaded, dict):
             data.update(loaded)
     except (OSError, yaml.YAMLError):

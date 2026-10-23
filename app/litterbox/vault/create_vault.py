@@ -53,12 +53,9 @@ from litterbox.vault import git_attributes
 
 GITATTRIBUTES = ".gitattributes"
 
-
 GITIGNORE = ".gitignore"
 
-
 README = "README.md"
-
 
 IGNORE_LINES = [
     ".tmp-*",             # half-written files Litterbox keeps while saving
@@ -69,7 +66,6 @@ IGNORE_LINES = [
 
 
 IGNORE_HEADER = "# Litterbox: temporary and lock files."
-
 
 README_TEXT = """# {org} vault
 
@@ -323,7 +319,7 @@ def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIG
 
         if not (repo / layout.CONFIG_DIR).exists():
             writer.made_folders.append(layout.CONFIG_DIR)
-        config_rel = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
+        config_rel = layout.CONFIG_PATH
         writer.note(config_rel, None)
         config_write.save(repo, org=org, start_number=start_number, base_digits=base_digits,
                     variant_digits=variant_digits, org_name=org_name)

@@ -149,7 +149,7 @@ def make_cots_many(repo, pns):
 def _reason_batch(repo, pns, action, change, message):
     """`message(pn)` is each part's commit message."""
     batch = batch_core.edit_records(repo, [(pn, action, change, message(pn)) for pn in pns])
-    batch.results = {pn: None for pn in batch.results}
+    batch.results = dict.fromkeys(batch.results)
     return batch_core.as_lists(batch, pns)
 
 

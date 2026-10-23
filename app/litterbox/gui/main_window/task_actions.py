@@ -26,7 +26,8 @@ from litterbox.workflows import workflow_templates
 
 
 class TaskActions:
-    """My Tasks and sign-off workflows: reviewing, resubmitting, completing, withdrawing, (a part of the main window, App)."""
+    """My Tasks and sign-off workflows: reviewing, resubmitting, completing, withdrawing, overriding and reassigning.
+    One part of the main window (App)."""
 
     def _task_windows(self):
         """The My Tasks screen, once it has been opened (a list, so callers can loop over it)."""
@@ -37,9 +38,6 @@ class TaskActions:
         """Reload the My Tasks screen. (The count beside My Tasks in the sidebar is updated with the other counts.)"""
         for window in self._task_windows():
             window.reload()
-
-    def show_tasks(self):
-        self.show_screen("tasks")
 
     def _eco_of(self, number):
         """The ECO to show beside a request, or None (none, or it can't be read: that is only logged)."""

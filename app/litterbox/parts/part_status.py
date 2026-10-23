@@ -4,7 +4,8 @@ PN-logs, with its lock, its files and whether they are modified.
 
 Rows come from records, not files: a CAD file with no record has no row. get_status(repo, documents=True) gives
 the same rows for documents (DOC-logs/, their files in documents/), which are checked out, released and so on in
-the same way.
+the same way. The parts list wants both: read_state() reads what they are worked out from (the files, the lock list
+from the server, git's list of changes) once, for both calls.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -61,14 +62,30 @@ def released_revisions(record):
     return tuple(sorted(released, key=revision_letters.revision_number))
 
 
-def get_status(repo, documents=False):
-    """One PartStatus per part number that has a record (or with documents=True, per document)."""
+@dataclass(frozen=True)
+class VaultState:
+    """What the rows are worked out from, read at one moment."""
+    index: dict                 # record_files.cad_index
+    locks: dict                 # lfs_locks.get_locks
+    modified: set               # repository.get_modified
+
+
+def read_state(repo):
+    """Look at the vault once: its files, the lock list (from the server) and git's list of changes."""
     repository.validate_repo(repo)
     index = record_files.cad_index(repo)
     with ThreadPoolExecutor(max_workers=2) as pool:      # two independent git calls: do them at the same time
         locks_job = pool.submit(lfs_locks.get_locks, repo)
         modified_job = pool.submit(repository.get_modified, repo)
-        locks, modified = locks_job.result(), modified_job.result()
+        return VaultState(index, locks_job.result(), modified_job.result())
+
+
+def get_status(repo, documents=False, state=None):
+    """One PartStatus per part number that has a record (or with documents=True, per document). `state` is from
+    read_state(), when the parts and the documents are both wanted as they are at one moment."""
+    if state is None:
+        state = read_state(repo)
+    index, locks, modified = state.index, state.locks, state.modified
 
     rows = []
     for pn in (record_store.list_docs(repo) if documents else record_store.list_pns(repo)):

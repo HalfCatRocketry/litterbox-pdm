@@ -19,20 +19,14 @@ values the next time they get the latest. Projects are changed through the same 
 
 from pathlib import Path
 
-from litterbox import diagnostics
 from litterbox import layout
 from litterbox.errors import LitterboxError
-from litterbox.git import lfs_locks
-from litterbox.git import remote
 from litterbox.git import repository
-from litterbox.git import runner
 from litterbox.records.error_conversion import converts_errors
-from litterbox.team import guarded_push
 from litterbox.team import team_permissions
 from litterbox.vault import config
 from litterbox.vault import config_write
-
-CONFIG_REL = f"{layout.CONFIG_DIR}/{layout.CONFIG_FILE}"
+from litterbox.vault import shared_files
 
 
 @converts_errors
@@ -57,47 +51,14 @@ def change_file(repo, change, check=None):
         team_permissions.require(repo, "manage_settings")
     else:
         check()
-    path = Path(repo) / CONFIG_REL
-    tracked = repository.in_index(repo, CONFIG_REL)
-    before = path.read_bytes() if path.is_file() else None
-    if tracked:
-        lfs_locks.lock(repo, CONFIG_REL, "the vault settings")
-    committed = False
-    try:
-        remote.pull(repo)
+    path = Path(repo) / layout.CONFIG_PATH
+
+    def make_change():
         before = path.read_bytes() if path.is_file() else None
         try:
             message = change()
         except config.ConfigError as e:
             raise LitterboxError(str(e)) from None
-        after = path.read_bytes() if path.is_file() else None
-        if after == before:
-            changed = False
-        else:
-            changed = True
-            runner.run(["git", "add", "--", CONFIG_REL], repo)
-            runner.run(["git", "commit", "-m", message, "--", CONFIG_REL], repo)
-            committed = True
-            guarded_push.push(repo)
-    except BaseException:
-        try:
-            if committed:
-                runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
-            if tracked:
-                runner.run(["git", "restore", "--staged", "--worktree", "--", CONFIG_REL], repo)
-            else:
-                runner.run(["git", "rm", "-f", "--cached", "--ignore-unmatch", "--", CONFIG_REL], repo, quiet=True)
-                if before is None:
-                    path.unlink(missing_ok=True)
-                else:
-                    path.write_bytes(before)
-        except (LitterboxError, OSError) as e:
-            diagnostics.LOG(f"WARNING: could not fully undo the change to {CONFIG_REL}: {e}")
-        if tracked:
-            lfs_locks.force_unlock_quietly(repo, [CONFIG_REL])
-        raise
-    if tracked:
-        failed = lfs_locks.unlock_mine(repo, [CONFIG_REL])
-        if failed:
-            raise LitterboxError(lfs_locks.unlock_failure_message(failed))
-    return changed
+        changed = (path.read_bytes() if path.is_file() else None) != before
+        return ([layout.CONFIG_PATH] if changed else []), message, changed
+    return shared_files.edit(repo, [layout.CONFIG_PATH], "the vault settings", make_change)

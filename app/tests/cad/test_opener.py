@@ -5,6 +5,7 @@ from pathlib import Path
 
 from litterbox.cad import opener
 from litterbox.errors import LitterboxError
+from tests.support import temp_folders
 
 
 class OpenOrder(unittest.TestCase):
@@ -41,6 +42,7 @@ class ProgramFor(unittest.TestCase):
 class OpenPath(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(temp_folders.remove, self.dir)
         self.file = self.dir / "part.SLDPRT"
         self.file.write_text("x")
         self.pdf = self.dir / "doc.pdf"
