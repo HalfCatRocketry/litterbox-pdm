@@ -93,7 +93,7 @@ def _open_path(path):
 
 def hash_file(path):
     """The SHA-256 of a file to import (its path may be longer than Windows usually allows)."""
-    return file_hash.sha256(_open_path(path))
+    return file_hash.sha256(_open_path(str(path)))
 
 
 def propose_name(stem):
