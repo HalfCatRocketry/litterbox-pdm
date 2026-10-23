@@ -149,10 +149,18 @@ def lock_many(repo, wanted):
 
 def unlock_mine(repo, paths):
     """Unlock every one of these paths that you hold. Returns [(path, error), ...] for failures."""
+    return release(repo, paths)[0]
+
+
+def release(repo, paths):
+    """unlock_mine(), also returning the lock list as it is afterwards: as read before unlocking, less the locks
+    given back (read_only.give_back_locks uses it, so the server is asked for the list only once)."""
     locks = get_locks(repo, strict=True)
     mine = [path for path in paths if is_mine(locks, path)]
     results = _parallel(lambda path: run_lfs(["git", "lfs", "unlock", path], repo), mine)
-    return [(path, str(error)) for path, (_value, error) in zip(mine, results) if error is not None]
+    failed = [(path, str(error)) for path, (_value, error) in zip(mine, results) if error is not None]
+    given_back = {path.lower() for path, (_value, error) in zip(mine, results) if error is None}
+    return failed, {path: lock for path, lock in locks.items() if path not in given_back}
 
 
 def force_unlock(repo, paths):

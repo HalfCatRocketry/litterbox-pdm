@@ -64,8 +64,7 @@ def _undo_batch(repo, pns):
     for pn, group in groups.items():
         batch.results[pn] = [p for p in group if p.lower() not in tracked]       # never uploaded: kept, not deleted
 
-    failed = lfs_locks.unlock_mine(repo, everything)
-    read_only.enforce_read_only(repo)
+    failed = read_only.give_back_locks(repo, everything)
     if failed:
         batch.notice = lfs_locks.unlock_failure_message(failed)
     return batch

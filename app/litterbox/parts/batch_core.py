@@ -188,8 +188,7 @@ def edit_records(repo, items, atomic=False, prepare=None, finish=None):
 
     for pn, _path, _message in edited:
         batch.results[pn] = True
-    failed = lfs_locks.unlock_mine(repo, paths)
-    read_only.enforce_read_only(repo)
+    failed = read_only.give_back_locks(repo, paths)
     if failed:
         batch.notice = lfs_locks.unlock_failure_message(failed)
     return batch

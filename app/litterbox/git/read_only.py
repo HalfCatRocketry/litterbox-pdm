@@ -43,6 +43,15 @@ def _set_read_only(path):
         os.chmod(path, stat.S_IREAD)
 
 
+def give_back_locks(repo, paths):
+    """The end of Check In, Undo and the like: give back your locks on these paths (lfs_locks.unlock_mine), then make
+    the files you no longer hold read-only, with the lock list read once for both. Returns the failures, as
+    unlock_mine does."""
+    failed, locks = lfs_locks.release(repo, paths)
+    enforce_read_only(repo, locks)
+    return failed
+
+
 def delete_file(path):
     """Delete a file, even a read-only one (Windows refuses to delete those). Nothing happens if it isn't there.
     Raises OSError if it can't be deleted (open in SolidWorks, say)."""
@@ -65,19 +74,20 @@ def delete_files(repo, rels):
     return problems
 
 
-def enforce_read_only(repo):
+def enforce_read_only(repo, locks=None):
     """Make every managed file read-only unless you hold its lock.
 
     This is the safety net that stops SolidWorks from saving over a file you
     haven't checked out. It runs after every pull, check-in, undo and so on.
     If the lock list can't be read, it does nothing: guessing wrong here would
-    lock you out of files you are editing.
+    lock you out of files you are editing. `locks` is a lock list just read (see give_back_locks).
     """
-    try:
-        locks = lfs_locks.get_locks(repo, strict=True)
-    except LitterboxError:
-        diagnostics.LOG("WARNING: skipped the read-only check because locks could not be read.")
-        return
+    if locks is None:
+        try:
+            locks = lfs_locks.get_locks(repo, strict=True)
+        except LitterboxError:
+            diagnostics.LOG("WARNING: skipped the read-only check because locks could not be read.")
+            return
     index = record_files.cad_index(repo)
     for pn in record_store.list_pns(repo) + record_store.list_docs(repo):
         every_file = [f for files in index.get(pn, {}).values() for f in files]

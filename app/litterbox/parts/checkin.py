@@ -184,8 +184,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                 batch.errors[pn] = bad
                 batch.results.pop(pn, None)
     else:
-        failed = lfs_locks.unlock_mine(repo, [path for group in groups.values() for path in group])
-        read_only.enforce_read_only(repo)
+        failed = read_only.give_back_locks(repo, [path for group in groups.values() for path in group])
         if failed:
             batch.notice = lfs_locks.unlock_failure_message(failed)
     return batch

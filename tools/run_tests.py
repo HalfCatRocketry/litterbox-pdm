@@ -7,14 +7,15 @@ tools/.test_times.json). The same tests as `python -m unittest discover -s tests
     python tools/run_tests.py --git             everything, the git tests too (sets LITTERBOX_GIT_TESTS=1)
     python tools/run_tests.py tests.parts       only test classes whose names start with these
     python tools/run_tests.py --jobs 8          at most 8 at once (default: half the cores)
-    python tools/run_tests.py --split-over 30   run each test of a class that last took over 30 s in a process of
-                                                its own (default 60; 0 never splits)
+    python tools/run_tests.py --split-over 300  also run each test of a class that last took over 300 s in a
+                                                process of its own (off unless asked for)
 
 Each class runs in a fresh process, so tests that change os.environ or replace a module's function can't reach
-another class; the git tests each make their own vault in a temporary folder, so they don't meet either. A class
-that took long last time (the git tests on Windows can take many minutes) is split up, a test per process, so it
-isn't the one thing still running at the end. Prints each failing class's output at the end, and exits with 1 if
-anything failed.
+another class; the git tests each make their own vault in a temporary folder, so they don't meet either. With
+--split-over, a class that took long last time is split up, a test per process, so it isn't the one thing still
+running at the end; on Windows with the git tests that made the whole run slower (about 5000 s against 1800 s:
+splitting starts every slow git test at once), so it is off by default. Prints each failing class's output at the
+end, and exits with 1 if anything failed.
 """
 
 import argparse
@@ -87,7 +88,7 @@ def main(argv=None):
     parser.add_argument("prefixes", nargs="*", help="only test classes whose names start with these (tests.parts ...)")
     parser.add_argument("--git", action="store_true", help="run the git tests on Windows too (slow without this)")
     parser.add_argument("--jobs", type=int, default=max((os.cpu_count() or 4) // 2, 1), help="how many at once")
-    parser.add_argument("--split-over", type=float, default=60.0,
+    parser.add_argument("--split-over", type=float, default=0.0,
                         help="run each test of a class that last took longer than this (seconds) on its own")
     args = parser.parse_args(argv)
 
