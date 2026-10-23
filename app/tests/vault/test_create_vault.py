@@ -2,7 +2,6 @@
 
 import fnmatch
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
@@ -20,6 +19,7 @@ from litterbox.records import record_store
 from tests.support.vault_fixture import SKIP_ON_WINDOWS, git, install_fake_lfs
 from litterbox.errors import LitterboxError
 from litterbox.parts import part_status
+from tests.support import temp_folders
 
 
 class EmptyRepo(unittest.TestCase):
@@ -27,7 +27,7 @@ class EmptyRepo(unittest.TestCase):
 
     def setUp(self):
         root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, root)
         self.root = root
         bin_dir = root / "bin"
         bin_dir.mkdir()

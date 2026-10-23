@@ -2,18 +2,18 @@
 
 import hashlib
 import os
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 from litterbox.util import file_hash
+from tests.support import temp_folders
 
 
 class Sha256(unittest.TestCase):
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, self.folder)
 
     def test_matches_hashlib(self):
         for size in (0, 1, 3 * 1024 * 1024 + 7):

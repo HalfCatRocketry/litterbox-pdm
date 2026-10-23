@@ -1,7 +1,6 @@
 """git/read_only.py: deleting files that may be read-only, and making a file read-only without touching one that is."""
 
 import os
-import shutil
 import stat
 import tempfile
 import time
@@ -9,12 +8,13 @@ import unittest
 from pathlib import Path
 
 from litterbox.git import read_only
+from tests.support import temp_folders
 
 
 class DeleteFiles(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, self.repo)
         (self.repo / "cad").mkdir()
 
     def test_a_read_only_file_is_deleted(self):
@@ -38,7 +38,7 @@ class DeleteFiles(unittest.TestCase):
 class SetReadOnly(unittest.TestCase):
     def setUp(self):
         folder = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, folder)
         self.file = folder / "HCR-00001-001_A.SLDPRT"
         self.file.write_bytes(b"x")
 

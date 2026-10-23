@@ -6,7 +6,6 @@ in. The first group runs anywhere; the second uses the two-user vault and a fake
 one does, so it needs Linux, macOS or WSL.
 """
 
-import shutil
 import tempfile
 import threading
 import unittest
@@ -20,6 +19,7 @@ from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.git import runner
 from litterbox.parts import checkout
+from tests.support import temp_folders
 
 DAMAGED = ("Command failed: git lfs locks --verify --json\n\nUnable to create lock system: lock cache initialization: "
            "problem reading updated key/value data from C:\\vault\\.git\\lfs\\lockcache.db: gob: bad data: field "
@@ -29,7 +29,7 @@ DAMAGED = ("Command failed: git lfs locks --verify --json\n\nUnable to create lo
 class Healing(unittest.TestCase):
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, self.repo)
         (self.repo / ".git" / "lfs").mkdir(parents=True)
         self.cache = lfs_locks.lock_cache_path(self.repo)
         self.cache.write_bytes(b"broken")

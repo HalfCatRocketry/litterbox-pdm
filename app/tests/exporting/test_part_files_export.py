@@ -1,7 +1,6 @@
 """Tests for Export Files and where an export may go. No git: a vault folder with records and files is enough."""
 
 import os
-import shutil
 import stat
 import tempfile
 import unittest
@@ -13,6 +12,7 @@ from litterbox.exporting import part_files_export as export
 from litterbox.parts import downloads
 from litterbox.records import record_store
 from tests.support.gui_fakes import replace
+from tests.support import temp_folders
 
 PART, ASM = PN("HCR", 1, 1), PN("HCR", 2, 1)
 def temporary_folder(test):
@@ -22,7 +22,7 @@ def temporary_folder(test):
     def remove():
         for path in folder.rglob("*"):
             os.chmod(path, stat.S_IWRITE | stat.S_IREAD | (stat.S_IEXEC if path.is_dir() else 0))
-        shutil.rmtree(folder, ignore_errors=True)
+        temp_folders.remove(folder)
     test.addCleanup(remove)
     return folder
 

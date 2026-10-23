@@ -1,13 +1,13 @@
 """git/repository.get_modified: every kind of change, with names git would otherwise quote (spaces, letters like é)."""
 
 import os
-import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
 from litterbox.git import repository
+from tests.support import temp_folders
 
 
 def git(folder, *args):
@@ -19,7 +19,7 @@ class SmallRepo:
 
     def setUp(self):
         self.repo = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.repo, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, self.repo)
         saved = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved)))
         empty = self.repo.parent / f"{self.repo.name}-gitconfig"
@@ -69,7 +69,7 @@ class InHeadMany(SmallRepo, unittest.TestCase):
 
     def test_paths_changed_in_unpushed_and_incoming_commits(self):
         remote = self.repo.parent / f"{self.repo.name}-remote.git"
-        self.addCleanup(shutil.rmtree, remote, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, remote)
         git(self.repo.parent, "init", "-q", "--bare", "-b", "main", str(remote))
         self.assertEqual(repository.paths_changed_in(self.repo, repository.UNPUSHED), set())     # no upstream yet
         git(self.repo, "remote", "add", "origin", str(remote))
@@ -77,7 +77,7 @@ class InHeadMany(SmallRepo, unittest.TestCase):
         self.assertEqual(repository.paths_changed_in(self.repo, repository.UNPUSHED), set())
 
         other = self.repo.parent / f"{self.repo.name}-other"
-        self.addCleanup(shutil.rmtree, other, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, other)
         git(self.repo.parent, "clone", "-q", str(remote), str(other))
         git(other, "config", "user.name", "Bea")
         git(other, "config", "user.email", "bea@example.com")

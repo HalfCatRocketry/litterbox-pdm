@@ -18,6 +18,7 @@ These tests need a Unix-like system (Linux, macOS or WSL), so the test classes
 that use this are marked @SKIP_ON_WINDOWS.
 """
 
+import atexit
 import contextlib
 import os
 import shutil
@@ -28,6 +29,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.support import temp_folders
 from litterbox.records import record_store
 from litterbox.core.part_number import PN
 from litterbox.git import lfs_locks
@@ -68,6 +70,9 @@ def is_writable(path):
     return bool(stat.S_IMODE(os.stat(path).st_mode) & stat.S_IWUSR)
 
 
+_TEMPLATES = {}         # (LFS, ON_DEMAND): a folder holding the vault as setUp leaves it, built once per process
+
+
 class TwoUserVault:
     """Mix this into a unittest.TestCase."""
 
@@ -76,64 +81,84 @@ class TwoUserVault:
 
     def setUp(self):
         root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        self.addCleanup(temp_folders.remove, root)
         self.root = root
-
-        # Put the fake git-lfs first on PATH so `git lfs ...` finds it.
-        bin_dir = root / "bin"
-        bin_dir.mkdir()
-        install_fake_lfs(bin_dir)
         saved_env = dict(os.environ)
         self.addCleanup(lambda: (os.environ.clear(), os.environ.update(saved_env)))
-        os.environ["PATH"] = f"{bin_dir}{os.pathsep}{os.environ['PATH']}"
+
+        # The vault is built once per process (and kind of vault), then copied: building it runs about fifteen git
+        # commands, a third of a short git test's time. The copies' remotes are pointed at their own remote.git.
+        key = (self.LFS, self.ON_DEMAND)
+        if key not in _TEMPLATES:
+            template = Path(tempfile.mkdtemp(prefix="litterbox-test-vault-"))
+            atexit.register(temp_folders.remove, template)
+            self._use(template, saved_env)
+            self._build(template)
+            _TEMPLATES[key] = template
+        self._use(root, saved_env)
+        shutil.copytree(_TEMPLATES[key], root, dirs_exist_ok=True)
+        self.remote, self.a, self.b = root / "remote.git", root / "a", root / "b"
+        for clone in (self.a, self.b):
+            git(clone, "remote", "set-url", "origin", str(self.remote))
+
+    def _use(self, root, saved_env):
+        """Point git, the fake git-lfs and its lock store at this folder: the fake git-lfs first on PATH, this
+        computer's own Git settings (e.g. commit signing) ignored."""
+        os.environ["PATH"] = f"{root / 'bin'}{os.pathsep}{saved_env['PATH']}"
         os.environ["LFS_STORE"] = str(root / "locks.json")
         os.environ["GIT_TERMINAL_PROMPT"] = "0"
-        empty_config = root / "empty-gitconfig"          # ignore this computer's own Git settings (e.g. commit signing)
-        empty_config.write_text("")
-        os.environ["GIT_CONFIG_GLOBAL"] = str(empty_config)
+        os.environ["GIT_CONFIG_GLOBAL"] = str(root / "empty-gitconfig")
         os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
         if self.LFS or self.ON_DEMAND:
             os.environ["LFS_OBJECTS"] = str(root / "lfs-objects")      # the LFS "server"
+
+    def _build(self, root):
+        """The vault as every test starts with it, in `root` (the environment already points at it)."""
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        install_fake_lfs(bin_dir)
+        empty_config = root / "empty-gitconfig"
+        empty_config.write_text("")
+        if self.LFS or self.ON_DEMAND:
             for key, value in (("filter.lfs.clean", "git-lfs clean -- %f"),
                                ("filter.lfs.smudge", "git-lfs smudge -- %f"), ("filter.lfs.required", "true")):
                 subprocess.run(["git", "config", "--file", str(empty_config), key, value], check=True)
 
         git(root, "init", "--bare", "-b", "main", "remote.git")
         remote = str(root / "remote.git")
-        self.remote = root / "remote.git"
 
         # Alex starts the vault: one part with a part file, a drawing, and a record.
-        self.a = root / "a"
+        a = root / "a"
         git(root, "clone", remote, "a")
-        git(self.a, "symbolic-ref", "HEAD", "refs/heads/main")
-        self.config(self.a, "Alex")
-        (self.a / "cad").mkdir()
+        git(a, "symbolic-ref", "HEAD", "refs/heads/main")
+        self.config(a, "Alex")
+        (a / "cad").mkdir()
         if self.LFS or self.ON_DEMAND:
-            (self.a / ".gitattributes").write_text("".join(f"*.{ext} filter=lfs -text\n"
-                                                           for ext in ("SLDPRT", "SLDASM", "SLDDRW")))
-        (self.a / PRT).write_bytes(b"version 1")
-        (self.a / DRW).write_bytes(b"drawing 1")
-        record_store.create_record(self.a, PART, "Front upright", "Alex")
-        git(self.a, "add", ".")
-        git(self.a, "commit", "-m", "Start vault")
-        git(self.a, "push", "-u", "origin", "main")
+            (a / ".gitattributes").write_text("".join(f"*.{ext} filter=lfs -text\n"
+                                                      for ext in ("SLDPRT", "SLDASM", "SLDDRW")))
+        (a / PRT).write_bytes(b"version 1")
+        (a / DRW).write_bytes(b"drawing 1")
+        record_store.create_record(a, PART, "Front upright", "Alex")
+        git(a, "add", ".")
+        git(a, "commit", "-m", "Start vault")
+        git(a, "push", "-u", "origin", "main")
 
-        self.b = root / "b"
+        b = root / "b"
         if self.ON_DEMAND:                                  # like Add org...: no CAD files, then download on demand
             os.environ["GIT_LFS_SKIP_SMUDGE"] = "1"
             try:
                 git(root, "clone", remote, "b")
             finally:
                 del os.environ["GIT_LFS_SKIP_SMUDGE"]
-            git(self.b, "lfs", "install", "--local", "--skip-smudge")
+            git(b, "lfs", "install", "--local", "--skip-smudge")
         else:
             git(root, "clone", remote, "b")
-        self.config(self.b, "Bea")
+        self.config(b, "Bea")
 
         with self.user("Alex"):
-            read_only.enforce_read_only(self.a)
+            read_only.enforce_read_only(a)
         with self.user("Bea"):
-            read_only.enforce_read_only(self.b)
+            read_only.enforce_read_only(b)
 
     # -- helpers -----------------------------------------------------------
     @staticmethod
