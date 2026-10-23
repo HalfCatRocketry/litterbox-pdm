@@ -3,10 +3,12 @@ vault/project_visibility.py): only members work on a restricted project's parts 
 and a hidden project's parts are left out of everyone else's copy. Alex is the Owner, Bea and Cy are Members."""
 
 import unittest
+from unittest import mock
 
 from tests.support.vault_fixture import PART, PRT, REC
 from tests.support.workflow_fixture import PART2, Fixture
 
+from litterbox import diagnostics
 from litterbox.errors import LitterboxError
 from litterbox.parts import checkout
 from litterbox.parts import create
@@ -86,23 +88,30 @@ class Restricted(Fixture, unittest.TestCase):
 class Hidden(Fixture, unittest.TestCase):
     def setUp(self):
         super().setUp()
+        self.logged = []                                # what went wrong, shown when a check fails
+        logging = mock.patch.object(diagnostics, "LOG", lambda text, *a, **k: self.logged.append(str(text)))
+        logging.start()
+        self.addCleanup(logging.stop)
         self.do("Alex", project_admin.add_project, "Rover", "0000", dict(TEAM, hidden=True))
         with self.user("Bea"):
             team_identity.current(self.b, refresh=True)            # Bea is known in her copy
         self.get_latest("Bea")
 
     def test_its_parts_are_left_out_of_everyone_elses_copy(self):
-        self.assertFalse((self.b / REC).exists() or (self.b / PRT).exists())
+        self.assertFalse((self.b / REC).exists() or (self.b / PRT).exists(), self.warnings())
         self.assertNotIn(PART, [row.pn for row in part_status.get_status(self.b)])
         self.assertTrue((self.a / REC).exists())                   # the Owner sees everything
 
     def test_a_new_member_gets_them_at_the_next_get_latest_and_loses_them_when_taken_off(self):
         self.do("Alex", project_admin.edit_project, "Rover", "Rover", "0000", dict(TEAM, hidden=True, members=["bea"]))
         self.get_latest("Bea")
-        self.assertTrue((self.b / REC).exists() and (self.b / PRT).exists())
+        self.assertTrue((self.b / REC).exists() and (self.b / PRT).exists(), self.warnings())
         self.do("Alex", project_admin.edit_project, "Rover", "Rover", "0000", dict(TEAM, hidden=True))
         self.get_latest("Bea")
-        self.assertFalse((self.b / REC).exists())
+        self.assertFalse((self.b / REC).exists(), self.warnings())
+
+    def warnings(self):
+        return "\n".join(line for line in self.logged if "WARNING" in line or "fail" in line.lower()) or "(no warnings)"
 
     def test_unhiding_brings_them_back(self):
         self.do("Alex", project_admin.edit_project, "Rover", "Rover", "0000", TEAM)

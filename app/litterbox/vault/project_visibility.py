@@ -43,6 +43,7 @@ def apply(repo, identity=None):
     """Leave the hidden projects' parts out of this copy, for the current user. Returns True if the copy changed.
     Never raises: a problem is logged and the copy is left as it was."""
     try:
+        config.apply(repo)                                  # this vault's digits, to read its part numbers
         projects = config.get_projects(repo)
         if not any(p.hidden for p in projects) and not sparse.excluded(repo):
             return False                                    # the usual case: nothing hidden, nothing to undo
