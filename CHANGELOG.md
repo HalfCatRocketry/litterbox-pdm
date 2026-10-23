@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased (branch have_fun)
+## 0.5.6
 
-Rename this heading to the next version when releasing. Nothing in the window changes.
+Nothing in the window changes: this release is faster and fixes a few things.
 
 - **Faster.** The parts list refreshes sooner: it reads each part's record about six times faster, asks the vault's server for the lock list once instead of twice, and looks at the vault's folders faster on Windows. Every upload (Check In, Release, a sign-off, a settings change) asks the server one thing less, and Check In, Undo and the other actions that give locks back ask for the lock list once instead of twice. Checking in, undoing or releasing many parts at once asks git once for the whole batch where it asked once per part.
 - **Files with letters like é or spaces in their names** are now seen as changed when they are. Litterbox asked git which files had changed in a form where git writes such names with escape codes, so they never matched.

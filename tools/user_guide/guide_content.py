@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.5.5"
+VERSION = "0.5.6"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -188,8 +188,8 @@ BLOCKS = [
     "downloaded, and void parts (which no other view shows).",
     "The search box looks in every column, or in one column chosen beside it. `*` matches any characters and `?` "
     "matches one, against the whole value (Te*rt finds Test Part but not My Test Part).",
-    "Click a column heading to sort. View > Columns adds Project, Kind, COTS, Status, Checked out by, Released rev, "
-    "Imported from, and Material.",
+    "Click a column heading to sort. Part number, Rev, Name, Description, Files, and Kind show to start with. View > "
+    "Columns adds Project, COTS, Status, Checked out by, Released rev, Imported from, and Material.",
 ]),
 ("h2", "Checking out and checking in"),
 ("p", "Files you don't have checked out are **read-only** on your disk, so SolidWorks opens them read-only and you "
