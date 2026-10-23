@@ -14,6 +14,7 @@ import os
 import stat
 from pathlib import Path
 
+from litterbox import diagnostics
 from litterbox import layout
 from litterbox.errors import LitterboxError
 from litterbox.git import runner
@@ -62,12 +63,23 @@ def set_excluded(repo, patterns):
     if not patterns:
         runner.run(["git", "sparse-checkout", "disable"], repo, quiet=True)
         return True
-    for pattern in patterns:                    # Windows won't let git delete a read-only file
-        for found in Path(repo).glob(pattern.lstrip("/")):
-            if found.is_file():
-                os.chmod(found, stat.S_IREAD | stat.S_IWRITE)
+    for found in _matching(repo, patterns):     # Windows won't let git delete a read-only file
+        os.chmod(found, stat.S_IREAD | stat.S_IWRITE)
+    try:                                        # making files read-only changed their times: git would take
+        runner.run(["git", "update-index", "-q", "--refresh"], repo, quiet=True)     # them for changed ones
+    except LitterboxError:
+        pass                                    # some really are changed: git leaves those, and says so below
     runner.run(["git", "sparse-checkout", "set", "--no-cone", "/*"] + [f"!{p}" for p in patterns], repo, quiet=True)
+    left = _matching(repo, patterns)
+    if left:
+        diagnostics.LOG(f"WARNING: git kept {len(left)} file(s) a hidden project should leave out, because they are "
+                        f"changed in this copy: " + ", ".join(str(p.relative_to(repo)) for p in left[:5]))
     return True
+
+
+def _matching(repo, patterns):
+    """The files in the working folder that these patterns match."""
+    return [found for pattern in patterns for found in Path(repo).glob(pattern.lstrip("/")) if found.is_file()]
 
 
 def _unset(repo, key):

@@ -2,6 +2,7 @@
 vault/project_visibility.py): only members work on a restricted project's parts and sign for them, its Lead edits it,
 and a hidden project's parts are left out of everyone else's copy. Alex is the Owner, Bea and Cy are Members."""
 
+import subprocess
 import unittest
 from unittest import mock
 
@@ -98,7 +99,8 @@ class Hidden(Fixture, unittest.TestCase):
         self.get_latest("Bea")
 
     def test_its_parts_are_left_out_of_everyone_elses_copy(self):
-        self.assertFalse((self.b / REC).exists() or (self.b / PRT).exists(), self.warnings())
+        self.assertFalse((self.b / REC).exists(), self.warnings())
+        self.assertFalse((self.b / PRT).exists(), self.warnings())
         self.assertNotIn(PART, [row.pn for row in part_status.get_status(self.b)])
         self.assertTrue((self.a / REC).exists())                   # the Owner sees everything
 
@@ -111,7 +113,12 @@ class Hidden(Fixture, unittest.TestCase):
         self.assertFalse((self.b / REC).exists(), self.warnings())
 
     def warnings(self):
-        return "\n".join(line for line in self.logged if "WARNING" in line or "fail" in line.lower()) or "(no warnings)"
+        """Any warning logged, and git's view of Bea's copy: shown when a check fails."""
+        logged = [line for line in self.logged if "WARNING" in line or "fail" in line.lower()]
+        state = [subprocess.run(["git", *args], cwd=self.b, capture_output=True, text=True).stdout
+                 for args in (["config", "--show-origin", "--get-regexp", "sparse|fetchexclude"],
+                              ["ls-files", "-t", "-v", "PN-logs", "cad"], ["status", "--short"])]
+        return "\n".join(logged or ["(no warnings)"]) + "\n" + "\n".join(state)
 
     def test_unhiding_brings_them_back(self):
         self.do("Alex", project_admin.edit_project, "Rover", "Rover", "0000", TEAM)
