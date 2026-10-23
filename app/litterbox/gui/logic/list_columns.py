@@ -48,10 +48,10 @@ _VALUES = {
 
 COLUMNS = (
     Column("pn", "Part number", 120, True),
+    Column("rev", "Rev", 48, True),
     Column("name", "Name", 220, True, fit=True),
     Column("description", "Description", 260, True, fit=True, stretch=True),
     Column("project", "Project", 120, False, fit=True),
-    Column("rev", "Rev", 48, True),
     Column("files", "Files", 80, True),
     Column("kind", "Kind", 70, True),
     Column("cots", "COTS", 56, False),

@@ -7,13 +7,23 @@ New Part with Rover chosen asks only for the other 4 digits. Blocks never overla
 the part number, and a part number outside every block belongs to no project. Parts with no project never get a
 number inside a block.
 
+A project may also have a Lead and members (team people's ids), and be restricted or hidden. Restricted: only its
+members, its Lead, Admins and the Owner may make its part numbers, change its parts or take part in their workflows
+(team/project_access.py). Hidden: restricted, and nobody else sees it or its parts at all (vault/project_visibility.py
+leaves them out of their copy). Either needs a Lead; hidden always means restricted.
+
 The org's projects are kept in the vault's config (vault/config.py: get_projects) as
     projects:
     - name: Rover
       prefix: '12'
+      lead: alex                  # the rest only when set
+      members: [bea, cy]
+      restricted: true
+      hidden: true
 """
 
 from dataclasses import dataclass
+from dataclasses import replace
 
 from litterbox.core import part_number
 
@@ -28,6 +38,14 @@ class ProjectError(part_number.PNError):
 class Project:
     name: str
     prefix: str                 # digits, kept as text so a leading 0 counts ('05')
+    lead: str = ""              # the Lead's person id ('' for none)
+    members: tuple = ()         # person ids, the Lead not among them
+    restricted: bool = False    # only members (and the Lead, Admins, the Owner) may work on its parts
+    hidden: bool = False        # restricted, and nobody else sees it
+
+    def is_member(self, person_id):
+        """True for the Lead and the members."""
+        return bool(person_id) and (person_id == self.lead or person_id in self.members)
 
     def block(self, digits=None):
         """(lowest, highest) part number in this project's block."""
@@ -118,9 +136,25 @@ def new_project(name, prefix, projects, digits=None):
     return Project(name, prefix)
 
 
+def with_team(project, lead="", members=(), restricted=False, hidden=False):
+    """The project with this Lead, these members, restricted or hidden. Raises ProjectError if restricted or hidden
+    without a Lead. Hidden is always restricted; the Lead isn't listed among the members; no one is listed twice."""
+    lead = str(lead or "").strip()
+    restricted = bool(restricted) or bool(hidden)
+    if restricted and not lead:
+        raise ProjectError(f"Choose a Project Lead for {project.name} before you "
+                           f"{'hide' if hidden else 'restrict'} it.")
+    kept = []
+    for person in members or ():
+        person = str(person or "").strip()
+        if person and person != lead and person not in kept:
+            kept.append(person)
+    return replace(project, lead=lead, members=tuple(kept), restricted=restricted, hidden=bool(hidden))
+
+
 def from_data(data, digits=None):
-    """The projects from the vault's config (a list of {name, prefix}). Raises ProjectError if the list is broken,
-    so a hand edit can never make two projects share numbers."""
+    """The projects from the vault's config (a list of {name, prefix}, and lead, members, restricted and hidden when
+    set). Raises ProjectError if the list is broken, so a hand edit can never make two projects share numbers."""
     if data in (None, ""):
         return []
     if not isinstance(data, list):
@@ -129,9 +163,26 @@ def from_data(data, digits=None):
     for entry in data:
         if not isinstance(entry, dict):
             raise ProjectError("Each project must have a name and a prefix.")
-        projects.append(new_project(entry.get("name"), entry.get("prefix"), projects, digits))
+        members = entry.get("members") or []
+        if not isinstance(members, list):
+            raise ProjectError(f"The members of project {entry.get('name')} must be a list of people's ids.")
+        project = new_project(entry.get("name"), entry.get("prefix"), projects, digits)
+        projects.append(with_team(project, entry.get("lead"), members, entry.get("restricted") is True,
+                                  entry.get("hidden") is True))
     return projects
 
 
 def to_data(projects):
-    return [{"name": project.name, "prefix": project.prefix} for project in projects]
+    data = []
+    for project in projects:
+        entry = {"name": project.name, "prefix": project.prefix}
+        if project.lead:
+            entry["lead"] = project.lead
+        if project.members:
+            entry["members"] = list(project.members)
+        if project.restricted:
+            entry["restricted"] = True
+        if project.hidden:
+            entry["hidden"] = True
+        data.append(entry)
+    return data

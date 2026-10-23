@@ -49,7 +49,7 @@ def part(**fields):
 
 class Columns(unittest.TestCase):
     def test_default_columns(self):
-        self.assertEqual(list_columns.shown_keys(None), ["pn", "name", "description", "rev", "files", "kind"])
+        self.assertEqual(list_columns.shown_keys(None), ["pn", "rev", "name", "description", "files", "kind"])
         self.assertEqual(list_columns.shown_keys("junk"), list_columns.shown_keys(None))
 
     def test_saved_columns_keep_the_list_order_and_always_the_part_number(self):
@@ -59,8 +59,8 @@ class Columns(unittest.TestCase):
     def test_toggling(self):
         keys = list_columns.shown_keys(None)
         self.assertEqual(list_columns.toggled(keys, "cots"),
-                         ["pn", "name", "description", "rev", "files", "kind", "cots"])
-        self.assertEqual(list_columns.toggled(keys, "name"), ["pn", "description", "rev", "files", "kind"])
+                         ["pn", "rev", "name", "description", "files", "kind", "cots"])
+        self.assertEqual(list_columns.toggled(keys, "name"), ["pn", "rev", "description", "files", "kind"])
         self.assertEqual(list_columns.toggled(keys, "pn"), keys)
 
     def test_what_each_column_shows(self):

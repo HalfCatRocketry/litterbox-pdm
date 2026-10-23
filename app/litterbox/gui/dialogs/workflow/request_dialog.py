@@ -1,7 +1,7 @@
 """
-request_dialog.py - asking for sign-off: the parts (Add Parts / Remove Parts, and for a release of Rev B or later
-or a void, what changed and the Dispo of each), the template, a person for each row, and the ECO's title and
-description when the request needs one. It also changes a rejected request (a draft) for resubmitting.
+request_dialog.py - asking for sign-off: the parts (Add Parts / Remove Parts, and when the request needs an ECO,
+for a release of Rev B or later or a void, what changed and the Dispo of each), the template, a person for each
+row, and the ECO's title and description when the request needs one. It also changes a rejected request (a draft) for resubmitting.
 """
 
 import tkinter as tk
@@ -42,7 +42,7 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
         result = WorkflowRequestDialog(parent, action, parts, templates, directory, my_id, addable).show()
         # None if cancelled, else {'template': name, 'assignments': [person ids], 'extras': [(role, id)],
         #                          'reason': text, 'parts': [PN], 'eco': {'name', 'description'} or None,
-        #                          'changes': {part number text: {'changed', 'disposition'}}}
+        #                          'changes': {part number text: {'changed', 'disposition'}} or None (no ECO)}
     `parts` is [(PN, name, revision, released revision)]; addable(current PNs) gives the part rows Add Parts may
     offer (None: no Add Parts). Submit asks for a last confirmation before it returns.
 
@@ -164,8 +164,9 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
         release_button.ReleaseButton(side, text="Remove Parts", width=120, height=30, fg_color=theme.GRAY,
                                      hover_color=theme.GRAY_HOVER, command=self._remove_parts).grid(row=1, column=0)
         if workflow_templates.base_action(self.action) in (workflow_templates.RELEASE, workflow_templates.VOID):
-            ctk.CTkLabel(side, text=task_text.CHANGE_HINT, text_color=theme.MUTED, justify="left", wraplength=130,
-                         anchor="w").grid(row=2, column=0, sticky="w", pady=(10, 0))
+            self.change_hint = ctk.CTkLabel(side, text=task_text.CHANGE_HINT, text_color=theme.MUTED, justify="left",
+                                            wraplength=130, anchor="w")
+            self.change_hint.grid(row=2, column=0, sticky="w", pady=(10, 0))
 
     def _add_parts(self):
         rows = self.addable([p[0] for p in self.parts])
@@ -220,12 +221,19 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
 
     def _show_eco(self):
         """Show the ECO panel when it is needed, with the sign-offs just wide enough beside it; else the sign-offs
-        take the whole width."""
-        if self.eco_needed():
+        take the whole width. Form, Fit, Function and Dispo are asked only with an ECO."""
+        needed = self.eco_needed()
+        self.table.ask_changes(needed)
+        hint = getattr(self, "change_hint", None)
+        if needed:
+            if hint is not None:
+                hint.grid()
             self.eco_frame.grid()
             self.body.columnconfigure(0, weight=0)
             self.body.columnconfigure(1, weight=1)
         else:
+            if hint is not None:
+                hint.grid_remove()
             self.eco_frame.grid_remove()
             self.body.columnconfigure(0, weight=1)
             self.body.columnconfigure(1, weight=0)

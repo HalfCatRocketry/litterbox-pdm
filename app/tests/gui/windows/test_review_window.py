@@ -1,6 +1,5 @@
-"""Tests for My Tasks' Review window (gui/dialogs/workflow/review_dialog.py) and the Release/Void window that asks
-what changed (gui/dialogs/change_info_dialog.py). The windows are built on stand-ins (tests/support/gui_fakes.py):
-these check the wiring, not the look. Please also try the real windows."""
+"""Tests for My Tasks' Review window (gui/dialogs/workflow/review_dialog.py). The window is built on stand-ins
+(tests/support/gui_fakes.py): these check the wiring, not the look. Please also try the real window."""
 
 import unittest
 from types import SimpleNamespace
@@ -75,20 +74,6 @@ class ReviewWindow(unittest.TestCase):
         self.dialog.comment_var.set("Too thin")
         self.dialog._answer("reject")
         self.assertEqual(self.dialog.result, {"answer": "reject", "handed": {}, "comment": "Too thin"})
-
-
-class ChangeInfoWindow(unittest.TestCase):
-    def test_every_dispo_is_needed_before_continuing(self):
-        gui = load_gui_with_fakes(FakeBox())
-        dialog = gui.change_info_dialog.ChangeInfoDialog(FakeParent(), "release", [(P1, "Bracket", "B", "A")])
-        problems = []
-        dialog.problem = SimpleNamespace(configure=lambda text: problems.append(text))
-        dialog._ok()
-        self.assertIsNone(dialog.result)
-        self.assertIn("Choose a Dispo", problems[-1])
-        dialog.table.choose(P1, "scrap")
-        dialog._ok()
-        self.assertEqual(dialog.result, {"HCR-00001-001": {"changed": [], "disposition": "scrap"}})
 
 
 if __name__ == "__main__":

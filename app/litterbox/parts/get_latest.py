@@ -7,6 +7,7 @@ from litterbox.git import read_only
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.records.error_conversion import converts_errors
+from litterbox.vault import project_visibility
 
 
 @converts_errors
@@ -18,5 +19,6 @@ def get_latest(repo):
     repository.validate_repo(repo)
     before = repository.head(repo)
     remote.pull(repo)
+    project_visibility.apply(repo)                  # someone added to or taken off a hidden project
     read_only.enforce_read_only(repo)
     return repository.changed_between(repo, before, repository.head(repo))

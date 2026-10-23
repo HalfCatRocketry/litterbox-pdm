@@ -48,11 +48,15 @@ def edit(repo, **values):
     return change_file(repo, change)
 
 
-def change_file(repo, change):
+def change_file(repo, change, check=None):
     """Lock the settings file, get the latest, make the change (change() edits the file and returns the commit
-    message), commit and upload. If anything fails the file is put back. True if the file changed."""
+    message), commit and upload. If anything fails the file is put back. True if the file changed. `check()` raises
+    if the user may not make this change (default: only an Admin or the Owner, "manage_settings")."""
     repository.validate_repo(repo)
-    team_permissions.require(repo, "manage_settings")
+    if check is None:
+        team_permissions.require(repo, "manage_settings")
+    else:
+        check()
     path = Path(repo) / CONFIG_REL
     tracked = repository.in_index(repo, CONFIG_REL)
     before = path.read_bytes() if path.is_file() else None

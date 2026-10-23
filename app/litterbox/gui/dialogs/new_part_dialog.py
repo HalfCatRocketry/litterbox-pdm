@@ -18,6 +18,7 @@ from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.parts import create
 from litterbox.parts import number_suggestions
+from litterbox.team import project_access
 from litterbox.vault import config
 
 NO_PROJECT = "None"
@@ -140,7 +141,8 @@ class NewPartDialog(modal_dialog.ModalDialog):
         except (config.ConfigError, LitterboxError) as e:
             self._say(str(e), theme.ERROR)
         else:
-            self.project_menu.configure(values=[NO_PROJECT] + [p.name for p in self.projects])
+            offered = project_access.usable_here(repo, self.projects)        # a restricted project: its members
+            self.project_menu.configure(values=[NO_PROJECT] + [p.name for p in offered])
             self._refresh(first_time=True)
         self.after(150, self._grab)
 

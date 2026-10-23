@@ -116,7 +116,7 @@ class EveryEventSaysWhoById(RegistryTestCase):
         self.assertNotIn("created_by_id", record.to_dict())
 
     def test_ecos_record_the_id(self):
-        eco = eco_lifecycle.open_eco(self.repo, "Change", "", "release", "T1", "req-1", [(PN("HCR", 42, 1), "A")], ALEX)
+        eco = eco_lifecycle.open_eco(self.repo, "Change", "Why", "release", "T1", "req-1", [(PN("HCR", 42, 1), "A")], ALEX)
         self.assertEqual((eco.requested_by, eco.requested_by_id), ("Alex Smith", "alex"))
         self.assertEqual(eco.history[0]["by_id"], "alex")
         self.assertEqual(eco_store.load(self.repo, eco.number).requested_by_id, "alex")

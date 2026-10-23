@@ -155,7 +155,7 @@ class TeamScreen(ctk.CTkFrame):
                     lambda: self._why_not("manage_workflows")),
                    ("Doc Workflows...", lambda: self.app.edit_workflow(self, documents=True),
                     lambda: self._why_not("manage_workflows")),
-                   ("Projects...", lambda: self.app.manage_projects(self), lambda: self._why_not("manage_settings", team=False)),
+                   ("Projects...", lambda: self.app.manage_projects(self), lambda: self._why_not("edit_project", team=False)),
                    ("Document Types...", lambda: self.app.manage_doc_types(self),
                     lambda: self._why_not("manage_doc_types", team=False)),
                    ("Vault Settings...", lambda: self.app.edit_vault_settings(self),

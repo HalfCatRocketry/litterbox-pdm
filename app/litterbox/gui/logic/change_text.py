@@ -10,7 +10,8 @@ from litterbox.workflows import workflow_templates
 
 COLUMNS = (("pn", "Part"), ("name", "Name"), ("rev", "Rev"), ("form", "Form"), ("fit", "Fit"),
            ("function", "Function"), ("dispo", "Dispo"))
-WIDTHS = {"rev": 64, "form": 54, "fit": 46, "function": 72, "dispo": 150}     # Part fits its numbers; Name stretches
+WIDTHS = {"rev": 64, "form": 54, "fit": 46, "function": 72, "dispo": 150}     # the least; each also fits its text
+ALWAYS = ("pn", "name", "rev")      # shown even when Form, Fit, Function and Dispo aren't asked
 
 TICKED, UNTICKED, NOT_ASKED = "☑", "☐", "—"
 CHOOSE = "Choose..."

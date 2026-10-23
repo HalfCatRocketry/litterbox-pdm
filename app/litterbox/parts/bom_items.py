@@ -72,6 +72,7 @@ def clean_quantity(quantity):
 
 def _checked_out_assembly(repo, pn, user):
     permission_check.check_permission(repo, user, "edit_details")
+    permission_check.check_parts(repo, [pn], "edit_details")
     if not lfs_locks.is_mine(lfs_locks.get_locks(repo, strict=True), record_store.record_relpath(pn)):
         raise LitterboxError(f"You don't have {pn} checked out. Check it out to change its BOM.")
     record = record_store.load(repo, pn)

@@ -62,6 +62,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
     pns = batch_core.unique_pns(pns)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "checkin")
+    permission_check.check_parts(repo, pns, "checkin")
     batch = batch_core.Batch()
 
     locks = lfs_locks.get_locks(repo, strict=True)

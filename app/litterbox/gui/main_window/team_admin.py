@@ -184,8 +184,9 @@ class TeamAdmin:
         self.run_task(lambda: vault_settings.edit(repo, **changes), "Vault settings saved")
 
     def manage_projects(self, window):
-        """Projects...: see the org's projects and add one (Admin and Owner, like the vault settings)."""
-        if not self._may("manage_settings"):
+        """Projects...: the org's projects you may see. Admins and the Owner add, change and delete them; a
+        project's Lead changes that project (its name, Lead, members, Restrict and Hide)."""
+        if not self._may("edit_project"):
             return
         repo = self.repo()
         try:
@@ -194,17 +195,20 @@ class TeamAdmin:
         except config.ConfigError as e:
             messagebox.showwarning("Projects", f"The settings file has a problem:\n\n{e}", parent=window)
             return
-        chosen = projects_dialog.ProjectsDialog(window, repo, current).show()
+        identity = self.identity
+        legacy = identity.state == team_identity.LEGACY
+        person = identity.person if identity.state == team_identity.OK else None
+        chosen = projects_dialog.ProjectsDialog(window, repo, current, identity.directory, person, legacy).show()
         if not chosen:
             return
         if chosen[0] == "add":
-            _what, name, prefix = chosen
-            self.run_task(lambda: project_admin.add_project(repo, name, prefix), f"Project {name} added")
+            _what, name, prefix, team = chosen
+            self.run_task(lambda: project_admin.add_project(repo, name, prefix, team), f"Project {name} added")
             return
         if chosen[0] == "edit":
-            _what, name, new_name, new_prefix = chosen
-            plan = lambda: project_admin.plan_change(repo, name, new_name, new_prefix)
-            work = lambda: project_admin.edit_project(repo, name, new_name, new_prefix)
+            _what, name, new_name, new_prefix, team = chosen
+            plan = lambda: project_admin.plan_change(repo, name, new_name, new_prefix, team=team)
+            work = lambda: project_admin.edit_project(repo, name, new_name, new_prefix, team)
             done = f"Project {name} changed"
         else:
             _what, name = chosen
@@ -217,8 +221,10 @@ class TeamAdmin:
             if change.checked_out:
                 messagebox.showwarning("Projects", project_admin.checked_out_text(change), parent=window)
                 return
-            if messagebox.askyesno("Projects", project_text.change_text(change), parent=window,
-                                   icon="warning"):
+            if not change.updates and change.new is not None and change.new.prefix == change.old.prefix:
+                self.run_task(work, done)                   # only its name, Lead, members, Restrict or Hide
+            elif messagebox.askyesno("Projects", project_text.change_text(change), parent=window,
+                                     icon="warning"):
                 self.run_task(work, done)
 
         self.run_task(plan, "", on_success=ask, refresh=False, label="Working out which parts change")

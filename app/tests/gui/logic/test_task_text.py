@@ -34,7 +34,7 @@ class TestWorkflowText(unittest.TestCase):
 
     def test_a_resubmitted_request_says_everyone_signs_again_and_its_eco_carries_on(self):
         text = task_text.request_confirm_text("release", [("HCR-00001-001", "Upright")], self.template(), self.slots(),
-                                              eco={"name": "Thicker wall", "description": ""}, resubmit=True)
+                                              eco={"name": "Thicker wall", "description": "Why"}, resubmit=True)
         self.assertIn("Resubmit the Release workflow (T1)", text)
         self.assertIn("(everyone signs again)", text)
         self.assertIn("ECO) carries on: Thicker wall", text)

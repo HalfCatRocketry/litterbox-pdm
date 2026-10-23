@@ -82,6 +82,7 @@ class ReviewDialog(modal_dialog.ModalDialog):
         frame.columnconfigure(0, weight=1)
         parts = [(pn, name, rev, self.task.earlier.get(str(pn), "")) for pn, name, rev in self.task.parts]
         self.table = change_table.ChangeTable(frame, self.task.action, parts, self.task.changes, read_only=True)
+        self.table.ask_changes(bool(self.task.eco))            # Form, Fit, Function and Dispo come with an ECO
         self.parts_tree = self.table.tree
         self.parts_tree.grid(row=0, column=0, sticky="ew", padx=(8, 0), pady=8)
         scroll = ctk.CTkScrollbar(frame, command=self.parts_tree.yview)

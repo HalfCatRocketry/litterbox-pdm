@@ -168,6 +168,8 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
     extras = list(extra_paths)
     pathspec = committing.write_pathspec(record_paths + extras)
     projects = config.get_projects(repo)                 # each record is in its number's project
+    for project in sorted({create.project_name(projects, pn.base) for pn in planned}):
+        permission_check.check_new_number(repo, project)   # a restricted project: its members only
     written, committed = [], False
     try:
         try:
@@ -241,6 +243,8 @@ def create_many(repo, specs, org=None, message=None):
         record_paths = [record_store.record_relpath(pn) for pn in planned]
         pathspec = committing.write_pathspec(record_paths)
         projects = config.get_projects(repo)                 # each record is in its number's project
+        for project in sorted({create.project_name(projects, pn.base) for pn in planned}):
+            permission_check.check_new_number(repo, project)   # a restricted project: its members only
         written, committed = [], False
         try:
             for pn, spec in zip(planned, cleaned):

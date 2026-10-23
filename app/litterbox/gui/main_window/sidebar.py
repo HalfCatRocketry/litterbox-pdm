@@ -16,6 +16,7 @@ from litterbox.gui.screens import tasks_screen
 from litterbox.gui.screens import team_screen
 from litterbox.gui.widgets import nav_item
 from litterbox.gui.widgets import release_button
+from litterbox.vault import project_visibility
 from litterbox.workflows import workflow_tasks
 
 # The parts list's views and their icons, then the other screens.
@@ -134,7 +135,7 @@ class Sidebar:
         screen = self.screens.get("ecos")
         if screen is not None and self.repo():
             ecos, problems = eco_store.load_all(self.repo())
-            screen.show(ecos, problems)
+            screen.show(project_visibility.shown_ecos(self.repo(), ecos), problems)     # less hidden projects'
 
     # -- narrow windows ------------------------------------------------------------------------------------------
     def set_sidebar_collapsed(self, collapsed, chosen=False):

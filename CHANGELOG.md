@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.5
+
+- **Rev comes second in the parts list**, right after the part number.
+- **Form, Fit, Function and Dispo only with an ECO.** The Workflow and Review windows ask for and show them only when the request has an ECO. A workflow that doesn't require one (or a first release, which never has one) shows just Part, Name and Rev. A Release or Void without a workflow no longer asks them at all: the small "what changed" window is gone.
+- **The Form, Fit and Function columns are always wide enough for their headings**, at any display scaling (they were cut off at higher scaling). Every column of that table now fits its heading and what it shows.
+- **An ECO needs a description**, as well as a title: what changes, and why.
+- **Project Leads, members, Restrict and Hide.** Team > **Projects...** now opens for everyone on the team and lists the projects you may see, each with its Lead, how many members it has, and whether it is restricted or hidden. Admins and the Owner add projects (**New Project...**), change them and delete them. **Edit** opens a **Project** window with the name, the digits, a **Project Lead**, the **members** (search the team, then **Add** and **Remove**), and two tick boxes, all optional:
+  - **Restrict Project:** only its members, its Lead, Admins and the Owner may make part numbers in it, change its parts (check out, check in, release, revise, void and the rest), and ask for or sign its workflows. The Workflow window, Review's Reassign and All Workflows' Change signer only offer people who may sign; superusers may still sign. Its name only appears in New Part, New Assembly and Import for those who may use it.
+  - **Hide Project:** restricted too, and nobody else sees it at all: Litterbox leaves its parts (records, CAD files, cancelled revisions) out of their copy of the vault, so their CAD files are never downloaded, and its ECOs out of their ECOs list. Someone added to it gets its parts at their next Get Latest; someone taken off loses them then.
+  - Either one needs a Lead. A project's Lead may change everything about it but its digits, including its members; only Admins and the Owner may change its digits or delete it.
+  - This is process control, like the rest of Litterbox's permissions: anyone with access to the vault on the Git host can still read all of it, and a hidden project's name and its part numbers in commit messages are not hidden.
+- Changing a project makes the vault need Litterbox 0.5.5, so older copies, which would ignore the restrictions, can't work in it.
+
 ## 0.5.4
 
 - **Form, Fit, Function and Dispo.** Releasing a part at Rev B or later now asks, for each part, what changed (**Form**, **Fit** and/or **Function** tick boxes) and what to do with the parts already made to the revision before (**Dispo**: Use As Is, Rework, Scrap or Return To Supplier). They are columns of the Workflow window's parts list; a part released at Rev A shows dashes there, since nothing earlier exists. Dispo starts blank and the workflow can't be submitted until every part that needs one has it. Without a workflow, Release asks the same in a small window first. What changed goes in the new revision's history, and the Dispo in the earlier revision's: pick the earlier revision on the Details tab and it says, for example, "Disposition: Scrap (Rev B released)". A void asks for a Dispo too, for the voided revision's parts. The ECO window lists both for each of its parts.

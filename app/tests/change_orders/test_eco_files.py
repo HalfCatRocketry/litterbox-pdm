@@ -31,8 +31,10 @@ class TestModel(unittest.TestCase):
         with self.assertRaises(eco_model.EcoError):
             eco_model.clean_name("x" * (eco_model.MAX_NAME + 1))
 
-    def test_the_description_is_optional_but_limited(self):
-        self.assertEqual(eco_model.clean_description(None), "")
+    def test_the_description_is_required_and_limited(self):
+        for blank in (None, "", "  \n "):
+            with self.assertRaises(eco_model.EcoError):
+                eco_model.clean_description(blank)
         self.assertEqual(eco_model.clean_description(" line one\nline two \n"), "line one\nline two")
         with self.assertRaises(eco_model.EcoError):
             eco_model.clean_description("x" * (eco_model.MAX_DESCRIPTION + 1))
@@ -105,7 +107,7 @@ class TestLifecycle(RegistryTestCase):
                                           {"pn": "HCR-00002-001", "revision": "A"}])
         self.assertEqual(self.eco.history[0]["event"], "opened")
         self.assertEqual(eco_store.load(self.repo, "ECO-0001"), self.eco)
-        again = eco_lifecycle.open_eco(self.repo, "Next", "", "release", "T1", "def456", [], "Alex Smith")
+        again = eco_lifecycle.open_eco(self.repo, "Next", "Why", "release", "T1", "def456", [], "Alex Smith")
         self.assertEqual(again.number, "ECO-0002")
 
     def test_it_stays_open_while_a_part_still_waits(self):

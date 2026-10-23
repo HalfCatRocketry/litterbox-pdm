@@ -77,7 +77,7 @@ class TestDrafts(Fixture, unittest.TestCase):
         self.assertEqual((eco.status, eco.history[-1]["event"], eco.history[-1]["comment"]),
                          (eco_model.OPEN, "rejected", "Wrong tolerance"))
         self.assertEqual(self.record().draft["change"], change[str(PART)])
-        self.resubmit(batch, eco={"name": "Thicker bracket, again", "description": ""},
+        self.resubmit(batch, eco={"name": "Thicker bracket, again", "description": "Wall to 3.5 mm"},
                       changes={str(PART): {"changed": ["fit"], "disposition": "rework"}})
         eco = eco_store.load(self.a, "ECO-0001")
         self.assertEqual((eco.status, eco.name, eco.history[-1]["event"]),

@@ -1,13 +1,11 @@
 """
-release_actions.py - Release, Make COTS, Unrelease (reopen) and Void, with their confirmations. A release of Rev B
-or later, and a void, first ask what changed and the Dispo of the parts already made (change_info_dialog.py).
+release_actions.py - Release, Make COTS, Unrelease (reopen) and Void, with their confirmations. Without a workflow
+they don't ask what changed or a Dispo: only a workflow with an ECO asks those.
 """
 
 from tkinter import messagebox
 
-from litterbox.gui.dialogs import change_info_dialog
 from litterbox.gui.logic import action_rules
-from litterbox.gui.logic import change_text
 from litterbox.gui.logic import confirmations
 from litterbox.gui.logic import job_text
 from litterbox.parts import lifecycle
@@ -41,27 +39,11 @@ class ReleaseActions:
         if not messagebox.askokcancel(title, text):
             return
         pns = [p.pn for p in good]
-        changes = self._ask_changes("release", pns)
-        if changes is None:
-            return
         skipped = [(p.pn, p.problems[0]) for p in bad]
-        self.run_releasing(lambda: lifecycle.release_many(repo, pns, **({"changes": changes} if changes else {})),
-                           pns, "",
+        self.run_releasing(lambda: lifecycle.release_many(repo, pns), pns, "",
                            on_success=lambda result: self._after_batch("release", action_rules.ActionPlan(pns, skipped),
                                                                        result),
                            label=job_text.job_label("release", len(pns), action_rules.are_documents(pns)), parts=pns)
-
-    def _ask_changes(self, action, pns):
-        """For the parts that take them, what changed and their Dispo: {part number text: change}; {} when none
-        does; None if cancelled."""
-        parts = []
-        for pn in pns:
-            row = self.rows_by_pn.get(pn)
-            revision, released = getattr(row, "revision", "A"), getattr(row, "released_revision", "")
-            parts.append((pn, getattr(row, "name", ""), revision, released))
-        if not any(any(change_text.asks(pn, action, rev, released)) for pn, _name, rev, released in parts):
-            return {}
-        return change_info_dialog.ChangeInfoDialog(self, action, parts).show()
 
     def make_cots(self):
         plan = self._plan("make_cots")
@@ -137,9 +119,6 @@ class ReleaseActions:
                 f"Void {pns[0]}?\n\nIts number will never be used again, and it can't be checked out."
                 if len(pns) == 1 else confirmations.void_many_confirm_text(pns)):
             return
-        changes = self._ask_changes("void", pns)
-        if changes is None:
-            return
-        self.run_task(lambda: lifecycle.void_many(repo, pns, reason, **({"changes": changes} if changes else {})), "",
+        self.run_task(lambda: lifecycle.void_many(repo, pns, reason), "",
                       on_success=lambda result: self._after_batch("void", action_rules.ActionPlan(pns, skipped), result),
                       label=job_text.job_label("void", len(pns), documents), parts=pns)

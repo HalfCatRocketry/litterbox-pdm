@@ -12,6 +12,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import project_access
 from litterbox.team import team_store
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_drafts
@@ -144,6 +145,7 @@ def reassign(repo, pns, slot, person_id):
             if not (pending.get("requested_by_id") == me.id or signoff_slots.is_admin(me)):
                 raise record_model.RegistryError("Only the person who asked, or an Admin, can change who signs.")
             old, new = _new_slot(directory, pending, slot, person_id, me)
+            project_access.require_signers(repo, [record.pn], [new["id"]], directory)
             _swap(record, user, pending, slot, old, new)
         return edit
 
@@ -168,6 +170,7 @@ def hand_over(repo, pns, people):
                 if person_id == me.id:
                     raise record_model.RegistryError("Choose someone other than yourself.")
                 old, new = _new_slot(directory, pending, slot, person_id, me)
+                project_access.require_signers(repo, [record.pn], [new["id"]], directory)
                 _swap(record, user, pending, slot, old, new, handed_over=True)
         return edit
 

@@ -87,7 +87,7 @@ class RequestWindow(Setup):
         self.assertEqual(self.dialog.parts_tree.rows["HCR-00002-001"]["values"][2:], ["A", "—", "—", "—", "—"])
         self.dialog.table.toggle("HCR-00002-001", "form")              # dashes can't be ticked
         self.dialog._submit()
-        self.assertEqual((self.dialog.result["eco"], self.dialog.result["changes"]), (None, {}))
+        self.assertEqual((self.dialog.result["eco"], self.dialog.result["changes"]), (None, None))
 
     def test_a_workflow_that_requires_an_eco_needs_its_name(self):
         self.dialog.table.choose("HCR-00001-001", "use_as_is")
@@ -101,12 +101,34 @@ class RequestWindow(Setup):
         question = [c for c in self.box.calls if c[0] == "askokcancel"][-1][1][1]
         self.assertIn("ECO) will be made: Thicker wall", question)
 
+    def test_a_workflow_that_requires_an_eco_needs_its_description(self):
+        self.dialog.table.choose("HCR-00001-001", "use_as_is")
+        self.dialog.eco_name_var.set("Thicker wall")
+        self.dialog.eco_description = SimpleNamespace(get=lambda start, end: " \n")
+        self.dialog._submit()
+        self.assertIn("The ECO needs a description", self.problems[-1])
+        self.assertIsNone(self.dialog.result)
+
     def test_a_workflow_without_the_box_has_no_eco(self):
         self.dialog.template_var.set("T2")
         self.dialog._rebuild()
         self.dialog.table.choose("HCR-00001-001", "use_as_is")
         self.dialog._submit()
         self.assertIsNone(self.dialog.result["eco"])
+
+    def test_without_an_eco_form_fit_function_and_dispo_are_hidden_and_not_asked(self):
+        shown = []
+        self.dialog.change_hint = SimpleNamespace(grid=lambda: shown.append(True),
+                                                  grid_remove=lambda: shown.append(False))
+        self.dialog.template_var.set("T2")
+        self.dialog._rebuild()
+        self.assertEqual(self.dialog.parts_tree.options["displaycolumns"], ["pn", "name", "rev"])
+        self.assertEqual(shown, [False])                            # the "Tick what changed" hint goes too
+        self.dialog._submit()                                       # Rev B, but no Dispo needed
+        self.assertIsNone(self.dialog.result["changes"])
+        self.dialog.template_var.set("T1")
+        self.dialog._rebuild()
+        self.assertEqual(len(self.dialog.parts_tree.options["displaycolumns"]), 7)
 
     def test_at_least_one_part_is_needed(self):
         self.dialog.template_var.set("T2")

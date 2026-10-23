@@ -16,6 +16,7 @@ from litterbox.gui.widgets import release_button
 from litterbox.importing import import_errors
 from litterbox.importing import manifest as manifest_module
 from litterbox.importing import scan
+from litterbox.team import project_access
 from litterbox.user import settings
 from litterbox.vault import config
 
@@ -134,7 +135,7 @@ class PickPage:
         self.family_applied = None
         self.family_var.set(False)
         try:
-            self.show_projects(config.get_projects(self.repo))
+            self.show_projects(project_access.usable_here(self.repo, config.get_projects(self.repo)))
         except config.ConfigError:
             self.show_projects([])
         self.family_placeholder = number_input.import_base_placeholder(self.repo, self.session.prepared.proposal.org)

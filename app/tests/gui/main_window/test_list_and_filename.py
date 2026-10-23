@@ -33,7 +33,7 @@ class ListAndFilenameWiring(unittest.TestCase):
         app = self.app([self.row])
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
-                         ["00007-001", "Bracket", "", "", "B", "PRT", "CAD", "", "Available (Rev A released)", "", "A", "",
+                         ["00007-001", "B", "Bracket", "", "", "PRT", "CAD", "", "Available (Rev A released)", "", "A", "",
                           ""])
         self.assertIn("image", app.tree.rows["HCR-00007-001"])          # the tick box and status icon
 
@@ -43,7 +43,7 @@ class ListAndFilenameWiring(unittest.TestCase):
         app = self.app([long])
         app.tree.widths["name"] = 14 + 7 * 10                             # room for ten characters (see FakeFont)
         app._render()
-        self.assertEqual(app.tree.rows["HCR-00007-001"]["values"][1], "A very lo\u2026")      # ten characters
+        self.assertEqual(app.tree.rows["HCR-00007-001"]["values"][2], "A very lo\u2026")      # ten characters
         self.assertEqual(app._cell_tooltip("HCR-00007-001", "name"), "A very long name for a small bracket")
         self.assertEqual(app._cell_tooltip("HCR-00007-001", "rev"), "")
 

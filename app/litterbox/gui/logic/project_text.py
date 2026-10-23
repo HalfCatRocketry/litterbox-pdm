@@ -7,13 +7,6 @@ from litterbox.core import part_number
 from litterbox.core import projects as project_rules
 
 
-ADD_NOTE = "Parts already in the block keep no project."
-
-
-EDIT_NOTE = ("Changing the digits changes which parts are in the project: parts whose numbers are in the new block "
-             "join it, and the rest leave it. You'll see which before anything is changed.")
-
-
 def project_lines(projects):
     """One line per project for the window's list."""
     if not projects:

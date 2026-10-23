@@ -23,6 +23,7 @@ from litterbox.records import record_links
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import project_access
 from litterbox.team import team_identity
 from litterbox.team import team_permissions
 from litterbox.team import team_store
@@ -198,6 +199,11 @@ def _ask(repo, pns, action, template_name, assignments, extras, reason, eco, doc
     draft = workflow_drafts.find(repo, draft_id, me) if draft_id else None
 
     records = {pn: record_store.load(repo, pn) for pn in pns}
+    try:
+        project_access.require_parts(repo, pns, action)                 # a restricted project: its members ask,
+        project_access.require_signers(repo, pns, [s["id"] for s in slots], directory)      # and sign
+    except LitterboxError as e:
+        raise workflow_templates.WorkflowError(str(e)) from None
     fields = workflow_ecos.eco_fields(template, eco, workflow_ecos.eco_needed(
         template, action, [r.revision for r in records.values()]))
     change = {pn: change_for(records[pn], action, changes) for pn in pns}

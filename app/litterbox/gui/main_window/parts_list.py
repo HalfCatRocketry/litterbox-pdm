@@ -29,6 +29,7 @@ from litterbox.parts import get_latest
 from litterbox.parts import part_status
 from litterbox.team import team_identity
 from litterbox.user import settings
+from litterbox.vault import project_visibility
 
 FIRST_COLUMN = "#0"             # the tick box and status icon
 
@@ -285,6 +286,8 @@ class PartsList:
                 rows = part_status.get_status(repo)
                 docs = part_status.get_status(repo, documents=True)
                 who, behind = who_job.result(), behind_job.result()
+            if project_visibility.apply(repo, who):           # a hidden project's parts came or went
+                rows = part_status.get_status(repo)
             if diagnostics.DEBUG:
                 diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
             return rows, who, behind, docs

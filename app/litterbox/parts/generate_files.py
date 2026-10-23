@@ -76,6 +76,7 @@ def generate(repo, pns, kinds, force=False, backend_factory=None):
     repository.validate_repo(repo)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, REMAKE if force else GENERATE)
+    permission_check.check_parts(repo, pns, REMAKE if force else GENERATE)
     pns = batch_core.unique_pns(pns)
     result = Generated()
     locks = lfs_locks.get_locks(repo, strict=True)

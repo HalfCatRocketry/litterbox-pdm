@@ -10,6 +10,7 @@ from litterbox.cad import file_types
 from litterbox.cad.solidworks import sw_backend
 from litterbox.core import part_number
 from litterbox.core.part_number import PN
+from litterbox.errors import LitterboxError
 from litterbox.git import repository
 from litterbox.importing import import_errors
 from litterbox.importing import import_journal
@@ -19,6 +20,7 @@ from litterbox.importing import import_plan
 from litterbox.importing import manifest as manifest_module
 from litterbox.parts import create
 from litterbox.parts import create_batch
+from litterbox.parts import permission_check
 from litterbox.records import record_model
 from litterbox.vault import config
 
@@ -118,6 +120,11 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
     Call close() on it when done, whether or not the import went ahead.
     """
     repository.validate_repo(repo)
+    if project:
+        try:
+            permission_check.check_new_number(repo, project)         # a restricted project: its members only
+        except LitterboxError as e:
+            raise import_errors.ImportFailed(str(e)) from None
     status = import_journal.recover(repo, log)
     if status != "nothing":
         log(f"(An earlier import was interrupted; it was dealt with: {status}.)")

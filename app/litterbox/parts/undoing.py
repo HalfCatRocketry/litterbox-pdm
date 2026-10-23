@@ -26,6 +26,7 @@ def _undo_batch(repo, pns):
     pns = batch_core.unique_pns(pns)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "undo")
+    permission_check.check_parts(repo, pns, "undo")
     batch = batch_core.Batch()
 
     locks = lfs_locks.get_locks(repo, strict=True)

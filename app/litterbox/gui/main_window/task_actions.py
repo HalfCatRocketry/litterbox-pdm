@@ -16,6 +16,7 @@ from litterbox.gui.dialogs.workflow import superuser_sign_dialog
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import request_parts
 from litterbox.gui.logic import task_text
+from litterbox.team import project_access
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_responses
@@ -59,6 +60,7 @@ class TaskActions:
         directory, me = self.identity.directory, self.identity.person
         if directory is None or me is None:
             return
+        directory = project_access.signing_directory(self.repo(), directory, task.pns)    # hand over to them
         answer = review_dialog.ReviewDialog(self, task, directory, me.id, self._eco_of(task.eco),
                                             on_open=self._open_for_review).show()
         if not answer:
@@ -105,6 +107,7 @@ class TaskActions:
                       "request.", "warn")
             return
         parts = [self._request_part(pn, name, rev) for pn, name, rev in task.parts]
+        directory = project_access.signing_directory(repo, directory, task.pns)      # restricted projects
         addable = None
         if task.action != workflow_templates.REMOVE_DOC:
             addable = lambda current: request_parts.addable_rows(task.action, list(self.rows_by_pn.values()), current,
@@ -180,6 +183,7 @@ class TaskActions:
         directory = self.identity.directory
         if directory is None:
             return
+        directory = project_access.signing_directory(self.repo(), directory, task.pns)    # restricted projects
         chosen = reassign_dialog.ReassignDialog(self, task, directory).show()
         if chosen is None:
             return
@@ -211,6 +215,7 @@ class TaskActions:
             self._say("Set up the team first (Team > Set Up Team): sign-offs are done by people on it.", "warn")
             return True
         parts = [self._request_part(pn, self.rows_by_pn[pn].name) for pn in plan.targets]
+        directory = project_access.signing_directory(repo, directory, plan.targets)  # restricted projects
         addable = lambda current: request_parts.addable_rows(action, list(self.rows_by_pn.values()), current,
                                                              self.jobs.pending_parts())
         chosen = request_dialog.WorkflowRequestDialog(self, action, parts, templates, directory, me.id,

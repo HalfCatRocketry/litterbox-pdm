@@ -20,6 +20,7 @@ from pathlib import Path
 from litterbox import diagnostics
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
+from litterbox.vault import project_visibility
 
 SCHEMES = ("https://", "http://", "ssh://", "git://", "file://")
 
@@ -72,6 +73,7 @@ def clone(url, target, on_demand=True):
         raise LitterboxError(f"Could not clone {url}\n\n{(result.stderr or result.stdout).strip()}")
     if on_demand:
         lfs_download.set_on_demand(target, True)
+    project_visibility.apply(target)                # hidden projects: until you are known, none of them
     return target
 
 

@@ -167,43 +167,26 @@ class WorkflowWiring(WorkflowSetup):
         self.targets("HCR-00001-001", "HCR-00002-001")
         self.app.rows_by_pn = {"HCR-00001-001": self.row("ok"), "HCR-00002-001": self.row("ok", pn="HCR-00002-001")}
         self.app._ask_reason = lambda text, title: "Because"
-        got, asked = [], []
+        got = []
         for name in ("void_many", "reopen_many"):
             replace(self, self.gui.lifecycle, name, lambda repo, pns, reason, name=name, **kw: got.append(
                 (name, pns, reason, kw)) or ([], []))
-        dispo = {"HCR-00001-001": {"disposition": "scrap"}, "HCR-00002-001": {"disposition": "rework"}}
-        replace(self, self.gui.change_info_dialog, "ChangeInfoDialog",
-                lambda parent, action, parts: asked.append((action, parts)) or self.SimpleNamespace(show=lambda: dispo))
         self.app.void()
         self.tasks.pop()[0]()
         self.app.reopen()
         self.tasks.pop()[0]()
         pair = ["HCR-00001-001", "HCR-00002-001"]
-        self.assertEqual(got, [("void_many", pair, "Because", {"changes": dispo}), ("reopen_many", pair, "Because", {})])
-        self.assertEqual(asked, [("void", [("HCR-00001-001", "Upright", "A", ""), ("HCR-00002-001", "Upright", "A", "")])])
+        self.assertEqual(got, [("void_many", pair, "Because", {}), ("reopen_many", pair, "Because", {})])
 
-    def test_cancelling_the_dispo_window_cancels_the_void(self):
-        self.templates = {}
-        self.targets("HCR-00001-001")
-        self.app.rows_by_pn = {"HCR-00001-001": self.row("ok")}
-        self.app._ask_reason = lambda text, title: "Because"
-        replace(self, self.gui.change_info_dialog, "ChangeInfoDialog",
-                lambda parent, action, parts: self.SimpleNamespace(show=lambda: None))
-        self.app.void()
-        self.assertEqual(self.tasks, [])
-
-    def test_a_release_of_rev_b_asks_what_changed_and_passes_it_on(self):
+    def test_a_release_of_rev_b_without_a_workflow_asks_no_changes(self):
         self.templates = {}
         released = []
         replace(self, self.gui.lifecycle, "release_many", lambda repo, pns, **kw: released.append((pns, kw)) or ([], []))
         self.app.rows_by_pn = {"HCR-00001-001": self.SimpleNamespace(pn="HCR-00001-001", name="Upright", kind="ok",
                                                                      revision="B", released_revision="A")}
-        change = {"HCR-00001-001": {"changed": ["fit"], "disposition": "use_as_is"}}
-        replace(self, self.gui.change_info_dialog, "ChangeInfoDialog",
-                lambda parent, action, parts: self.SimpleNamespace(show=lambda: change))
         self.app._confirm_release("C:/vault", [self.plan(1)])
         self.tasks.pop()[0]()
-        self.assertEqual(released, [(["HCR-00001-001"], {"changes": change})])
+        self.assertEqual(released, [(["HCR-00001-001"], {})])
 
     def test_blockers_are_shown_instead_of_asking(self):
         self.app._confirm_release("C:/vault", [self.SimpleNamespace(

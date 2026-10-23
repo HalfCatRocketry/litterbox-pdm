@@ -1,6 +1,6 @@
 """
 permission_check.py - the checks an action that changes a part makes first: does this person's role allow it?
-(See team/people.py.) And, for the actions that save SolidWorks files, is this computer's SolidWorks newer than the
+(See team/people.py.) Is the part in a restricted project they aren't a member of? (See team/project_access.py.) And, for the actions that save SolidWorks files, is this computer's SolidWorks newer than the
 org's? (See cad/solidworks_versions.py.)
 """
 
@@ -20,6 +20,32 @@ def check_permission(repo, user, action):
     """
     from litterbox.team import team_permissions
     team_permissions.require(repo, action)
+
+
+def project_refusals(repo, items):
+    """{pn: why} for the parts of a batch ([(pn, permission)]) in restricted projects this user may not work on."""
+    from litterbox.team import project_access
+    return project_access.refused(repo, items)
+
+
+def check_new_number(repo, project):
+    """Stop making a part number in this project (its name; '' for none) if it is restricted to others."""
+    from litterbox.team import project_access
+    if project:
+        project_access.require_work(repo, [project], f"make part numbers in project {project}")
+
+
+def check_parts(repo, pns, action):
+    """Stop the action if any of these parts is in a restricted project this user may not work on (a part is in
+    the project whose block holds its number)."""
+    from litterbox.core.part_number import PNError
+    from litterbox.parts import batch_core
+    from litterbox.team import project_access
+    try:
+        pns = [batch_core.as_pn(pn) for pn in pns]
+    except PNError:
+        return                                      # the action itself says what is wrong with the number
+    project_access.require_parts(repo, pns, action)
 
 
 def uses_solidworks(repo, pns):

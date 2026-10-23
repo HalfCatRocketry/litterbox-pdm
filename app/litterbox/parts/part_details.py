@@ -33,6 +33,7 @@ def edit_details(repo, pn, name, description, kind=None):
     pn = batch_core.as_pn(pn)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "edit_details")
+    permission_check.check_parts(repo, [pn], "edit_details")
     if not lfs_locks.is_mine(lfs_locks.get_locks(repo, strict=True), record_store.record_relpath(pn)):
         raise LitterboxError(f"You don't have {pn} checked out. Check it out to change its name or description.")
     record = record_store.load(repo, pn)

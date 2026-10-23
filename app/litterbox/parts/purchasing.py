@@ -29,6 +29,7 @@ def edit_purchasing(repo, pn, fields):
     pn = batch_core.as_pn(pn)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, ACTION)
+    permission_check.check_parts(repo, [pn], ACTION)
     path = record_store.record_relpath(pn)
     owner = lfs_locks.get_locks(repo, strict=True).get(path.lower(), ("", ""))[0]
     if owner == "you":

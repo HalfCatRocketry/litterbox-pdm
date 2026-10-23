@@ -219,9 +219,10 @@ def _create(repo, name, description, org, choose, noncad=False):
         pn = choose(org)
         record_path = record_store.record_relpath(pn)
         kind = record_model.KIND_NONCAD if noncad else record_model.KIND_CAD
+        project = project_name(config.get_projects(repo), pn.base)
+        permission_check.check_new_number(repo, project)       # a restricted project: its members only
         try:
-            record_store.create_record(repo, pn, name, user, description=description,
-                                       project=project_name(config.get_projects(repo), pn.base), kind=kind)
+            record_store.create_record(repo, pn, name, user, description=description, project=project, kind=kind)
         except record_model.PNExistsError:
             raise CreateError(f"{pn} already exists in your copy of the vault.") from None
         paths, config_rel = [record_path], None

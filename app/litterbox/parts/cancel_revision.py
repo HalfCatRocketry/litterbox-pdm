@@ -79,6 +79,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
     pn = batch_core.as_pn(pn)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "cancel_revision")
+    permission_check.check_parts(repo, [pn], "cancel_revision")
     reason = " ".join((reason or "").split())
     if not reason:
         raise revision_files.RevisionFailed("A reason is required to cancel a revision.")

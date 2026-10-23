@@ -56,6 +56,14 @@ class TestEcos(Fixture, unittest.TestCase):
         self.assertEqual(git(self.a, "rev-parse", "HEAD"), head)
         self.assertFalse((self.a / "ECO").exists())
 
+    def test_a_description_is_required_and_nothing_changes_without_it(self):
+        head = git(self.a, "rev-parse", "HEAD")
+        with self.assertRaises(LitterboxError) as ctx:
+            self.request(eco={"name": "Thicker bracket", "description": " "})
+        self.assertIn("needs a description", str(ctx.exception))
+        self.assertEqual(git(self.a, "rev-parse", "HEAD"), head)
+        self.assertFalse((self.a / "ECO").exists())
+
     def test_a_template_without_the_box_makes_no_eco(self):
         self.set_template(name="Plain")
         self.request(name="Plain", eco=ECO)
@@ -65,13 +73,13 @@ class TestEcos(Fixture, unittest.TestCase):
     def test_numbers_go_up(self):
         self.second_part()
         self.request(eco=ECO)
-        self.request(pns=(PART2,), eco={"name": "Second"})
+        self.request(pns=(PART2,), eco={"name": "Second", "description": "Why"})
         self.assertEqual(eco_store.numbers(self.b), ["ECO-0001", "ECO-0002"])
         self.assertEqual(self.record(PART2).pending["eco"], "ECO-0002")
 
     def test_a_number_taken_meanwhile_moves_to_the_next(self):
         with self.user("Bea"):                         # Bea's ECO-0001 reaches the vault after Alex's last pull
-            eco_lifecycle.open_eco(self.b, "Bea's", "", "release", "T", "zzz", [], "Bea Jones")
+            eco_lifecycle.open_eco(self.b, "Bea's", "Why", "release", "T", "zzz", [], "Bea Jones")
             git(self.b, "add", ".")
             git(self.b, "commit", "-m", "ECO")
             git(self.b, "push")
@@ -118,7 +126,7 @@ class TestEcos(Fixture, unittest.TestCase):
         self.get_latest("Alex")
         self.do("Alex", workflow_responses.withdraw, [PART], "Not needed")
         self.assertEqual(eco_store.load(self.a, "ECO-0001").status, eco_model.WITHDRAWN)
-        self.request(eco={"name": "Try again"})
+        self.request(eco={"name": "Try again", "description": "Why"})
         self.do("Alex", workflow_responses.withdraw, [PART], "Not needed")
         self.assertEqual(eco_store.load(self.a, "ECO-0002").status, eco_model.WITHDRAWN)
 

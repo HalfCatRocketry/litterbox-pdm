@@ -49,6 +49,7 @@ def break_checkout(repo, pn, reason):
     pn = batch_core.as_pn(pn)
     user = repository.get_user(repo)
     permission_check.check_permission(repo, user, "break_checkout")
+    permission_check.check_parts(repo, [pn], "break_checkout")
     reason = batch_core.one_line(reason)
     if not reason:
         raise LitterboxError("Say why the checkout is being broken.")

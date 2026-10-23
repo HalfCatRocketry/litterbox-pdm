@@ -45,6 +45,8 @@ def clean_name(text):
 
 def clean_description(text):
     description = str(text or "").strip()
+    if not description:
+        raise EcoError("The ECO needs a description: what changes, and why.")
     if len(description) > MAX_DESCRIPTION:
         raise EcoError(f"The ECO's description can be up to {MAX_DESCRIPTION} characters.")
     return description

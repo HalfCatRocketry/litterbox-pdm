@@ -146,14 +146,18 @@ def edit_records(repo, items, atomic=False, prepare=None, finish=None):
         return batch
 
     committed, edited, extra = 0, [], []
+    actions = {item[0]: item[1] for item in items}
     try:
         remote.pull(repo)
+        refused = permission_check.project_refusals(repo, [(entry[0], actions[entry[0]]) for entry in locked])
         if prepare is not None:
             extra += prepare(user) or []
         for pn, path, edit, message in locked:
             try:
+                if pn in refused:                          # a restricted project: its members only
+                    raise LitterboxError(refused[pn])
                 record = record_store.load(repo, pn)       # reload after the pull
-                edit(record, user)                     # raises if the change isn't allowed
+                edit(record, user)                   # raises if the change isn't allowed
                 record_store.save(repo, record)
             except (LitterboxError, record_model.RegistryError) as e:
                 batch.errors[pn] = e
