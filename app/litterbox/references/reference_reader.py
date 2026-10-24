@@ -4,6 +4,7 @@ model's configurations (records/record_configurations.py), through the file's CA
 Check-in calls make_reader's reader for every part or assembly whose model changed.
 """
 
+import contextlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -225,7 +226,9 @@ def make_reader(backend=None, log=None):
             return None
         mine = None
         try:
-            with cad_programs.session():
+            # A backend that is given is used in its caller's session: one that first connects inside a session of
+            # its own here stops working when that session ends (seen with SolidWorks 2024).
+            with cad_programs.session() if backend is None else contextlib.nullcontext():
                 use = backend
                 if use is None:
                     use = mine = new_backend(attach_only=True)

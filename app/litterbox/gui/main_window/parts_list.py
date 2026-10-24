@@ -17,6 +17,7 @@ from litterbox.gui import scaling
 from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import home_data
 from litterbox.gui.logic import download_text
+from litterbox.gui.logic import folder_text
 from litterbox.gui.logic import job_text
 from litterbox.gui.logic import list_columns
 from litterbox.gui.logic import list_view
@@ -307,6 +308,7 @@ class PartsList:
         def show(result):
             rows, who, behind, docs, folders = result
             self.home_trees, self.home_projects, self.eco_titles = folders
+            self._load_personal()                             # this org's (the org may have just changed)
             self.doc_rows = docs
             self.identity = who
             self._show_identity()
@@ -361,7 +363,9 @@ class PartsList:
         keys = list_columns.search_keys(choice)
         rows = list_view.filter_rows(self.rows, self.search.get(), self.view.get(),
                                      values=lambda row: list_columns.search_values(row, keys))
-        self.ticked &= {str(row.pn) for row in list(self.rows) + list(self.doc_rows)}    # gone: no tick
+        # Parts and documents that no longer exist lose their tick (ECOs ticked in Home keep theirs)
+        known = {str(row.pn) for row in list(self.rows) + list(self.doc_rows)}
+        self.ticked = {t for t in self.ticked if t in known or folder_text.parse_item(t)[0] == "eco"}
         if self.view.get() != "Void":                                         # so do void parts that are now hidden
             self.ticked -= {str(row.pn) for row in self.rows if row.kind == "void"}
         self._index_rows()

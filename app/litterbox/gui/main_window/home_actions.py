@@ -10,6 +10,7 @@ background (folders/folder_store.py); who may make it is folders/folder_access.p
 
 from tkinter import messagebox
 
+from litterbox.errors import LitterboxError
 from litterbox.folders import folder_access
 from litterbox.folders import folder_actions
 from litterbox.folders import folder_model
@@ -79,12 +80,18 @@ class HomeActions:
         repo = self.repo()
 
         def work():
-            folder_actions.apply_change(repo, place, ops, message, push=guarded_push.push)
-            return folder_store.load(repo)
+            try:
+                folder_actions.apply_change(repo, place, ops, message, push=guarded_push.push)
+            except LitterboxError as e:                   # show the folders as they really are, then say why
+                return folder_store.load(repo), str(e)
+            return folder_store.load(repo), ""
 
-        def done(trees):
-            self.home_trees = trees
+        def done(result):
+            self.home_trees, problem = result
             self._render_home()
+            if problem:
+                self._say("The folder change wasn't uploaded.", "warn")
+                messagebox.showwarning("Folders", problem, parent=self)
 
         self.run_task(work, f"Folders: {message}", on_success=done, refresh=False, label="Saving folders")
 

@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -50,6 +50,8 @@ BLOCKS = [
     ["Workflow", "A set of sign-offs, by role, that an action needs before it happens."],
     ["Project", "A block of part numbers set aside for one project. A project can have a Lead and members, and can "
                 "be restricted or hidden."],
+    ["Folder", "A named list of parts, documents, and ECOs in Home. It only points at them, so a part can be in any "
+               "number of folders."],
 ], [1.6, 4.9]),
 
 ("h1", "Getting started"),
@@ -156,6 +158,8 @@ BLOCKS = [
                 "then the Workflows, ECOs, Documents, and Team screens. Ctrl+1 to Ctrl+5 switch between them."],
     ["Toolbar", "Check Out, Check In, Save Progress, and Undo Checkout, then the Part, Lifecycle, and Create menus. "
                 "Hover over a greyed-out button to see why it is unavailable."],
+    ["Home / Vault", "The switch left of the search box. Vault shows the parts list; Home shows folders (see "
+                     "Folders)."],
     ["Parts list", "One row per part: a tick box and status icon, then Part number, Rev, Name, Description, and "
                    "more. Each status has its own icon shape (Help > Status icons)."],
     ["Details pane", "Everything about the highlighted part, in tabs. The button at its top, or double-clicking a "
@@ -188,6 +192,10 @@ BLOCKS = [
 ("p", "Every file in the cad folder is named after its part and revision: HCR-100010-001_A.SLDPRT, "
       "HCR-100010-001_A.SLDDRW, HCR-100010-001_A.STEP, and HCR-100010-001_A.PDF. Litterbox uses the names to match "
       "files to parts and revisions, and ignores files that don't follow the pattern."),
+("p", "**Create Variant** (Create menu) copies the highlighted part to a new variant of its part number, as a part "
+      "of its own: a bracket in two lengths ordered as two items, for example. The copy starts at Rev A with the "
+      "original's name (or one you type), its SolidWorks files are copies of the latest revision's (the drawing "
+      "points at the copied model), and it is checked out to you."),
 ("h2", "Projects"),
 ("p", "A **project** reserves a block of part numbers: with 6 digits, project Rover starting 12 owns 120000 to "
       "129999. Choose a project in New Part, New Assembly, or Import, and Litterbox suggests the next number in its "
@@ -202,6 +210,8 @@ BLOCKS = [
     ["Hide Project", "Restricted, and invisible to everyone else. Litterbox leaves its parts (records, CAD files, "
                      "and cancelled revisions) out of their copy of the vault, so their CAD files are never "
                      "downloaded, and leaves its ECOs out of their ECOs screen."],
+    ["Only the Lead changes its folders", "Members see the project's folders in Home but can't change them; its "
+                                          "Lead, Admins, and the Owner can."],
 ], [1.6, 4.9]),
 ("p", "Either option needs a Lead. Admins and the Owner add, change, and delete projects. A project's Lead can "
       "change everything about it except its digits, including its members. In the Project window, search the "
@@ -219,6 +229,33 @@ BLOCKS = [
     "Click a column heading to sort. Part number, Rev, Name, Description, Files, and Kind show to start with. View > "
     "Columns adds Project, COTS, Status, Checked out by, Released rev, Imported from, and Material.",
 ]),
+("h2", "Folders"),
+("p", "**Home** (the Home / Vault switch above the list) shows folders instead of the parts list. A folder lists "
+      "parts, documents, and ECOs, one line each: a tick box, the number, and the name. A folder only points at them, "
+      "so the same part can be in any number of folders, and removing it from a folder, or deleting the folder, "
+      "never touches the part."),
+("table", ["Top", "What it holds"], [
+    ["Personal", "Your own folders. They are kept on your computer only (C:\\Litterbox\\folders), so nobody else "
+                 "sees them, and a new computer starts with none."],
+    ["Team", "The org's folders. Everyone sees them. Admins, the Owner, and people with a role ticked **Team "
+             "folders** (Team > Roles...) change them."],
+    ["Projects", "A folder for each project you are the Lead or a member of (Admins and the Owner see every project "
+                 "that isn't hidden). Its Lead changes it, and its members too, unless the project is set so only "
+                 "its Lead does."],
+], [1.4, 5.1]),
+("ul", [
+    "Right-click a top or a folder for **New Folder...**, **Rename...**, **Delete Folder...**, and **Put the ticked "
+    "here**. Right-click an item for **Details...**, **Remove from This Folder**, and the part actions.",
+    "**Add to Folder...** in the Part menu, on the Documents screen, and on the ECOs screen puts the ticked parts (or "
+    "the highlighted one) in a folder you choose, or in a new one.",
+    "Drag an item or a folder onto a folder to move it. Dragging an item into another top (from Personal to Team, "
+    "say) copies it.",
+    "Ticks are shared with the parts list, so Check Out, Release, and the other actions work on what is ticked in "
+    "Home. Clicking a part shows its details; double-clicking opens them.",
+    "Search works in Home too: it keeps what matches and the folders it is in.",
+]),
+("p", "Team and project folders are uploaded like any change, and others see them at their next Get Latest. Two "
+      "people can change folders at the same time without a clash."),
 ("h2", "Checking out and checking in"),
 ("p", "Files you don't have checked out are **read-only** on your disk, so SolidWorks opens them read-only and you "
       "can't save over someone else's work. To edit a part:"),
@@ -236,8 +273,9 @@ BLOCKS = [
 ("tip", "Don't save parts in SolidWorks while they are being checked in. Wait until the status bar says Ready."),
 ("p", "When an assembly is checked in with SolidWorks open, Litterbox reads which parts it uses and how many of "
       "each, and which Toolbox parts and files from outside the vault it uses. When a part is checked in with "
-      "SolidWorks open, Litterbox reads its material. Without SolidWorks the check-in still works, and Litterbox marks "
-      "these as needing an update (see Assemblies, references, and BOMs, and Materials)."),
+      "SolidWorks open, Litterbox reads its material. It also reads the model's configurations (see Configurations). "
+      "Without SolidWorks the check-in still works, and Litterbox marks these as needing an update (see Assemblies, "
+      "references, and BOMs, and Materials)."),
 ("p", "If the team has a **Toolbox rule** (see Toolbox parts), Check In refuses an assembly that breaks it, says "
       "which files are the problem, and leaves it checked out to you."),
 ("h2", "Getting other people's changes"),
@@ -473,6 +511,8 @@ BLOCKS = [
                "project's Lead can change that project."],
     ["Not listed, or switched off", "Read-only: look, open, and export."],
 ], [1.7, 4.8]),
+("p", "Team > **Roles...** lists the roles the org uses. A role ticked **Superuser** may sign any sign-off; a "
+      "role ticked **Team folders** may change the Team folders in Home."),
 ("p", "Litterbox identifies you by the account you are signed in to on the Git host, matched against each "
       "person's host user names. **Who am I?** checks it. An Admin can require **signed commits** (Vault "
       "Settings); each person then sets up a signing key with Signing..., and Litterbox refuses uploads that aren't "
@@ -553,6 +593,25 @@ BLOCKS = [
     "before checking in parts with unsaved changes, and before Get Latest replaces an open file.",
 ]),
 
+("h2", "Configurations"),
+("p", "A part or assembly file can have several **configurations**. Litterbox checks out, revises, and releases "
+      "files, so a file's configurations always move together: changing one makes a new revision of the whole file. "
+      "A part's Details tab says when it has several. When a configuration needs its own part number, use **Create "
+      "Variant** instead (see Part numbers and file names)."),
+("ul", [
+    "**Named after the part.** With SolidWorks open, Check In renames a file's configuration to the part's Name when "
+    "it is the file's only configuration and is called Default, so an assembly's tree shows "
+    "HCR-100010-001_A<1> (Bracket). When the Name changes, it is renamed again at the next check-in. Import does the "
+    "same to the files it copies in. A file with configurations of its own is left alone, and so is a file open in "
+    "SolidWorks with unsaved changes. Assemblies follow a renamed configuration. The configuration's BOM part number "
+    "is set to the document name, so a SolidWorks BOM still shows the part number.",
+    "**Warnings at check-in.** Litterbox says when a configuration that an assembly uses was deleted from a part "
+    "(SolidWorks would show another configuration there), when a part's configurations have different materials "
+    "(Litterbox keeps one material per revision: the configuration's the file was saved in), and when a part is "
+    "linked to a design table or equations file outside it (Litterbox can't keep that file with the revisions; "
+    "embed it instead). Update references says when the newer revision has lost a configuration an assembly uses.",
+]),
+
 ("h1", "Settings and troubleshooting"),
 ("h2", "Your settings"),
 ("p", "Your personal settings are in C:\\Litterbox\\settings.yaml, outside every vault, and are not shared. Most "
@@ -570,6 +629,12 @@ BLOCKS = [
 ("h2", "Problems"),
 ("ul", [
     "A problem turns the status bar's dot red. **Details...** says what went wrong and what to do.",
+    "**Help > Report a problem...** (or **Report...** in the Details window) asks what you were doing, then makes a "
+    "report and opens an email to the Litterbox team with it, for you to send. With Outlook, the report is attached; "
+    "otherwise attach it yourself (Explorer shows it). The report has your comment, the versions of Litterbox, "
+    "Windows, SolidWorks, and Git, the problems in the status bar, Litterbox's log, and your settings, with passwords "
+    "and tokens taken out. The log names parts and files you worked on. Reports are kept in "
+    "C:\\Litterbox\\logs\\reports.",
     "The **Log** (View > Log, or the status bar) shows every Git command and its result. The full log is "
     "C:\\Litterbox\\logs\\litterbox.log; include it when you ask for help.",
     "If an upload is refused because someone else uploaded first, Litterbox gets their changes and tries again. If "
@@ -592,5 +657,6 @@ BLOCKS = [
     ["Double-click a part", "Open its details in a separate window"],
     ["Double-click a request in My Tasks", "Review it"],
     ["Shift-click a tick box", "Tick every part between the last click and this one"],
+    ["Space in Home", "Tick or untick the highlighted item"],
 ], [2.3, 4.2]),
 ]

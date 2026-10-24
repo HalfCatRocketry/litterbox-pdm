@@ -106,6 +106,29 @@ The Toolbox rule (`core/toolbox_rules.py`, the vault setting `toolbox`) is check
 lockable and read-only (file rules version 3, `git/read_only.py`), and `team/guarded_push.toolbox_allowed` refuses an
 upload that changes it unless the person is an Admin or the Owner.
 
+Configurations (0.6.1): a backend reads a model's configurations (`configurations`, with SolidWorks' ID for each) and
+which configuration each assembly component uses (`component_configurations`), and renames one
+(`name_configuration`); SolidWorks' side is `cad/solidworks/sw_configurations.py`. Check-in reads them with the rest
+(`reference_reader.read_configurations`) into the record's `configurations` (`records/record_configurations.py`),
+first renaming a lone "Default" after the part (`core/configuration_names.py` decides, `parts/configuration_naming.py`
+does it), and warns afterwards (`parts/configuration_check.py`). A backend handed to the reader or the namer is used in
+its caller's `cad_programs.session()`: one that first connects inside a session of their own breaks when it ends.
+
+### Folders
+
+Home's folders are a feature area of their own, `folders/` (layer 4): `folder_model.py` (a tree, built by applying
+changes in order), `folder_store.py` (Team and project folders: one never-edited file per change in the vault's
+`folders/` folder, `layout.FOLDERS_DIR_NAME`), `personal_folders.py` (a file per org on this computer),
+`folder_access.py` (who sees and changes which; `team/guarded_push.folders_allowed` refuses an upload that breaks it)
+and `folder_actions.py` (the checked changes the window asks for). The window side is `gui/main_window/home_view.py`
+and `home_actions.py`, with the words in `gui/logic/folder_text.py`. Home shares the parts list's ticks, and
+`PartsList._highlighted_pns` / `_ticked_pns` answer for whichever of the two is shown, so every action works from
+either.
+
+Problem reports: `user/bug_report.py` makes the zip, `user/report_mail.py` hands it to Outlook (through PowerShell) or
+the default email program, and `gui/main_window/problem_reports.py` asks for the comment. Unexpected errors are kept
+with their tracebacks by `diagnostics.note_unexpected` (the job queue and the window's `report_callback_exception`).
+
 ### Elsewhere
 
 Download on demand lives in `git/lfs_download.py` (pointers, `git lfs pull`) and `parts/downloads.py` (what a part

@@ -10,6 +10,7 @@ A file the person has open with unsaved changes isn't touched (the backend refus
 check-in. Without SolidWorks open nothing is renamed.
 """
 
+import contextlib
 import os
 
 from litterbox.cad import cad_programs
@@ -48,7 +49,8 @@ def make_namer(backend=None, log=None):
             return None
         mine = None
         try:
-            with cad_programs.session():
+            # A backend that is given is used in its caller's session (see reference_reader.make_reader).
+            with cad_programs.session() if backend is None else contextlib.nullcontext():
                 use = backend
                 if use is None:
                     use = mine = cad_programs.Backends(attach_only=True)
