@@ -3,7 +3,9 @@ layout.py - where everything lives inside a vault. One place for every fixed fol
 
     PN-logs/HCR-00042-001.yaml        the part records                    LOG_DIR_NAME
     cad/HCR-00042-001_A.SLDPRT        CAD files (Git LFS, lockable)       CAD_DIR_NAME
-    cancelled-revs/CANCELLED_...      revisions cancelled before release  CANCELLED_DIR_NAME, CANCELLED_PREFIX
+    cad/cancelled-revs/CANCELLED_...  revisions cancelled before release  CANCELLED_DIR_NAME, CANCELLED_PREFIX
+                                      (cancelled-revs/ at the top of the vault before 0.6.3: LEGACY_CANCELLED_DIR_NAME;
+                                      file rules version 4 moves it, vault/git_attributes.py)
     ECO/ECO-0001.yaml                 engineering change orders           ECO_DIR_NAME
     DOC-logs/PROP-0001.yaml           the document records                DOC_LOG_DIR_NAME
     documents/PROP-0001_A.docx        documents' files (Git LFS, lockable) DOC_DIR_NAME
@@ -24,7 +26,8 @@ Changing any of these changes the vault format (see version.VAULT_FORMAT).
 
 LOG_DIR_NAME = "PN-logs"
 CAD_DIR_NAME = "cad"
-CANCELLED_DIR_NAME = "cancelled-revs"       # revisions that were cancelled before release are kept here
+CANCELLED_DIR_NAME = f"{CAD_DIR_NAME}/cancelled-revs"    # revisions that were cancelled before release are kept here
+LEGACY_CANCELLED_DIR_NAME = "cancelled-revs"   # where they were kept before 0.6.3
 CANCELLED_PREFIX = "CANCELLED_"
 ECO_DIR_NAME = "ECO"                         # engineering change orders (change_orders/)
 DOC_LOG_DIR_NAME = "DOC-logs"                # document records (documents/), like PN-logs for parts

@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -322,8 +322,8 @@ BLOCKS = [
                 "an assembly uses parts that are unreleased or out of date."],
     ["Revise", "Starts the next revision of a released part: copies its files to the new letter (B), points "
                "drawings at the new model, and checks it out to you. The released revision is unchanged."],
-    ["Cancel Revision", "Discards a revision that was never released. Its files move to the cancelled-revs folder, "
-                        "and its letter isn't reused."],
+    ["Cancel Revision", "Discards a revision that was never released. Its files move to the cad\\cancelled-revs "
+                        "folder (read-only, kept for the history), and its letter isn't reused."],
     ["Unrelease", "Returns a part to in work, with a reason, when a release was a mistake."],
     ["Void", "Retires a part that was never released. Its number is never reused."],
     ["Make COTS", "Records a part as commercial off-the-shelf (bought, not modified). It is frozen like a release."],
@@ -566,7 +566,9 @@ BLOCKS = [
 ("h2", "Vault maintenance"),
 ("ul", [
     "**Vault > Update file rules...** appears when Litterbox has newer rules for which files Git LFS stores and "
-    "locks. An Admin is asked once per session. The update changes only Litterbox's own lines.",
+    "locks. An Admin is asked once per session. The update changes only Litterbox's own lines. Version 4 (Litterbox "
+    "0.6.3) also moves the vault's cancelled revisions from the old cancelled-revs folder at the top of the vault "
+    "into cad\\cancelled-revs, with their history, and makes everyone need 0.6.3.",
     "**Vault > Upgrade records...** appears when an update of Litterbox keeps part records in a new format. Until an "
     "Admin upgrades the vault, nobody on the new version can change anything, so an Admin is asked once per "
     "session. Upgrading makes everyone update Litterbox, and rewrites every record in one upload. Parts checked out "
@@ -693,7 +695,8 @@ BLOCKS = [
                           "purchasing info, and what it uses. Plain text."],
     ["cad, documents", "The parts' and documents' files, named after them (HCR-100010-001_A.SLDPRT)."],
     ["ECO", "Engineering change orders."],
-    ["cancelled-revs", "Revisions cancelled before release, kept for the history."],
+    ["cad\\cancelled-revs", "Revisions cancelled before release, kept for the history (at the top of the vault "
+                            "before 0.6.3)."],
     ["folders", "The Team and project folders: one small file per change, never edited, so two people never "
                 "clash."],
     ["templates", "The org's and projects' SolidWorks templates, and templates.yaml saying which is the default."],

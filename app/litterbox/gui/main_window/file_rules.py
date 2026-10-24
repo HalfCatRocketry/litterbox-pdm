@@ -48,15 +48,16 @@ class FileRules:
             return
         old = git_attributes.read(repo)
         new = git_attributes.updated_text(old)
-        if new == old.replace("\r\n", "\n"):
+        moving = len(git_attributes.legacy_cancelled_files(repo))
+        if new == old.replace("\r\n", "\n") and not moving:
             self.file_rules_outdated = False
             self._say("This vault's file rules are up to date.")
             return
         found = git_attributes.vault_version(old) if found is None else found
         added = git_attributes.added_rules(old, new)
         question = file_rules_text.question(found, git_attributes.VERSION, git_attributes.change_lines(old, new),
-                                            raises_minimum=any(r.endswith(" lockable") for r in added),
-                                            minimum=git_attributes.MIN_LITTERBOX)
+                                            raises_minimum=any(r.endswith(" lockable") for r in added) or moving > 0,
+                                            minimum=git_attributes.MIN_LITTERBOX, moving=moving)
         if not messagebox.askyesno("Update file rules", question, parent=self):
             self._say("The file rules were not updated. Vault > Update file rules... does it later.")
             return

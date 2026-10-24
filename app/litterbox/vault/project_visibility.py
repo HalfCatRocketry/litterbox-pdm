@@ -5,7 +5,8 @@ may not see them (team/project_access.py may_see), so Litterbox never shows them
 A project's parts are every part number in its block, so the files to leave out follow from its digits:
     PN-logs/HCR-12*                  its records
     cad/HCR-12*                      their CAD files, STEPs, PDFs and saved BOMs
-    cancelled-revs/CANCELLED_HCR-12* their cancelled revisions
+    cad/cancelled-revs/CANCELLED_HCR-12*   their cancelled revisions (and cancelled-revs/..., where a vault kept
+                                           them before 0.6.3, until its file rules are updated)
 apply() runs at Get Latest, when a vault is opened and after a project changes. Someone added to a hidden project
 gets its parts at their next Get Latest; someone taken off loses them then.
 
@@ -27,7 +28,8 @@ def patterns(org, projects):
     for project in projects:
         start = f"{org}-{project.prefix}"
         found += [f"/{layout.LOG_DIR_NAME}/{start}*", f"/{layout.CAD_DIR_NAME}/{start}*",
-                  f"/{layout.CANCELLED_DIR_NAME}/{layout.CANCELLED_PREFIX}{start}*"]
+                  f"/{layout.CANCELLED_DIR_NAME}/{layout.CANCELLED_PREFIX}{start}*",
+                  f"/{layout.LEGACY_CANCELLED_DIR_NAME}/{layout.CANCELLED_PREFIX}{start}*"]
     return found
 
 

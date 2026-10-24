@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.3
+
+- **Cancelled revisions are kept in cad\cancelled-revs**, under the cad folder, instead of a cancelled-revs folder at the top of the vault. They are stored with Git LFS and read-only, like the rest of the cad folder: kept only for the history.
+- **File rules version 4.** Vault > Update file rules... (an Admin or the Owner is asked once per session) adds the rule for the new folder and moves the vault's existing cancelled revisions there in the same upload, with their history. It makes everyone in the vault need Litterbox 0.6.3, so nobody keeps cancelling into the old place. It is offered again if an older Litterbox cancelled a revision into the old folder before the update. Until then, 0.6.3 already cancels into the new place, and a hidden project's cancelled revisions are left out of other people's copies in either place.
+
 ## 0.6.2
 
 - **SolidWorks templates.** Litterbox now makes a part's files from the team's templates: part templates (.prtdot), assembly templates (.asmdot) and drawing templates (.drwdot).

@@ -23,7 +23,7 @@ class TestReviseText(unittest.TestCase):
     def test_cancel_texts(self):
         from types import SimpleNamespace as S
         plan = S(pn="X", name="Bracket", revision="B", back_to="A",
-                 moves=[("cad/a_B.SLDPRT", "cancelled-revs/CANCELLED_a_B.SLDPRT")])
+                 moves=[("cad/a_B.SLDPRT", "cad/cancelled-revs/CANCELLED_a_B.SLDPRT")])
         t = confirmations.cancel_confirm_text(plan)
         self.assertIn("CANCELLED_a_B.SLDPRT", t); self.assertIn("back to Rev A", t)
         self.assertIn("can't be cancelled", confirmations.cancel_problem_text("X", ["why"]))

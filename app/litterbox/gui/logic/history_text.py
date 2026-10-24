@@ -152,7 +152,7 @@ def revision_rows(record, revisions):
     for rev in sorted(letters, key=revision_letters.revision_number, reverse=True):
         event = released.get(rev)
         if rev in cancelled:
-            rows.append((rev, "Cancelled", "kept in the cancelled-revs folder"))
+            rows.append((rev, "Cancelled", "kept in the cad\\cancelled-revs folder"))
             continue
         if rev == record.revision and record.status != "released":
             state = "In work" if record.status == "in_work" else record.status.replace("_", " ").title()

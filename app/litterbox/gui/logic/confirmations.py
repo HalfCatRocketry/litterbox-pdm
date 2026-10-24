@@ -131,7 +131,7 @@ def cancel_confirm_text(plan):
     kept = "\n".join("  " + PurePosixPath(new).name for _old, new in plan.moves) or "  (no files)"
     documents = action_rules.are_documents([plan.pn])
     return (f"Cancel Rev {plan.revision} of {plan.pn} ({plan.name})?\n\n"
-            f"Its files are not deleted. They are kept in the cancelled-revs folder as:\n{kept}\n\n"
+            f"Its files are not deleted. They are kept in the cad\\cancelled-revs folder as:\n{kept}\n\n"
             f"The {'document' if documents else 'part'} goes back to Rev {plan.back_to}, and the letter "
             f"{plan.revision} will not be used again."
             + ("" if documents else f" Any assembly that already uses Rev {plan.revision} will lose it."))

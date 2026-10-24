@@ -1,6 +1,6 @@
 """
 cancel_revision.py - Cancel Revision: throw away a revision that was never released. Its files are kept
-in cancelled-revs/ as CANCELLED_..., and its letter is never used again.
+in cad/cancelled-revs/ as CANCELLED_..., and its letter is never used again.
 """
 
 import uuid
@@ -70,7 +70,7 @@ def cancel_revision_plan(repo, pn, fetch=True):
 
 @converts_errors
 def cancel_revision(repo, pn, reason, backend=None, log=print):
-    """Throw away the working revision (keeping its files in cancelled-revs). Returns the kept files.
+    """Throw away the working revision (keeping its files in cad/cancelled-revs). Returns the kept files.
 
     Call cancel_revision_plan() first and show it to the user. The part goes back to its latest
     released revision, and the cancelled letter is never used again."""
@@ -111,7 +111,7 @@ def cancel_revision(repo, pn, reason, backend=None, log=print):
             moves = [(rel, revision_files.cancelled_name(rel)) for rel in files]
             clashes = [new for _old, new in moves if (Path(repo) / new).exists()]
             if clashes:
-                raise revision_files.RevisionFailed("These already exist in cancelled-revs: " + ", ".join(clashes))
+                raise revision_files.RevisionFailed("These already exist in cad/cancelled-revs: " + ", ".join(clashes))
             kept = [new for _old, new in moves]
             journal = {"op": "cancel", "token": token, "record": record_path, "added": kept,
                        "removed": [old for old, _new in moves], "locked": []}

@@ -61,11 +61,11 @@ def read_journal(repo):
     except (OSError, ValueError, KeyError, TypeError) as e:
         raise RevisionFailed(f"The note about an unfinished revise ({path}) can't be read ({e}). "
                              "Delete it by hand if you are sure nothing is running, then try again.") from None
-    folders = (f"{layout.CAD_DIR_NAME}/", f"{layout.DOC_DIR_NAME}/", f"{layout.CANCELLED_DIR_NAME}/")
+    folders = (f"{layout.CAD_DIR_NAME}/", f"{layout.DOC_DIR_NAME}/", f"{layout.LEGACY_CANCELLED_DIR_NAME}/")
     for rel in journal["added"] + journal["removed"]:
         if not str(rel).startswith(folders) or ".." in str(rel):
             raise RevisionFailed(f"The note about an unfinished revise lists a file outside the cad and "
-                                 f"cancelled-revs folders ({rel}). Litterbox will not touch it. "
+                                 f"documents folders ({rel}). Litterbox will not touch it. "
                                  f"Check {path} by hand.")
     if not journal["record"].startswith((f"{layout.LOG_DIR_NAME}/", f"{layout.DOC_LOG_DIR_NAME}/")) \
             or ".." in journal["record"]:

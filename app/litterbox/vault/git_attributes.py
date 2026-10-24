@@ -23,9 +23,14 @@ updated_text() recognises those (LEGACY_HEADERS, LEGACY_RULES) and puts them ins
     needs_update(repo)    (the vault's version, True if this Litterbox has a newer block)
     updated_text(text)    the file with the block brought up to date
     update(repo)          do it: get the latest, rewrite the block, convert matching files, commit and upload
+
+Version 4 (0.6.3) keeps cancelled revisions in cad/cancelled-revs (lockable, so read-only, like the rest of cad/),
+and its update also moves a vault's old cancelled-revs/ folder there in the same commit (legacy_cancelled_files).
 """
 
+import os
 import re
+import stat
 from pathlib import Path
 
 from litterbox import diagnostics
@@ -34,6 +39,7 @@ from litterbox.errors import LitterboxError
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.git import runner
+from litterbox.git import sparse
 from litterbox.records.error_conversion import converts_errors
 from litterbox.team import guarded_push
 from litterbox.team import team_permissions
@@ -101,12 +107,16 @@ RULES = (
     + [                                                     # version 3 (0.6.0): the team's Toolbox
         f"toolbox/** {LFS} lockable",                       # read-only for everyone; only Admins upload it
     ]
+    + [                                                     # version 4 (0.6.3): cancelled revisions under cad/
+        f"{layout.CANCELLED_DIR_NAME}/** {LFS} lockable",   # read-only: kept only for the history
+    ]
 )
 
 
-VERSION = 3
+VERSION = 4
 
-MIN_LITTERBOX = "0.6.0"         # the oldest Litterbox that knows every lockable rule in RULES
+MIN_LITTERBOX = "0.6.3"         # the oldest Litterbox that knows every lockable rule in RULES (and keeps cancelled
+                                # revisions in cad/cancelled-revs)
 
 BEGIN = "# >>> Litterbox rules, version {version}. Litterbox updates the lines down to '# <<< Litterbox'; don't " \
         "edit them."
@@ -199,15 +209,33 @@ def is_litterbox_vault(repo):
     return config.config_path(repo).is_file()
 
 
+def legacy_cancelled_files(repo):
+    """The files the vault keeps in the old cancelled-revs/ folder (before 0.6.3), which the update moves. Asks git
+    only when the folder is there (or a hidden project may have left it out of this copy), since this runs at every
+    refresh; [] if it can't be told."""
+    try:
+        if not (Path(repo) / layout.LEGACY_CANCELLED_DIR_NAME).is_dir() and not sparse.excluded(repo):
+            return []
+        return repository.tracked(repo, f"{layout.LEGACY_CANCELLED_DIR_NAME}/")
+    except (LitterboxError, OSError):
+        return []
+
+
+def moved_path(rel):
+    """Where a file of the old cancelled-revs/ folder goes: "cad/cancelled-revs/CANCELLED_..."."""
+    return f"{layout.CANCELLED_DIR_NAME}/{rel.split('/', 1)[1]}"
+
+
 def needs_update(repo):
-    """(the vault's block version or None, True if this Litterbox would change the block)."""
+    """(the vault's block version or None, True if this Litterbox would change the block, or has cancelled
+    revisions to move)."""
     if not is_litterbox_vault(repo):
         return None, False
     text = read(repo)
     found = vault_version(text)
     if found is not None and found > VERSION:
         return found, False                                 # a newer Litterbox wrote it: leave it alone
-    return found, updated_text(text) != text.replace("\r\n", "\n")
+    return found, updated_text(text) != text.replace("\r\n", "\n") or bool(legacy_cancelled_files(repo))
 
 
 def _pattern_files(repo, rules):
@@ -222,8 +250,9 @@ def _pattern_files(repo, rules):
 @converts_errors
 def update(repo):
     """Bring the vault's Litterbox rules up to date: get the latest, rewrite the block, convert files that new Git
-    LFS rules now cover, raise min_litterbox_version if lockable rules were added, then commit and upload all of it
-    together. If anything fails it is all put back. Returns the rules added ([] if there was nothing to do)."""
+    LFS rules now cover, raise min_litterbox_version if lockable rules were added, move the old cancelled-revs/
+    folder into cad/, then commit and upload all of it together. If anything fails it is all put back. Returns the
+    rules added ([] if there was nothing to do)."""
     repository.validate_repo(repo)
     team_permissions.require(repo, "manage_settings")
     repo = Path(repo)
@@ -234,25 +263,34 @@ def update(repo):
     if (vault_version(old_text) or 0) > VERSION:
         raise LitterboxError(f"This vault's {FILE_NAME} was written by a newer Litterbox. Update Litterbox first.")
     new_text = updated_text(old_text)
-    if new_text == old_text.replace("\r\n", "\n"):
+    legacy = legacy_cancelled_files(repo)
+    if new_text == old_text.replace("\r\n", "\n") and not legacy:
         return []
     added = added_rules(old_text, new_text)
+    moved = []
     config_rel = layout.CONFIG_PATH
     config_before = config.config_path(repo).read_bytes()
     touched, committed = [FILE_NAME], False
     try:
         path.write_bytes(new_text.encode("utf-8"))
-        if any(rule.endswith(" lockable") for rule in added):
+        if any(rule.endswith(" lockable") for rule in added) or legacy:
             config_write.stamp(repo, min_version=MIN_LITTERBOX)
             if config.config_path(repo).read_bytes() != config_before:
                 touched.append(config_rel)
         runner.run(["git", "add", "--", *touched], repo)
+        for rel in legacy:                                  # into cad/cancelled-revs, kept with their history
+            target = repo / moved_path(rel)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            runner.run(["git", "mv", "--", rel, moved_path(rel)], repo)
+            moved.append(rel)
+        touched += [p for rel in moved for p in (rel, moved_path(rel))]
         converted = _pattern_files(repo, added)
         if converted:
             runner.run(["git", "add", "--renormalize", "--", *converted], repo)
             staged = runner.run(["git", "diff", "--cached", "--name-only", "-z"], repo, quiet=True)
             touched += [p for p in staged.split("\0") if p and p not in touched]
-        message = f"Litterbox: file rules version {VERSION}" + (f" ({len(added)} rules added)" if added else "")
+        message = f"Litterbox: file rules version {VERSION}" + (f" ({len(added)} rules added)" if added else "") \
+            + (f", {len(moved)} cancelled files moved to {layout.CANCELLED_DIR_NAME}" if moved else "")
         runner.run(["git", "commit", "-m", message, "--", *touched], repo)
         committed = True
         guarded_push.push(repo)
@@ -261,6 +299,10 @@ def update(repo):
             if committed:
                 runner.run(["git", "reset", "--soft", "HEAD~1"], repo)
             runner.run(["git", "reset", "-q", "--", *touched], repo, quiet=True)
+            for rel in moved:                               # the moved files go back where they were
+                (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+                os.chmod(repo / moved_path(rel), stat.S_IREAD | stat.S_IWRITE)
+                (repo / moved_path(rel)).replace(repo / rel)
             if before is None:
                 path.unlink(missing_ok=True)
             else:
@@ -269,6 +311,11 @@ def update(repo):
         except (LitterboxError, OSError) as e:
             diagnostics.LOG(f"WARNING: could not fully undo the change to {FILE_NAME}: {e}")
         raise
+    if moved:
+        try:
+            (repo / layout.LEGACY_CANCELLED_DIR_NAME).rmdir()   # git leaves the emptied folder; only if it is empty
+        except OSError:
+            pass
     diagnostics.LOG(f"Updated the vault's {FILE_NAME} to Litterbox rules version {VERSION}"
                     + (f"; Litterbox {MIN_LITTERBOX} or newer is now needed." if config_rel in touched else "."))
     return added

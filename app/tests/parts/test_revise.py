@@ -33,8 +33,8 @@ from litterbox.git import remote
 PRT_B = PRT.replace("_A.", "_B.")
 DRW_B = DRW.replace("_A.", "_B.")
 PRT_C = PRT.replace("_A.", "_C.")
-CANCELLED_PRT = "cancelled-revs/CANCELLED_HCR-00001-001_B.SLDPRT"
-CANCELLED_DRW = "cancelled-revs/CANCELLED_HCR-00001-001_B.SLDDRW"
+CANCELLED_PRT = "cad/cancelled-revs/CANCELLED_HCR-00001-001_B.SLDPRT"
+CANCELLED_DRW = "cad/cancelled-revs/CANCELLED_HCR-00001-001_B.SLDDRW"
 
 
 @SKIP_ON_WINDOWS
@@ -76,7 +76,7 @@ class ReviseFixture(TwoUserVault):
         self.assertEqual((record.revision, record.released_revision, record.status), ("A", "A", "released"))
         self.assertEqual(sorted(p.name for p in (repo / "cad").iterdir()),
                          ["HCR-00001-001_A.SLDDRW", "HCR-00001-001_A.SLDPRT"])
-        self.assertFalse((repo / "cancelled-revs").exists())
+        self.assertFalse((repo / "cad" / "cancelled-revs").exists())
         self.assertEqual(git(repo, "status", "--porcelain"), "")
         self.assertEqual(git(repo, "rev-list", "--count", "@{u}..HEAD"), "0")
         self.assertEqual(self.locks(repo), {})
@@ -319,7 +319,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         self.assertEqual((record.revision, record.status), ("B", "in_work"))
         self.assertTrue((self.a / PRT_B).exists())
         self.assertTrue((self.a / DRW_B).exists())
-        self.assertFalse((self.a / "cancelled-revs").exists())
+        self.assertFalse((self.a / "cad" / "cancelled-revs").exists())
         self.assertEqual(git(self.a, "rev-list", "--count", "@{u}..HEAD"), "0")
         self.assertFalse(revision_files._journal_path(self.a).exists())
         self.assertEqual(self.locks(self.a), {})               # nobody is left holding half a lock
@@ -330,7 +330,7 @@ class TestCancelRevision(ReviseFixture, unittest.TestCase):
         with self.assertRaises(Exception):
             self.cancel()
         self.assertTrue((self.a / PRT_B).exists())
-        self.assertFalse((self.a / "cancelled-revs").exists())
+        self.assertFalse((self.a / "cad" / "cancelled-revs").exists())
         self.assertEqual(record_store.load(self.a, PART).revision, "B")
 
 

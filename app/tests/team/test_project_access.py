@@ -117,7 +117,8 @@ class Words(unittest.TestCase):
 class Hidden(unittest.TestCase):
     def test_a_hidden_project_leaves_out_its_records_files_and_cancelled_revisions(self):
         self.assertEqual(project_visibility.patterns("HCR", [ROVER]),
-                         ["/PN-logs/HCR-12*", "/cad/HCR-12*", "/cancelled-revs/CANCELLED_HCR-12*"])
+                         ["/PN-logs/HCR-12*", "/cad/HCR-12*", "/cad/cancelled-revs/CANCELLED_HCR-12*",
+                          "/cancelled-revs/CANCELLED_HCR-12*"])
 
     def test_only_the_hidden_projects_you_may_not_see(self):
         hidden = projects.with_team(ROVER, "cy", ["bea"], hidden=True)
