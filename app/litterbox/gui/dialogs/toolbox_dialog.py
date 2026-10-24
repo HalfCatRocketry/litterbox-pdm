@@ -21,7 +21,7 @@ class ToolboxDialog(modal_dialog.ModalDialog):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result, self.status = None, status
-        width, height = 600, 470
+        width, height = 760, 470
         self.title("Toolbox")
         window_chrome.place_over(self, parent, width, height, down=4)
         self.resizable(False, False)
@@ -31,7 +31,7 @@ class ToolboxDialog(modal_dialog.ModalDialog):
         ctk.CTkLabel(self, text="The team's Toolbox", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(
             row=0, column=0, sticky="ew", padx=20, pady=(18, 6))
         ctk.CTkLabel(self, text="\n".join(toolbox_text.status_lines(status, admin)), anchor="nw", justify="left",
-                     wraplength=550).grid(row=1, column=0, sticky="nsew", padx=20)
+                     wraplength=width - 50).grid(row=1, column=0, sticky="nsew", padx=20)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=2, column=0, sticky="ew", padx=20, pady=(14, 16))
         entries = [("Download", "download", bool(status.not_downloaded))]
@@ -40,7 +40,7 @@ class ToolboxDialog(modal_dialog.ModalDialog):
                         ("Let me change it", "open", bool(status.files)),
                         ("Upload changes", "upload", status.has_changes)]
         for column, (text, action, usable) in enumerate(entries):
-            release_button.ReleaseButton(buttons, text=text, height=34, fg_color=theme.ACCENT,
+            release_button.ReleaseButton(buttons, text=text, height=34, width=100, fg_color=theme.ACCENT,   # as wide as its text
                                          state="normal" if usable else "disabled",
                                          command=lambda a=action: self._choose(a)).grid(
                 row=0, column=column, sticky="w", padx=(0, 8))

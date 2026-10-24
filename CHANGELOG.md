@@ -9,6 +9,7 @@
   - SolidWorks takes every Toolbox part from the Toolbox folder it is set to use, whatever folder the assembly was saved with. So with Only the team's Toolbox, each computer's SolidWorks must be set to the team's folder (Tools > Options > System Options > Hole Wizard/Toolbox); after the first refresh Litterbox says so if it isn't, or if some of the team's Toolbox isn't downloaded yet.
 - **File rules version 3.** Everything in the toolbox folder is stored with Git LFS and lockable (so read-only until locked). Admins are offered the update as before; it makes the vault need 0.6.0.
 - **Ready for more CAD programs.** Everything SolidWorks-specific now sits behind one interface (`cad/cad_program.py`), reached through `cad/cad_programs.py` by each file's extension, so a second CAD program can be added without changing how anything works for SolidWorks users. Nothing in the window changes.
+- **Windows that didn't fit.** Team > Toolbox... is wide enough for its buttons. Team > Vault Settings... is shorter and scrolls, with Cancel and Save always showing. Team > Doc Workflows... has shorter tabs (Release doc, Unrelease doc, Void doc, Remove doc link). Team > Roles... has a Superuser column wide enough for its heading at any display scaling.
 - The user guide's **Decisions to make first** now points to the Toolbox rule and the team's Toolbox, and has a Toolbox parts section and a section on the team's Toolbox.
 
 ## 0.5.7

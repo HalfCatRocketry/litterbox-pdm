@@ -3,6 +3,7 @@ roles_dialog.py - the team's list of roles, and which are superuser roles (whoev
 """
 
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import messagebox, ttk
 
 import customtkinter as ctk
@@ -52,7 +53,7 @@ class RolesDialog(modal_dialog.ModalDialog):
         self.tree.heading("role", text="Role", anchor="w")
         self.tree.heading("superuser", text="Superuser", anchor="w")
         self.tree.column("role", anchor="w")
-        self.tree.column("superuser", width=90, stretch=False, anchor="w")
+        self.tree.column("superuser", width=self._superuser_width(), stretch=False, anchor="w")
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._selected())
         self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
         scroll = ctk.CTkScrollbar(frame, command=self.tree.yview)
@@ -89,6 +90,15 @@ class RolesDialog(modal_dialog.ModalDialog):
         self.protocol("WM_DELETE_WINDOW", self._cancel)
         self.bind("<Escape>", lambda event: self._cancel())
         self.after(150, self._grab)
+
+    @staticmethod
+    def _superuser_width():
+        """Wide enough for the bold "Superuser" heading at any display scaling, with room either side."""
+        try:
+            heading = tkfont.Font(font=ttk.Style().lookup("Treeview.Heading", "font") or "TkHeadingFont")
+            return max(90, heading.measure("Superuser") + 2 * heading.measure("0") + 16)
+        except Exception:                               # no font yet: the width at 100%
+            return 90
 
     def _changed(self):
         return self.roles != self.initial or self.superusers != self.initial_superusers
