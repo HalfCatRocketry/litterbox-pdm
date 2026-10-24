@@ -13,6 +13,11 @@
   - **Projects**: a folder for each project you are the Lead or a member of (Admins and the Owner see every project that isn't hidden). Its Lead changes it, and its members too unless the project window's **Only the Lead changes its folders** is ticked.
   - Right-click in Home: New Folder..., Rename..., Delete Folder..., Put the ticked here, Remove from This Folder, Details..., and the part actions. Drag items and folders onto folders (dragging into another top copies). Ticks in Home are the same ticks as in Vault, so Check Out, Release and the rest act on what is ticked there; clicking a part shows its details.
   - **Add to Folder...** in the Part menu, on the Documents screen and on the ECOs screen.
+  - **Add Parts...** on a folder or a top (right-click): a search window of every part and document not in it yet; pick one or several (Ctrl or Shift) and Add.
+  - Parts, documents and ECOs can go straight in a top (Personal, Team, a project), outside every folder: right-click it, drag onto it, or choose it in Add to Folder.... An older Litterbox doesn't show those.
+  - In a top or a folder, the folders come first, then parts, documents and ECOs, each by number.
+  - Two folder changes made very quickly could sometimes apply in the wrong order when the vault's folders folder held a file not named by time; fixed.
+- **Check In and Save Progress list what they are about to check in** (number, revision and name) above the comment box. The comment can still be left blank.
   - Team and project folders are kept in the vault's new **folders** folder, one small file per change, so two people changing folders at once never clash, and a renamed project keeps its folders. An upload that changes folders the person may not change is refused (and the change taken back). An older Litterbox leaves the folder alone, so the vault doesn't need 0.6.1.
 - `tools/run_tests.py` no longer crashes printing a failed test's output on a Windows console.
 

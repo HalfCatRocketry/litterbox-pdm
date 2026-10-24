@@ -1,8 +1,9 @@
 """
 home_actions.py - changing folders from the window (home_view.py shows them): Home's right-click menu (New Folder,
-Rename, Delete, Put the ticked items here, Remove from this folder, and the part actions), dragging items and
-folders between folders, double-clicking an item, and Add to Folder... from the Part menu, the Documents screen and
-the ECOs screen.
+Rename, Delete, Add Parts... (a search window), Put the ticked items here, Remove from this folder, and the part
+actions), dragging items and folders between folders, double-clicking an item, and Add to Folder... from the Part
+menu, the Documents screen and the ECOs screen. Items can go in a folder or straight in a top (Personal, Team, a
+project): folder id "" (folder_model.ROOT).
 
 A Personal change is made at once on this computer. A Team or project change shows at once and is uploaded in the
 background (folders/folder_store.py); who may make it is folders/folder_access.py.
@@ -17,6 +18,8 @@ from litterbox.folders import folder_model
 from litterbox.folders import folder_store
 from litterbox.folders.folder_model import FolderError
 from litterbox.gui.dialogs import folder_picker_dialog
+from litterbox.gui.dialogs.workflow import part_picker_dialog
+from litterbox.gui.logic import list_view
 from litterbox.gui.logic import folder_text
 from litterbox.gui.widgets import menu_bar
 from litterbox.team import guarded_push
@@ -124,8 +127,10 @@ class HomeActions:
         if row.kind == "folder":
             menu.add_command(label="Rename...", **menu_bar.entry_options(may, lambda: self.rename_folder(row)))
             menu.add_command(label="Delete Folder...", **menu_bar.entry_options(may, lambda: self.delete_folder(row)))
+        if row.kind in ("top", "folder") and row.place is not None:
             count = len(self.ticked)
             menu.add_separator()
+            menu.add_command(label="Add Parts...", **menu_bar.entry_options(may, lambda: self.add_parts(row)))
             menu.add_command(label=f"Put the {count} ticked here" if count else "Put the ticked here (none ticked)",
                              **menu_bar.entry_options(may and count > 0, lambda: self.put_ticked(row)))
         if row.kind == "item":
@@ -138,7 +143,8 @@ class HomeActions:
     def _item_menu(self, menu, row, may):
         kind, _number = folder_text.parse_item(row.item)
         menu.add_command(label="Details...", command=lambda: self._open_home_item(row))
-        menu.add_command(label="Remove from This Folder", **menu_bar.entry_options(may, lambda: self.remove_item(row)))
+        menu.add_command(label="Remove from This Folder" if row.folder else "Remove from Here",
+                         **menu_bar.entry_options(may, lambda: self.remove_item(row)))
         if kind in ("part", "document") and self._home_highlighted():
             if row.item not in self.ticked:                   # like the parts list: it becomes the only ticked one
                 self._set_home_ticks(list(self.ticked), False)
@@ -181,6 +187,25 @@ class HomeActions:
         else:
             self._say("Everything ticked is in that folder already.")
 
+    def add_parts(self, row):
+        """Add Parts...: a search window of every part and document not in this folder (or top) yet."""
+        holder = folder_model.holder(self._tree_of(row.place), row.folder)
+        if holder is None:
+            self._say("That folder isn't there any more. Someone may have just deleted it.", "warn")
+            return
+        have = set(holder.items)
+        rows = [r for r in self.rows_by_pn.values() if str(r.pn) not in have]
+        rows = [rows[i] for i in list_view.sort_order([str(r.pn) for r in rows])]
+        chosen = part_picker_dialog.PartPickerDialog(
+            self, rows, heading=f"Add parts to {row.text}",
+            empty="Every part and document in this vault is here already.").show()
+        if not chosen:
+            return
+        op = self._try(lambda: folder_actions.put_items(self._tree_of(row.place), row.folder,
+                                                         [str(pn) for pn in chosen]))
+        if op:
+            self.change_folders(row.place, [op], f"{len(op['items'])} added to {row.text}")
+
     def remove_item(self, row):
         op = self._try(lambda: folder_actions.take_items(self._tree_of(row.place), row.folder, [row.item]))
         if op:
@@ -221,15 +246,17 @@ class HomeActions:
         target = self.home_rows.get(self.home.identify_row(event.y))
         if source is None or target is None or target.place is None:
             return
-        if target.kind == "item":                       # onto an item: into the folder it is in
-            target = self.home_rows.get(folder_text.folder_iid(target.place, target.folder), target)
+        if target.kind == "item":                       # onto an item: into the folder (or top) it is in
+            holder = (folder_text.folder_iid(target.place, target.folder) if target.folder
+                      else folder_text.top_iid(target.place))
+            target = self.home_rows.get(holder, target)
         if source.kind == "item":
             self._drop_item(source, target)
         elif source.kind == "folder":
             self._drop_folder(source, target)
 
     def _drop_item(self, source, target):
-        if target.kind != "folder":
+        if target.kind not in ("folder", "top") or target.place is None:
             self._say("Drop it on a folder.", "warn")
             return
         if target.place == source.place and target.folder == source.folder:

@@ -94,6 +94,41 @@ class HomeWiring(unittest.TestCase):
         self.assertEqual(picked, [(["Personal", "Team"], 2)])
         self.assertEqual(personal_folders.load(self.path)[folder].items, [str(PART), str(OTHER)])
 
+    def test_add_to_folder_can_put_them_in_a_top(self):
+        class Picker:
+            def __init__(self, parent, places, count):
+                pass
+
+            def show(self):
+                return Place(folder_access.PERSONAL), "", []
+
+        replace(self, self.gui.folder_picker_dialog, "FolderPickerDialog", Picker)
+        self.app.add_to_folder([str(PART)])
+        self.assertEqual(personal_folders.load(self.path)[""].items, [str(PART)])
+        self.assertIn("i|personal||HCR-00001-001", self.app.home.rows)
+
+    def test_add_parts_offers_what_the_folder_lacks_and_puts_the_chosen(self):
+        offered = []
+
+        class Picker:
+            def __init__(self, parent, rows, heading="", **kwargs):
+                offered.append(([str(r.pn) for r in rows], heading))
+
+            def show(self):
+                return [OTHER]
+
+        replace(self, self.gui.part_picker_dialog, "PartPickerDialog", Picker)
+        replace(self, self.gui.home_actions.folder_actions, "apply_change", lambda *a, **kw: None)
+        self.app.add_parts(self.app.home_rows["f|team|t1"])
+        self.assertEqual(offered, [([str(OTHER)], "Add parts to Shared")])     # PART is in it already
+        self.assertEqual(self.app.home_trees.team["t1"].items, [str(PART), "ECO-0001", str(OTHER)])
+
+    def test_an_item_dropped_on_a_top_moves_out_of_its_folder(self):
+        replace(self, self.gui.home_actions.folder_actions, "apply_change", lambda *a, **kw: None)
+        self.app._drop_item(self.app.home_rows["i|team|t1|HCR-00001-001"], self.app.home_rows["top:team"])
+        self.assertEqual(self.app.home_trees.team["t1"].items, ["ECO-0001"])
+        self.assertIn("i|team||HCR-00001-001", self.app.home.rows)
+
     def test_a_team_change_shows_now_and_uploads_in_the_background(self):
         made = []
         replace(self, self.gui.home_actions.folder_actions, "apply_change",

@@ -6,6 +6,9 @@ thing a folder points at, and what a row's id means.
     # [HomeRow]: three tops (Personal, Team, Projects, with a top per project under Projects), then folders and the
     # items in them. An item reads "HCR-00042-001   Bracket" (one line: its number, then its name).
 
+Within a top or a folder, the folders come first (by name), then the items: parts, documents, ECOs, each by number.
+An item at the top of a tree has the folder id "" (folder_model.ROOT).
+
 A row's id says where it is, so a click can be traced back: "top:team", "top:project:Rover", "f|<place>|<folder>",
 "i|<place>|<folder>|<item>" (place: personal, team, or project:<name>).
 """
@@ -90,6 +93,15 @@ def item_label(item, name):
     return f"{item}{GAP}{name}" if name else str(item)
 
 
+ITEM_ORDER = ("part", "document", "eco")
+
+
+def item_sort_key(item):
+    """Parts, then documents, then ECOs (then anything else), each by number."""
+    kind, _number = parse_item(item)
+    return (ITEM_ORDER.index(kind) if kind in ITEM_ORDER else len(ITEM_ORDER), str(item).upper())
+
+
 def _matches(text, search):
     return not search or search.lower() in text.lower()
 
@@ -97,22 +109,23 @@ def _matches(text, search):
 def _tree_rows(place, tree, describe, search):
     """The rows of one tree under its top, leaving out what the search doesn't find (a folder stays when its name
     or anything in it does)."""
-    rows = []
+    def items_of(folder_id, parent_iid):
+        holder = folder_model.holder(tree, folder_id)
+        items = [HomeRow(item_iid(place, folder_id, item), parent_iid, "item", item_label(item, describe(item)),
+                         place, folder_id, item) for item in sorted(holder.items, key=item_sort_key)]
+        return [row for row in items if _matches(row.text, search)]
 
     def visit(parent_id, parent_iid):
         kept = []
         for folder in folder_model.children(tree, parent_id):
             iid = folder_iid(place, folder.id)
-            inner = visit(folder.id, iid)
-            items = [HomeRow(item_iid(place, folder.id, item), iid, "item", item_label(item, describe(item)), place,
-                             folder.id, item) for item in folder.items]
-            items = [row for row in items if _matches(row.text, search)]
-            if inner or items or _matches(folder.name, search):
-                kept += [HomeRow(iid, parent_iid, "folder", folder.name, place, folder.id)] + inner + items
+            inner = visit(folder.id, iid) + items_of(folder.id, iid)
+            if inner or _matches(folder.name, search):
+                kept += [HomeRow(iid, parent_iid, "folder", folder.name, place, folder.id)] + inner
         return kept
 
-    rows += visit("", top_iid(place))
-    return rows
+    top = top_iid(place)
+    return visit(folder_model.ROOT, top) + items_of(folder_model.ROOT, top)
 
 
 def home_rows(personal, trees, projects, describe, search=""):

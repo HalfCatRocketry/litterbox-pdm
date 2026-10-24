@@ -61,6 +61,23 @@ def cad_changes(paths, limit=15):
     return names
 
 
+def comment_heading(count, keep_lock):
+    """The line above the list in the check-in comment window."""
+    what = "Save progress on" if keep_lock else "Check in"
+    return f"{what} these {count}:" if count != 1 else f"{what} this one:"
+
+
+def comment_lines(targets, rows_by_pn):
+    """One line per part (or document) being checked in: its number, revision and name."""
+    lines = []
+    for pn in targets:
+        row = rows_by_pn.get(pn)
+        name = getattr(row, "name", "") if row is not None else ""
+        revision = getattr(row, "revision", "") if row is not None else ""
+        lines.append("   ".join(text for text in (str(pn), f"Rev {revision}" if revision else "", name) if text))
+    return lines
+
+
 CHECKIN_CAUTION = ("Litterbox uploads in the background. Until the banner says Ready, don't open these files and "
                    "don't save them: a save in the middle of an upload can end up half in the vault.")
 

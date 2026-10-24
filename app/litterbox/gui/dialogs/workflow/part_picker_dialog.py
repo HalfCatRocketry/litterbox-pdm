@@ -1,5 +1,6 @@
 """
-part_picker_dialog.py - Add Parts in the Workflow window: search the parts that could join and pick some.
+part_picker_dialog.py - Add Parts: search the parts that could be added and pick some. In the Workflow window
+(those that could join the request) and on a folder in Home (any part or document not in it yet).
 """
 
 import tkinter as tk
@@ -19,10 +20,11 @@ class PartPickerDialog(modal_dialog.ModalDialog):
     (Ctrl or Shift for several) and press Add.
 
         PartPickerDialog(parent, rows, label).show()    # None if cancelled, else [PN] in list order
+        PartPickerDialog(parent, rows, heading="Add parts to Brackets", empty="...").show()
     """
     FOCUS = "entry"
 
-    def __init__(self, parent, rows, label):
+    def __init__(self, parent, rows, label="", heading="", empty="No other parts can join this workflow right now."):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result = None
@@ -35,7 +37,8 @@ class PartPickerDialog(modal_dialog.ModalDialog):
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)
-        ctk.CTkLabel(self, text=f"Add parts to the {label} workflow", font=ctk.CTkFont(size=16, weight="bold"),
+        self.empty = empty
+        ctk.CTkLabel(self, text=heading or f"Add parts to the {label} workflow", font=ctk.CTkFont(size=16, weight="bold"),
                      anchor="w").grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 6))
         self.search_var = tk.StringVar()
         self.entry = ctk.CTkEntry(self, textvariable=self.search_var, height=34,
@@ -80,7 +83,7 @@ class PartPickerDialog(modal_dialog.ModalDialog):
             self.by_iid[iid] = row.pn
             self.tree.insert("", "end", iid=iid, values=(iid, row.name, row.state))
         if not self.rows:
-            self.note.configure(text="No other parts can join this workflow right now.")
+            self.note.configure(text=self.empty)
         else:
             self.note.configure(text=f"{len(shown)} of {len(self.rows)} parts shown. Ctrl or Shift selects several.")
 

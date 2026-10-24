@@ -6,6 +6,7 @@ watching the files for a save after the click.
 from tkinter import messagebox
 
 from litterbox.gui.dialogs import confirm_dialogs
+from litterbox.gui.dialogs import text_input
 from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import solidworks_text
 from litterbox.parts import checkin
@@ -19,10 +20,13 @@ class CheckinActions:
     click. One part of the main window (App)."""
 
     def _ask_comment_and_check_in(self, action, plan, allow_unchanged=frozenset()):
-        """Ask for a comment, then check in (or save progress on) the planned parts."""
+        """Ask for a comment (the window lists the planned parts), then check in (or save progress on) them."""
         keep_lock = action == "save"
-        comment = self._ask("Describe your changes:\n\n" + checkin_text.CHECKIN_CAUTION,
-                            "Save Progress" if keep_lock else "Check In")
+        title = "Save Progress" if keep_lock else "Check In"
+        comment = text_input.CommentDialog(
+            self, title, checkin_text.comment_heading(len(plan.targets), keep_lock),
+            checkin_text.comment_lines(plan.targets, self.rows_by_pn), checkin_text.CHECKIN_CAUTION,
+            "Describe your changes:", title).show()
         if comment is None:                                  # cancelled
             return
         comment = comment.strip() or "Update"

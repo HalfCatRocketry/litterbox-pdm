@@ -1,9 +1,10 @@
 """
 folder_picker_dialog.py - Add to Folder...: choose the folder to put the ticked parts (or documents, or ECOs) in,
 among the folders you may change (Personal, Team, your projects'), or make a new one first with New Folder....
+Choosing a top (Personal, Team, a project) puts them there, outside every folder.
 
     chosen = FolderPickerDialog(parent, places, count).show()
-    # None if cancelled, else (Place, folder id, [the changes that make new folders first])
+    # None if cancelled, else (Place, folder id ("" for the top), [the changes that make new folders first])
     # places: [(folders.folder_actions.Place, title, tree)]
 """
 
@@ -109,7 +110,7 @@ class FolderPickerDialog(modal_dialog.ModalDialog):
 
     def _ok(self):
         top, folder = self._chosen()
-        if top is None or not folder:
+        if top is None:
             self.problem.configure(text="Choose a folder (or make one with New Folder...).")
             return
         place, _title, _tree = self.places[top]

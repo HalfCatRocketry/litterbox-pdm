@@ -54,5 +54,15 @@ class TestMessages(unittest.TestCase):
         self.assertIn("full text is in the log", long_text)
 
 
+class TestCommentWindow(unittest.TestCase):
+    def test_it_lists_what_is_checked_in(self):
+        from types import SimpleNamespace
+        rows = {PN("HCR", 1, 1): SimpleNamespace(name="Bracket", revision="B")}
+        self.assertEqual(checkin_text.comment_lines([PN("HCR", 1, 1), PN("HCR", 2, 1)], rows),
+                         ["HCR-00001-001   Rev B   Bracket", "HCR-00002-001"])
+        self.assertEqual(checkin_text.comment_heading(2, False), "Check in these 2:")
+        self.assertEqual(checkin_text.comment_heading(1, True), "Save progress on this one:")
+
+
 if __name__ == "__main__":
     unittest.main()

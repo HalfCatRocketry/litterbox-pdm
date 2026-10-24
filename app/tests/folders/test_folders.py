@@ -65,6 +65,24 @@ class Model(unittest.TestCase):
         self.assertEqual(folder_model.build(folder_model.to_ops(tree)), tree)
         self.assertEqual([f.name for f in folder_model.children(tree)], ["A", "B"])
 
+    def test_items_at_the_top_of_a_tree(self):
+        tree = tree_with("Brackets")
+        self.assertFalse(folder_model.apply(tree, {"op": "take", "folder": "", "items": ["x"]}))
+        self.assertEqual(list(tree), ["f1"])                                     # nothing made for a take
+        self.assertTrue(folder_model.apply(tree, {"op": "put", "folder": "", "items": ["HCR-00001-001"]}))
+        self.assertEqual(folder_model.holder(tree, "").items, ["HCR-00001-001"])
+        self.assertEqual([f.name for f in folder_model.children(tree)], ["Brackets"])    # the top isn't a folder
+        self.assertEqual([f.id for f in folder_model.folders(tree)], ["f1"])
+        for refused in ({"op": "delete", "folder": ""}, {"op": "rename", "folder": "", "name": "x"},
+                        {"op": "move", "folder": "", "parent": "f1"}, {"op": "add", "folder": "", "parent": "",
+                                                                       "name": "x"}):
+            self.assertFalse(folder_model.apply(tree, refused))
+        self.assertIn("f1", tree)
+        self.assertEqual(folder_model.build(folder_model.to_ops(tree)), tree)
+        self.assertTrue(folder_model.apply(tree, {"op": "delete", "folder": "f1"}))
+        self.assertEqual(folder_model.holder(tree, "").items, ["HCR-00001-001"])     # deleting a folder leaves it
+        self.assertEqual(folder_model.path_of(tree, ""), [])
+
     def test_names(self):
         self.assertEqual(folder_model.check_name("  Brackets   left "), "Brackets left")
         for bad in ("", "   ", "x" * (folder_model.NAME_MAX + 1)):
@@ -92,6 +110,13 @@ class Actions(unittest.TestCase):
         self.assertIsNone(folder_actions.put_items(tree, "f1", ["A"]))
         self.assertEqual(folder_actions.take_items(tree, "f1", ["A", "Z"])["items"], ["A"])
         self.assertIsNone(folder_actions.take_items(tree, "f1", ["Z"]))
+        top = folder_actions.put_items(tree, "", ["A"])                       # straight in the top
+        self.assertEqual(top, {"op": "put", "folder": "", "items": ["A"]})
+        folder_model.apply(tree, top)
+        self.assertIsNone(folder_actions.put_items(tree, "", ["A"]))
+        self.assertEqual(folder_actions.take_items(tree, "", ["A"])["items"], ["A"])
+        with self.assertRaises(FolderError):
+            folder_actions.rename_folder(tree, "", "Top")
 
     def test_personal_changes_go_in_their_file(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -215,6 +240,18 @@ class HomeRows(unittest.TestCase):
         self.assertEqual([r.text for r in self.rows("brack")],
                          ["Personal", "Mine", "HCR-00001-001   Bracket", "Team", "Projects", "Rover"])
         self.assertIn("Nuts", [r.text for r in self.rows("nuts")])
+
+    def test_folders_come_first_then_parts_documents_and_ecos(self):
+        folder_model.apply(self.personal, {"op": "put", "folder": "f1", "items": ["PROP-0001", "HCR-00003-001"]})
+        folder_model.apply(self.personal, {"op": "add", "folder": "z", "parent": "f1", "name": "Zinc"})
+        folder_model.apply(self.personal, {"op": "put", "folder": "", "items": ["ECO-0001", "HCR-00009-001"]})
+        rows = self.rows()
+        texts = [r.text for r in rows[:rows.index(next(r for r in rows if r.text == "Team"))]]
+        self.assertEqual(texts, ["Personal", "Mine", "Zinc", "HCR-00001-001   Bracket", "HCR-00003-001", "PROP-0001",
+                                 "ECO-0002   Lighter frame", "HCR-00009-001", "ECO-0001"])
+        top_item = next(r for r in rows if r.item == "HCR-00009-001")
+        self.assertEqual((top_item.parent, top_item.folder), ("top:personal", ""))
+        self.assertEqual(folder_text.parse_iid(top_item.iid), ("item", PERSONAL, "", "HCR-00009-001"))
 
     def test_what_an_item_points_at(self):
         self.assertEqual(folder_text.parse_item("HCR-00001-001"), ("part", PN("HCR", 1, 1)))

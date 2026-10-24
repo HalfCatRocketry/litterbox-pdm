@@ -16,6 +16,10 @@ vault, as changes nobody ever edits). A tree is built by applying changes in ord
     {op: put, folder: <id>, items: [HCR-00042-001]}     added once, at the end
     {op: take, folder: <id>, items: [HCR-00042-001]}
 
+Items can also sit at the top of a tree, outside every folder: put and take with folder "" (ROOT). The tree keeps
+them in a holder under that key (parent None, so it is never one of the folders); an older Litterbox skips those
+changes, as it does any change about a folder it doesn't have.
+
 A change about a folder that is gone (someone deleted it at the same time) does nothing, so two people working at
 once never break each other's tree.
 """
@@ -24,6 +28,7 @@ import secrets
 from dataclasses import dataclass, field
 
 NAME_MAX = 80
+ROOT = ""                   # the top of a tree, as a place to put items
 OPS = ("add", "rename", "move", "delete", "put", "take")
 
 
@@ -53,6 +58,18 @@ def check_name(text):
     return name
 
 
+def holder(tree, folder_id):
+    """The folder that holds a folder's items (ROOT: the top's holder, empty if nothing is there yet), or None."""
+    if folder_id == ROOT:
+        return tree.get(ROOT) or Folder(ROOT, "", None)
+    return tree.get(folder_id)
+
+
+def folders(tree):
+    """The folders of a tree (not the top's holder)."""
+    return [f for f in tree.values() if f.id != ROOT]
+
+
 def below(tree, folder_id):
     """The ids of a folder and every folder below it."""
     found, todo = [], [folder_id]
@@ -68,6 +85,10 @@ def apply(tree, op):
     """Make one change to `tree` ({id: Folder}). Returns True if it changed anything; a change that can't apply any
     more (its folder is gone, a move into itself) is skipped."""
     kind, folder_id = op.get("op"), str(op.get("folder") or "")
+    if folder_id == ROOT:                               # the top holds items, nothing else
+        if kind != "put" and not (kind == "take" and ROOT in tree):
+            return False
+        tree.setdefault(ROOT, Folder(ROOT, "", None))
     folder = tree.get(folder_id)
     if kind == "add":
         parent = str(op.get("parent") or "")
@@ -81,7 +102,7 @@ def apply(tree, op):
         folder.name = str(op.get("name") or folder.name)
     elif kind == "move":
         parent = str(op.get("parent") or "")
-        if (parent and parent not in tree) or parent in below(tree, folder_id):
+        if (parent and parent not in tree) or (parent and parent in below(tree, folder_id)):
             return False
         folder.parent = parent
     elif kind == "delete":
@@ -112,7 +133,7 @@ def children(tree, parent=""):
 
 def path_of(tree, folder_id):
     """["Top", "Inner", "Folder"]: the names from the top down to the folder."""
-    names, current = [], tree.get(folder_id)
+    names, current = [], tree.get(folder_id) if folder_id != ROOT else None
     while current is not None and len(names) <= len(tree):
         names.insert(0, current.name)
         current = tree.get(current.parent)
@@ -127,7 +148,7 @@ def name_taken(tree, parent, name, but=None):
 def to_ops(tree):
     """Changes that build this tree from nothing (parents first): how a Personal tree is saved."""
     ops, placed = [], set()
-    pending = list(tree.values())
+    pending = folders(tree)
     while pending:
         ready = [f for f in pending if not f.parent or f.parent in placed]
         if not ready:                                  # a parent that isn't there: put the rest at the top
@@ -140,4 +161,7 @@ def to_ops(tree):
                 ops.append({"op": "put", "folder": folder.id, "items": list(folder.items)})
             placed.add(folder.id)
             pending.remove(folder)
+    top = tree.get(ROOT)
+    if top is not None and top.items:
+        ops.append({"op": "put", "folder": ROOT, "items": list(top.items)})
     return ops

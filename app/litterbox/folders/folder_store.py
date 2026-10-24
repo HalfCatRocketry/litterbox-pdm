@@ -110,14 +110,12 @@ def _next_time(repo):
     """Now, or just after the newest change here if that is later: Windows' clock can give two quick changes the
     same time, and changes apply in the order of their names."""
     when = _now()
-    files = change_files(repo)
-    if files:
+    for path in reversed(change_files(repo)):           # the newest named by time (skipping any other name)
         try:
-            newest = datetime.strptime(files[-1].name.split("-", 1)[0], STAMP).replace(tzinfo=timezone.utc)
+            newest = datetime.strptime(path.name.split("-", 1)[0], STAMP).replace(tzinfo=timezone.utc)
         except ValueError:
-            return when
-        if newest >= when:
-            return newest + timedelta(microseconds=1)
+            continue
+        return newest + timedelta(microseconds=1) if newest >= when else when
     return when
 
 

@@ -26,7 +26,7 @@ class Place:
 
 
 def _folder(tree, folder_id):
-    folder = tree.get(folder_id)
+    folder = tree.get(folder_id) if folder_id != folder_model.ROOT else None
     if folder is None:
         raise FolderError("That folder isn't there any more. Someone may have just deleted it.")
     return folder
@@ -64,15 +64,21 @@ def delete_folder(tree, folder_id):
     return {"op": "delete", "folder": folder_id}
 
 
+def _holder(tree, folder_id):
+    """What holds a folder's items: the folder, or the top of the tree for ROOT."""
+    return folder_model.holder(tree, folder_id) if folder_id == folder_model.ROOT else _folder(tree, folder_id)
+
+
 def put_items(tree, folder_id, items):
-    """The change that adds these items (those not in the folder already), or None if they all are."""
-    folder = _folder(tree, folder_id)
+    """The change that adds these items (those not in the folder, or at the top for ROOT, already), or None if
+    they all are."""
+    folder = _holder(tree, folder_id)
     new = [str(item) for item in dict.fromkeys(items) if str(item) not in folder.items]
     return {"op": "put", "folder": folder_id, "items": new} if new else None
 
 
 def take_items(tree, folder_id, items):
-    folder = _folder(tree, folder_id)
+    folder = _holder(tree, folder_id)
     gone = [str(item) for item in items if str(item) in folder.items]
     return {"op": "take", "folder": folder_id, "items": gone} if gone else None
 
