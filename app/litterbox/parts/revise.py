@@ -6,8 +6,7 @@ under the new letter. The released revision stays as it was.
 import uuid
 from dataclasses import dataclass, field
 
-from litterbox.cad.solidworks import com
-from litterbox.cad.solidworks import sw_backend
+from litterbox.cad import cad_programs
 from litterbox.git import lfs_download
 from litterbox.git import lfs_locks
 from litterbox.git import read_only
@@ -31,7 +30,7 @@ class RevisePlan:
     revision: str               # the revision that is being revised
     new_revision: str
     files: list                 # all files of the revision being revised
-    copies: list                # [(old, new)] the SolidWorks files that will be copied
+    copies: list                # [(old, new)] the CAD files that will be copied
     kept: list = field(default_factory=list)       # files that stay with the old revision (exports, etc.)
     problems: list = field(default_factory=list)
 
@@ -82,10 +81,10 @@ def revise(repo, pn, reason, backend=None, log=print):
     locked, new_files, journal = [], [], None
     owns_backend = backend is None
     if owns_backend:
-        backend = sw_backend.SolidWorksBackend()
+        backend = cad_programs.Backends()
     pushed = False
     try:
-        with com.com_thread():
+        with cad_programs.session():
             lfs_locks.lock(repo, record_path, pn)                  # whoever gets this lock gets the revision
             locked.append(record_path)
             remote.pull(repo)                                   # lock first, THEN pull

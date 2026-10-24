@@ -1,6 +1,6 @@
 """
 team_admin.py - what the Team screen's buttons do: who am I, setting up the team, people, roles,
-handing over the Owner role, vault settings, projects, workflows, and saving the draft.
+handing over the Owner role, vault settings, projects, the team's Toolbox, workflows, and saving the draft.
 """
 
 from tkinter import messagebox
@@ -9,6 +9,7 @@ from litterbox.cad import solidworks_versions
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui.dialogs import projects_dialog
+from litterbox.gui.dialogs import toolbox_dialog
 from litterbox.gui.dialogs import vault_settings_dialog
 from litterbox.gui.dialogs.team import person_dialog
 from litterbox.gui.dialogs.team import roles_dialog
@@ -16,6 +17,7 @@ from litterbox.gui.dialogs.workflow import workflows_dialog
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import project_text
 from litterbox.gui.logic import team_text
+from litterbox.gui.logic import toolbox_text
 from litterbox.gui.logic import workflow_editor
 from litterbox.team import team_editing
 from litterbox.team import team_identity
@@ -24,6 +26,7 @@ from litterbox.team import team_setup
 from litterbox.vault import config
 from litterbox.vault import project_admin
 from litterbox.vault import settings_admin as vault_settings
+from litterbox.vault import toolbox_admin
 from litterbox.workflows import workflow_editing
 from litterbox.workflows import workflow_templates
 
@@ -157,7 +160,7 @@ class TeamAdmin:
                        "require_signatures": config.get_require_signatures(repo),
                        "assembly_variant_start": config.get_assembly_variant_start(repo),
                        "solidworks_version": config.get_solidworks_version(repo),
-                       "currency": config.get_currency(repo)}
+                       "currency": config.get_currency(repo), "toolbox": config.get_toolbox_rule(repo)}
         except config.ConfigError as e:
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
@@ -177,7 +180,39 @@ class TeamAdmin:
                 "SolidWorks version", team_text.solidworks_version_prompt(changes["solidworks_version"], installed),
                 parent=window):
             return
+        if changes.get("toolbox") and not messagebox.askokcancel(
+                "SolidWorks Toolbox parts", team_text.toolbox_rule_prompt(changes["toolbox"]), parent=window):
+            return
         self.run_task(lambda: vault_settings.edit(repo, **changes), "Vault settings saved")
+
+    def manage_toolbox(self, window):
+        """Toolbox...: the team's SolidWorks Toolbox. Everyone may look at it and download it; Admins and the Owner
+        copy one in, make it changeable and upload changes (vault/toolbox_admin.py)."""
+        repo = self.repo()
+        if not repo:
+            return
+        try:
+            status = toolbox_admin.status(repo)
+        except (LitterboxError, config.ConfigError) as e:
+            messagebox.showwarning("Toolbox", str(e), parent=window)
+            return
+        admin = self.identity.allows(toolbox_admin.PERMISSION)[0]
+        chosen = toolbox_dialog.ToolboxDialog(window, status, admin).show()
+        if not chosen:
+            return
+        action, folder = chosen
+        if action == "copy_in" and not messagebox.askokcancel(
+                "Toolbox", toolbox_text.copy_in_question(folder, status), parent=window):
+            return
+        work = {"download": lambda: toolbox_admin.download(repo),
+                "copy_in": lambda: toolbox_admin.copy_in(repo, folder),
+                "open": lambda: toolbox_admin.open_for_changes(repo),
+                "upload": lambda: toolbox_admin.upload(repo)}[action]
+
+        def done(result):
+            self.note = toolbox_text.done_text(action, result)
+            self._say(self.note)
+        self.run_task(work, "", on_success=done, label=toolbox_text.JOB_LABELS[action])
 
     def manage_projects(self, window):
         """Projects...: the org's projects you may see. Admins and the Owner add, change and delete them; a

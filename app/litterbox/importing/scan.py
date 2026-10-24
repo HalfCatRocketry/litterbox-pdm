@@ -33,17 +33,17 @@ import os
 import re
 from collections import defaultdict
 
+from litterbox.core import file_types
 from litterbox.importing import manifest as mf
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.util import file_hash
 
 
-# extension (lowercase) -> (kind, display type). Add other CAD programs here.
+# extension (lowercase) -> (kind, display type): every CAD program's files (core/file_types.py), and exports.
 FORMATS = {
-    ".sldprt": ("part", "SLDPRT"),
-    ".sldasm": ("assembly", "SLDASM"),
-    ".slddrw": ("drawing", "SLDDRW"),
+    **{ext: (kind, ext[1:].upper()) for kinds in file_types.PROGRAMS.values() for kind, exts in kinds.items()
+       for ext in exts},
     ".step": ("export", "STEP"),
     ".stp": ("export", "STP"),
     ".pdf": ("export", "PDF"),

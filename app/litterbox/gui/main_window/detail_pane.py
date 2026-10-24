@@ -160,7 +160,7 @@ class DetailPane:
                 if not (outdated or counts_outdated):
                     return (bom_text.table(found, mode, money), bom_text.note(found, assembly, cost=cost, currency=money),
                             False, editable, removable)
-                installed = reference_reader.can_start_solidworks()
+                installed = reference_reader.can_start_cad_program()
                 note = bom_text.note(found, True, outdated, counts_outdated, cost, money)
                 if not installed:
                     note += " " + bom_text.update_button_text(False)

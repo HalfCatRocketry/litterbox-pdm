@@ -52,7 +52,7 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
         self.tabs.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 6))
         self.panes = {}
         for action in self.actions:
-            tab = self.tabs.add(workflow_templates.label_of(action))
+            tab = self.tabs.add(workflow_templates.label_of(action).replace("document", "doc"))     # short tabs
             tab.columnconfigure(0, weight=1)
             tab.rowconfigure(2, weight=1)
             self.panes[action] = tab

@@ -4,29 +4,15 @@ read-only. It only looks: it never starts SolidWorks, opens, saves or closes any
 open documents writable after a check-out).
 
     sw = sw_documents.attach()                  # None if SolidWorks isn't running
-    docs = sw_documents.open_documents(sw)      # {normalised path: OpenDocument}
+    found = sw_documents.open_documents(sw)     # {open_documents.key(path): OpenDocument}
 
 Documents SolidWorks loaded only as parts of an open assembly count as open too: SolidWorks holds them as well.
 Tried with SolidWorks 2024 (the reload at check-out, 2026-10-22); the watcher's use of it not yet (docs/REMINDERS.md).
 """
 
-import os
-from dataclasses import dataclass
-
+from litterbox.cad import open_documents as docs
+from litterbox.cad.open_documents import OpenDocument
 from litterbox.cad.solidworks import com
-
-
-@dataclass(frozen=True)
-class OpenDocument:
-    path: str                   # as SolidWorks gives it
-    unsaved: bool               # it has changes that are not saved yet
-    read_only: bool             # SolidWorks opened it read-only
-    visible: bool               # shown in a window (False: loaded as part of an assembly)
-
-
-def key(path):
-    """A path in the form used to compare paths: absolute, and on Windows lower case with backslashes."""
-    return os.path.normcase(os.path.abspath(str(path)))
 
 
 def attach():
@@ -60,7 +46,7 @@ def each_document(sw):
 
 
 def open_documents(sw):
-    """{key(path): OpenDocument} for every document SolidWorks has open (see each_document)."""
-    return {key(path): OpenDocument(path, _flag(doc, "GetSaveFlag"), _flag(doc, "IsOpenedReadOnly"),
+    """{open_documents.key(path): OpenDocument} for every document SolidWorks has open (see each_document)."""
+    return {docs.key(path): OpenDocument(path, _flag(doc, "GetSaveFlag"), _flag(doc, "IsOpenedReadOnly"),
                                     _flag(doc, "Visible", default=True))
             for doc, path in each_document(sw)}

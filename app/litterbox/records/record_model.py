@@ -15,6 +15,7 @@ from litterbox.core.revision_letters import FIRST_REVISION, check_revision, revi
 from litterbox.records import purchasing_info
 from litterbox.records import record_materials
 from litterbox.records import record_migrations
+from litterbox.records import record_other_files
 
 
 STATUS_IN_WORK = "in_work"
@@ -110,6 +111,7 @@ _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "draft", "references", "references_outdated", "history",
     "purchasing", "quantities", "exports", "kind", "bom_items", "documents", "number", "doc_type", "materials",
+    "other_files",
 }
 
 
@@ -149,6 +151,7 @@ class Record:
     exports: dict = field(default_factory=dict)     # revision -> the STEP and PDF Litterbox made (records/record_exports.py)
     documents: dict = field(default_factory=dict)   # revision -> the documents linked to it, e.g. {'A': ['PROP-0001']}
     materials: dict = field(default_factory=dict)   # revision -> its material from SolidWorks (records/record_materials.py)
+    other_files: dict = field(default_factory=dict)  # revision -> files it uses that aren't parts (record_other_files.py)
     doc_type: str = ""          # a document's type key (documents/doc_types.py); "" for a part
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
 
@@ -206,6 +209,9 @@ class Record:
             data["quantities"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
                                   for rev, counts in sorted(self.quantities.items(),
                                                             key=lambda item: revision_number(item[0]))}
+        if self.other_files:
+            data["other_files"] = record_other_files.to_data(dict(sorted(
+                self.other_files.items(), key=lambda item: revision_number(item[0]))))
         if self.bom_items:
             data["bom_items"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
                                  for rev, counts in sorted(self.bom_items.items(),
@@ -345,6 +351,11 @@ class Record:
             raise RegistryError(f"{pn}: {e}")
 
         try:
+            other_files = record_other_files.parse(data.get("other_files"))
+        except ValueError as e:
+            raise RegistryError(f"{pn}: {e}")
+
+        try:
             purchasing = purchasing_info.clean(data.get("purchasing"))
         except purchasing_info.PurchasingError as e:
             raise RegistryError(f"{pn}: {e}")
@@ -381,6 +392,7 @@ class Record:
             exports=exports,
             documents=documents,
             materials=materials,
+            other_files=other_files,
             doc_type=_as_text(data.get("doc_type")),
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},
         )

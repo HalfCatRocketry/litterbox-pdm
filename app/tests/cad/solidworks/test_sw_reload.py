@@ -121,9 +121,9 @@ class Wiring(unittest.TestCase):
         app._warn_open_files = lambda rels: self.warned.append(rels)
         app.run_task = lambda work, done, on_success=None, **kw: on_success(work())
         self.app = app
-        replace(self, self.gui.sw_reload, "open_read_only",
+        replace(self, sw_reload, "open_read_only",
                 lambda paths: [doc(path, read_only=True) for path in paths if path.endswith("SLDPRT")])
-        replace(self, self.gui.sw_reload, "make_writable",
+        replace(self, sw_reload, "make_writable",
                 lambda paths, reload=(): self.made.append((list(paths), list(reload))) or (list(paths), []))
 
     def test_open_files_become_writable_and_the_rest_are_warned_about(self):
@@ -134,7 +134,7 @@ class Wiring(unittest.TestCase):
         self.assertEqual(self.warned, [["cad/HCR-00005-001_A.SLDPRT"]])  # not open here: the usual note
 
     def test_solidworks_not_running_leaves_just_the_usual_note(self):
-        replace(self, self.gui.sw_reload, "open_read_only", lambda paths: None)
+        replace(self, sw_reload, "open_read_only", lambda paths: None)
         self.app._after_checkout([(self.pn, SimpleNamespace(changed_upstream=[]))])
         self.assertEqual((self.made, self.warned), ([], [[]]))
 

@@ -71,5 +71,68 @@ class CopyingWhenSolidWorksRefuses(unittest.TestCase):
             self.backend(["C:/other.SLDPRT"]).copy(str(part), str(self.dir / "out" / "y.SLDPRT"))
 
 
+class ComponentsAndToolbox(unittest.TestCase):
+    """An assembly's components and which are Toolbox parts are read with one opening, and kept while the file is
+    unchanged. (ToolboxPartType tried with SolidWorks 2024: a Toolbox screw 1, an ordinary part 0.)"""
+
+    def setUp(self):
+        import contextlib
+        import tempfile
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(temp_folders.remove, self.dir)
+        self.asm = self.dir / "HCR-00002-500_A.SLDASM"
+        self.asm.write_bytes(b"asm")
+        self.opened = 0
+
+        class Component:
+            def __init__(inner, path, kind, suppressed=False):
+                inner.path, inner.kind, inner.suppressed = path, kind, suppressed
+
+            def GetPathName(inner):
+                return inner.path
+
+            def IsSuppressed(inner):
+                return inner.suppressed
+
+            def ExcludeFromBOM(inner):
+                return False
+
+            def IsEnvelope(inner):
+                return False
+
+            def GetModelDoc2(inner):
+                if inner.suppressed:
+                    return None
+                return type("Doc", (), {"Extension": type("Ext", (), {"ToolboxPartType": inner.kind})()})()
+
+        class Model:
+            def GetComponents(inner, top_only):
+                return [Component("C:/v/cad/HCR-00001-001_A.SLDPRT", 0),
+                        Component("C:/SOLIDWORKS Data/browser/screw.sldprt", 1),
+                        Component("C:/v/cad/HCR-00003-001_A.SLDPRT", 2),
+                        Component("C:/SOLIDWORKS Data/browser/nut.sldprt", 1, suppressed=True)]
+
+        @contextlib.contextmanager
+        def opened(path, doc_type):
+            self.opened += 1
+            yield Model()
+
+        self.backend = sw_backend.SolidWorksBackend()
+        self.backend._opened = opened
+
+    def test_one_opening_gives_both_and_a_copied_toolbox_part_is_a_part(self):
+        self.assertEqual(self.backend.library_components(str(self.asm)), ["C:/SOLIDWORKS Data/browser/screw.sldprt"])
+        self.assertEqual([state for _file, state in self.backend.components(str(self.asm))],
+                         ["counted", "counted", "counted", "suppressed"])
+        self.assertEqual(self.opened, 1)
+
+    def test_a_changed_file_is_read_again(self):
+        import os
+        self.backend.components(str(self.asm))
+        os.utime(self.asm, ns=(1, 1))
+        self.backend.library_components(str(self.asm))
+        self.assertEqual(self.opened, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

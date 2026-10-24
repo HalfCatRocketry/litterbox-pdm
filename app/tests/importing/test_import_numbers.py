@@ -7,7 +7,7 @@ from unittest import mock
 from tests.support.vault_fixture import SKIP_ON_WINDOWS
 from litterbox.vault import config_write
 from litterbox.parts import create
-from litterbox.cad.solidworks import sw_backend
+from litterbox.cad import cad_programs
 from litterbox.cli import import_files as cli_import
 from litterbox.importing import import_errors
 from litterbox.importing import import_finish
@@ -226,7 +226,7 @@ class ImportNumbers(ImportFlowFixture, unittest.TestCase):
     def test_command_line_dry_run_and_recover(self):
         self.make_manifest()
         with self.user("Alex"):
-            with mock.patch.object(sw_backend, "SolidWorksBackend", lambda: self.fake):
+            with mock.patch.object(cad_programs, "Backends", lambda: self.fake):
                 self.assertEqual(cli_import.main([str(self.a), str(self.manifest_path), "--dry-run"]), 0)
                 self.assertEqual(cli_import.main([str(self.a), "--recover"]), 0)
                 self.assertEqual(cli_import.main([str(self.a), str(self.manifest_path)]), 0)

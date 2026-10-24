@@ -7,9 +7,9 @@ from pathlib import Path
 from tkinter import messagebox
 
 from litterbox import diagnostics
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.cad import solidworks_versions
-from litterbox.cad.solidworks import sw_reload
+from litterbox.cad import cad_programs
 from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import solidworks_text
@@ -46,13 +46,13 @@ class CheckoutActions:
 
     def _after_checkout(self, done):
         """After a check-out (`done`: [(pn, CheckoutResult)]): files of these parts that SolidWorks already had open
-        read-only become writable (cad/solidworks/sw_reload.py), so they can be saved without reloading by hand.
+        read-only become writable (cad_programs.make_writable), so they can be saved without reloading by hand.
         Then the note about files the check-out updated, for those that weren't just reloaded. Best effort: nothing
         here can undo or fail the check-out."""
         repo = self.repo()
         changed = [path for _pn, result in done for path in result.changed_upstream]
         files = [rel for pn, _result in done for rel in self._working_files(pn)
-                 if file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS]
+                 if file_types.extension(rel) in file_types.CAD_EXTENSIONS]
         if not files:
             self._warn_open_files(changed)
             return
@@ -60,7 +60,7 @@ class CheckoutActions:
 
         def look():
             try:
-                return sw_reload.open_read_only(paths)
+                return cad_programs.open_read_only(paths)
             except Exception as e:                      # SolidWorks busy or gone: say nothing, just log it
                 diagnostics.LOG(f"Couldn't ask SolidWorks what it has open after a check-out: {e}")
                 return None
@@ -95,7 +95,7 @@ class CheckoutActions:
             self._say(self.note, "warn" if failed else "normal")
             self._warn_open_files(solidworks_text.still_old(repo, changed, made))
 
-        self.run_task(lambda: sw_reload.make_writable(wanted, reload), "", on_success=finished, refresh=False,
+        self.run_task(lambda: cad_programs.make_writable(wanted, reload), "", on_success=finished, refresh=False,
                       is_refresh=True, label="Making open files writable in SolidWorks")
 
     def _older_solidworks_ok(self):

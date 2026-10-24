@@ -7,7 +7,7 @@ such as .STEP and .PDF) are copied as they are.
 import os
 import shutil
 
-from litterbox.cad import file_types
+from litterbox.core import file_types
 
 from litterbox.importing import import_errors
 from litterbox.importing import import_paths
@@ -15,7 +15,7 @@ from litterbox.records import record_store
 
 
 def is_solidworks(path):
-    return import_paths.ext_of(path) in file_types.SOLIDWORKS_EXTENSIONS
+    return import_paths.ext_of(path) in file_types.CAD_EXTENSIONS
 
 
 def check_cancel(cancel):

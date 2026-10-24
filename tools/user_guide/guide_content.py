@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.5.7"
+VERSION = "0.6.0"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -98,10 +98,10 @@ BLOCKS = [
       "update of Litterbox can't undo them. Decide these before the first part:"),
 ("table", ["Decision", "Recommendation"], [
     ["Toolbox fasteners", "Don't use SolidWorks Toolbox. Model each fastener as a part of its own, so it has a part "
-                          "number, revisions, and purchasing info like any other part. Toolbox files are kept "
-                          "outside the vault, and a released assembly keeps pointing at wherever they were. If you "
-                          "must use Toolbox, keep the Toolbox folder as a controlled document (in a .zip), and make "
-                          "sure every member installs that copy in the same folder."],
+                          "number, revisions, and purchasing info like any other part. A new vault refuses Toolbox "
+                          "parts (the Toolbox rule, in Vault settings). If you must use Toolbox, an Admin keeps the "
+                          "team's own copy in the vault (see The team's Toolbox), and everyone points SolidWorks at "
+                          "it."],
     ["Configurations and design tables", "Don't keep several configurations in one file: model each one as a "
                                          "separate part. Litterbox gives each file one part number, one material, "
                                          "and one BOM line, and a file can't be split into several part numbers "
@@ -140,7 +140,7 @@ BLOCKS = [
     "**Roles...** for the jobs people do (Responsible Engineer, Manufacturing, Quality, Manager, Chief, and so on). "
     "Workflows ask for sign-offs by role. **Add the standard roles** adds a common set.",
     "**Part Workflows...** and **Doc Workflows...** if actions need sign-offs (see Sign-off workflows and ECOs).",
-    "**Projects...**, **Document Types...**, and **Vault Settings...** as needed.",
+    "**Projects...**, **Document Types...**, **Toolbox...**, and **Vault Settings...** as needed.",
     "**Save** at the top right. Changes to people, roles, and workflows are drafted on the Team screen and uploaded "
     "together.",
 ]),
@@ -235,9 +235,11 @@ BLOCKS = [
       "the save could be partly uploaded; that part stays checked out, and you check it in again."),
 ("tip", "Don't save parts in SolidWorks while they are being checked in. Wait until the status bar says Ready."),
 ("p", "When an assembly is checked in with SolidWorks open, Litterbox reads which parts it uses and how many of "
-      "each. When a part is checked in with SolidWorks open, Litterbox reads its material. Without SolidWorks the "
-      "check-in still works, and Litterbox marks these as needing an update (see Assemblies, references, and BOMs, "
-      "and Materials)."),
+      "each, and which Toolbox parts and files from outside the vault it uses. When a part is checked in with "
+      "SolidWorks open, Litterbox reads its material. Without SolidWorks the check-in still works, and Litterbox marks "
+      "these as needing an update (see Assemblies, references, and BOMs, and Materials)."),
+("p", "If the team has a **Toolbox rule** (see Toolbox parts), Check In refuses an assembly that breaks it, says "
+      "which files are the problem, and leaves it checked out to you."),
 ("h2", "Getting other people's changes"),
 ("p", "**Get Latest** (Vault menu, or the change count in the header) downloads what others have uploaded. It "
       "updates the files you already have and doesn't fetch the rest. If it replaces a file that is open in "
@@ -320,6 +322,21 @@ BLOCKS = [
       "says it needs updating, and **Update BOM** counts it again (starting SolidWorks in the background if needed)."),
 ("p", "When an assembly is released, Litterbox saves its indented BOM beside the model as "
       "HCR-100010-500_A_BOM.csv, as a fixed record of the released revision."),
+("h2", "Toolbox parts"),
+("p", "An Admin chooses the team's **Toolbox rule** in Team > Vault Settings...:"),
+("table", ["Rule", "An assembly may use"], [
+    ["No Toolbox parts", "Only parts in the vault: no SolidWorks Toolbox parts, and no files from outside the vault. "
+                         "A new vault starts with this rule."],
+    ["Only the team's Toolbox", "Toolbox parts from the team's Toolbox in the vault (see The team's Toolbox), and no "
+                                "other files from outside the vault."],
+    ["Don't check", "Anything. Vaults made before Litterbox 0.6.0 start with this."],
+], [1.9, 4.6]),
+("p", "Check In refuses an assembly that breaks the rule, and so does **Release**, since a rule can be set after an "
+      "assembly was checked in. An assembly checked in without SolidWorks open hasn't been looked at, so Release asks "
+      "for **Update BOM** first (on the BOM tab), which reads it with SolidWorks."),
+("p", "SolidWorks takes every Toolbox part from the Toolbox folder it is set to use (Tools > Options > System Options "
+      "> Hole Wizard/Toolbox), whatever folder the assembly was saved with. So with Only the team's Toolbox, set "
+      "SolidWorks to the team's folder once on each computer. Litterbox says so after the first refresh if it isn't."),
 ("h2", "Non-CAD parts and kits"),
 ("p", "New Part and New Assembly have a **Kind**: CAD or **Non-CAD**. A non-CAD part (paint, glue, wire, raw "
       "stock, labels) has a part number, revisions, a lifecycle, and purchasing info, but no files."),
@@ -449,9 +466,9 @@ BLOCKS = [
 ("h2", "People and access"),
 ("table", ["Access", "Permissions"], [
     ["Owner", "Everything, plus renaming the org and transferring ownership. There is exactly one Owner."],
-    ["Admin", "Manage people, roles, workflows, projects, document types, and vault settings; override workflows; "
-              "break a checkout; remake released STEP/PDF files; link documents to released parts. Admins can work "
-              "in every project, restricted or hidden."],
+    ["Admin", "Manage people, roles, workflows, projects, document types, the team's Toolbox, and vault settings; "
+              "override workflows; break a checkout; remake released STEP/PDF files; link documents to released "
+              "parts. Admins can work in every project, restricted or hidden."],
     ["Member", "Everyday work: create, check out, check in, release (subject to workflows), and sign off. A "
                "project's Lead can change that project."],
     ["Not listed, or switched off", "Read-only: look, open, and export."],
@@ -473,7 +490,25 @@ BLOCKS = [
     ["SolidWorks version", "The version everyone works in. People with a newer SolidWorks can't check out or "
                            "revise, because SolidWorks upgrades files when it saves them."],
     ["Team's currency", "The symbol costs are shown with."],
+    ["SolidWorks Toolbox parts", "The Toolbox rule (see Toolbox parts). Setting one makes everyone need Litterbox "
+                                 "0.6.0 or newer."],
 ], [1.8, 4.7]),
+("h2", "The team's Toolbox"),
+("p", "With the rule Only the team's Toolbox, the team shares one copy of the SolidWorks Toolbox, kept in the vault's "
+      "**toolbox** folder (C:\\Litterbox\\<vault>\\toolbox). Team > **Toolbox...** shows it: how many files it has, "
+      "how many are downloaded on your computer, and whether your SolidWorks uses it. Everyone can open it and press "
+      "**Download**. Only Admins and the Owner can change it:"),
+("ol", [
+    "**Copy in a Toolbox folder...** makes the team's Toolbox a copy of a Toolbox folder (C:\\SOLIDWORKS Data, say) "
+    "and uploads it. A whole Toolbox is several hundred MB, so this takes a while. Copying in again replaces it.",
+    "Everyone sets SolidWorks to use the team's folder (Tools > Options > System Options > Hole Wizard/Toolbox).",
+    "To add sizes or change Toolbox's settings, press **Let me change it**, make the changes in SolidWorks, then "
+    "press **Upload changes**. Set Toolbox to make a file for each size (Toolbox Settings > User Settings > Create "
+    "Parts), so a new size is a new file rather than a change to a shared one.",
+]),
+("p", "The team's Toolbox is read-only on everyone's computer, and Litterbox refuses to upload a change to it from "
+      "anyone but an Admin or the Owner. An assembly can't be checked in with a Toolbox part that is on your computer "
+      "but not uploaded to the team's Toolbox yet."),
 ("h2", "Vault maintenance"),
 ("ul", [
     "**Vault > Update file rules...** appears when Litterbox has newer rules for which files Git LFS stores and "
@@ -484,8 +519,8 @@ BLOCKS = [
     "at the time are upgraded when they are checked in.",
     "**Vault > Vault Size...** shows how much the vault uses on the host (its history and every version of every "
     "Git LFS file) and how much is downloaded on your computer.",
-    "Some features raise the oldest Litterbox version the vault accepts (workflows, projects, documents, and "
-    "others). Litterbox tells anyone on an older version to update before they upload anything.",
+    "Some features raise the oldest Litterbox version the vault accepts (workflows, projects, documents, the "
+    "Toolbox rule, and others). Litterbox tells anyone on an older version to update before they upload anything.",
 ]),
 
 ("h1", "Importing existing CAD"),
@@ -506,14 +541,14 @@ BLOCKS = [
         "outside the import that point at the old names won't follow them."),
 
 ("h1", "Working with SolidWorks"),
-("p", "Litterbox uses the SolidWorks API to read references, count parts, read materials, copy files at Revise and "
-      "Import, and make STEP and PDF files."),
+("p", "Litterbox uses the SolidWorks API to read references, count parts, find Toolbox parts, read materials, "
+      "copy files at Revise and Import, and make STEP and PDF files."),
 ("ul", [
     "If SolidWorks isn't running when Litterbox needs it, Litterbox starts it **in the background** and closes it "
     "afterwards. If it is running, Litterbox uses it and leaves your open documents as they are.",
     "Check-in only uses a SolidWorks that is already running.",
-    "Litterbox reads your installed SolidWorks version from Windows, without starting it, for the org's version "
-    "check.",
+    "Litterbox reads your installed SolidWorks version and its Toolbox folder from Windows, without starting it, "
+    "for the org's version check and the Toolbox rule.",
     "Litterbox can **watch** what SolidWorks has open (`solidworks_watch: true` in settings.yaml). It then warns "
     "before checking in parts with unsaved changes, and before Get Latest replaces an open file.",
 ]),

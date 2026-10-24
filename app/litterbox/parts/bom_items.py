@@ -12,7 +12,7 @@ Details. A line names the part revision it uses: the part's latest released revi
 never released, as a model's references do.
 """
 
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.core.filenames import file_stem
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks

@@ -8,7 +8,7 @@ change is logged, so it can be checked against what you see in SolidWorks.
 
     watcher = SolidWorksWatcher(on_change=lambda changes: ...)
     watcher.start()
-    watcher.snapshot()          # {key(path): OpenDocument}
+    watcher.snapshot()          # {open_documents.key(path): OpenDocument}
     watcher.stop()
 
 Switched on by `solidworks_watch: true` in settings.yaml (see user/settings.py).
@@ -17,42 +17,11 @@ Switched on by `solidworks_watch: true` in settings.yaml (see user/settings.py).
 import threading
 
 from litterbox import diagnostics
+from litterbox.cad import open_documents
 from litterbox.cad.solidworks import com
 from litterbox.cad.solidworks import sw_documents
 
 POLL_SECONDS = 3.0
-
-
-class Change:
-    """One difference between two snapshots: what happened to which file."""
-    OPENED, CLOSED, MODIFIED, SAVED = "opened", "closed", "has unsaved changes", "saved"
-
-    def __init__(self, what, document):
-        self.what = what
-        self.document = document
-
-    @property
-    def key(self):
-        return sw_documents.key(self.document.path)
-
-    def __repr__(self):
-        return f"Change({self.what!r}, {self.document.path!r})"
-
-
-def differences(old, new):
-    """[Change] between two snapshots, in a steady order."""
-    changes = []
-    for k in sorted(set(old) | set(new)):
-        before, after = old.get(k), new.get(k)
-        if before is None:
-            changes.append(Change(Change.OPENED, after))
-        elif after is None:
-            changes.append(Change(Change.CLOSED, before))
-        elif after.unsaved and not before.unsaved:
-            changes.append(Change(Change.MODIFIED, after))
-        elif before.unsaved and not after.unsaved:
-            changes.append(Change(Change.SAVED, after))
-    return changes
 
 
 class SolidWorksWatcher:
@@ -68,12 +37,12 @@ class SolidWorksWatcher:
         self._complained = False
 
     def snapshot(self):
-        """{key(path): OpenDocument} as of the last look."""
+        """{open_documents.key(path): OpenDocument} as of the last look."""
         with self._lock:
             return dict(self._snapshot)
 
     def is_open(self, path):
-        return sw_documents.key(path) in self.snapshot()
+        return open_documents.key(path) in self.snapshot()
 
     def poll_once(self):
         """Look once (on the calling thread, which must have COM switched on). Returns the changes."""
@@ -90,7 +59,7 @@ class SolidWorksWatcher:
             new = {}
         with self._lock:
             old, self._snapshot = self._snapshot, new
-        changes = differences(old, new)
+        changes = open_documents.differences(old, new)
         if changes and diagnostics.DEBUG:
             for change in changes:
                 diagnostics.LOG(f"SolidWorks: {change.what}: {change.document.path}"

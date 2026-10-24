@@ -17,11 +17,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox import diagnostics
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import com
-from litterbox.cad.solidworks import sw_backend
-from litterbox.cad.solidworks import sw_errors
-from litterbox.cad.solidworks import sw_process
+from litterbox.cad import cad_programs
+from litterbox.cad.cad_errors import CadError
+from litterbox.core import file_types
 from litterbox.core import filenames
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_download
@@ -124,22 +122,25 @@ def jobs_for(repo, pns, kinds, in_vault=False):
 def make(repo, jobs, folder, backend_factory=None, log=diagnostics.LOG):
     """Make every job's files in `folder`, replacing files of the same name. Downloads what SolidWorks needs to
     open them first (an assembly needs its parts). A part that fails is reported in Made.errors and the rest carry
-    on. With no backend_factory, SolidWorks itself is used, and Litterbox closes it again if it started it."""
+    on. With no backend_factory, each file's own CAD program is used (cad/cad_programs.py), and Litterbox closes it
+    again if it started it."""
     result = Made()
     if not jobs:
         return result
     if backend_factory is None:
-        if not sw_process.solidworks_installed():
-            raise sw_errors.SolidWorksError("SolidWorks is not installed on this computer, so it can't make STEP or "
-                                            "PDF files.")
-        backend_factory = sw_backend.SolidWorksBackend
+        sources = [source for job in jobs for source in job.sources.values()]
+        for program in cad_programs.for_files(sources):
+            if not program.installed():
+                raise CadError(f"{program.name} is not installed on this computer, so it can't make STEP or PDF "
+                               "files.")
+        backend_factory = cad_programs.Backends
     needed = sorted({rel for job in jobs for rel in _to_open(repo, job)})
     downloads.download_files(repo, needed, "files to make STEP and PDF files from")
     missing = set(lfs_download.stubs(repo, needed))
     folder = Path(folder)
     work = Path(tempfile.mkdtemp(prefix="litterbox-step-pdf-"))
     try:
-        with com.com_thread():
+        with cad_programs.session():
             backend = backend_factory()
             try:
                 for job in jobs:
@@ -152,9 +153,9 @@ def make(repo, jobs, folder, backend_factory=None, log=diagnostics.LOG):
 
 
 def _to_open(repo, job):
-    """The SolidWorks files SolidWorks needs to open the job's part (not the STEP and PDF files it already has)."""
+    """The CAD files the CAD program needs to open the job's part (not the STEP and PDF files it already has)."""
     return [rel for rel in downloads.files_to_open(repo, job.pn, job.revision)
-            if file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS]
+            if file_types.extension(rel) in file_types.CAD_EXTENSIONS]
 
 
 def _make_one(repo, job, folder, work, backend, missing, result, log):

@@ -2,9 +2,8 @@
 
 import unittest
 
-from litterbox.cad.solidworks import sw_documents
-from litterbox.cad.solidworks import sw_watcher
-from litterbox.cad.solidworks.sw_documents import OpenDocument
+from litterbox.cad import open_documents
+from litterbox.cad.open_documents import OpenDocument
 from litterbox.gui.logic import solidworks_text
 
 REPO = "C:/vault"
@@ -12,7 +11,7 @@ PRT, DRW, ASM = "cad/HCR-00001-001_A.SLDPRT", "cad/HCR-00001-001_A.SLDDRW", "cad
 
 
 def snapshot(*docs):
-    return {sw_documents.key(f"{REPO}/{rel}"): OpenDocument(f"{REPO}/{rel}", unsaved, False, True)
+    return {open_documents.key(f"{REPO}/{rel}"): OpenDocument(f"{REPO}/{rel}", unsaved, False, True)
             for rel, unsaved in docs}
 
 
@@ -34,8 +33,8 @@ class Text(unittest.TestCase):
 
     def test_a_queued_part_opened_or_saved_is_warned_about(self):
         snap = snapshot((PRT, False))
-        opened = sw_watcher.differences({}, snap)
-        saved = sw_watcher.differences(snapshot((PRT, True)), snap)
+        opened = open_documents.differences({}, snap)
+        saved = open_documents.differences(snapshot((PRT, True)), snap)
         busy = {"HCR-00001-001": "Checking in 1 part"}
         files = {"HCR-00001-001": [PRT, DRW]}.get
         notes = solidworks_text.queued_part_notes(opened, REPO, busy, lambda pn: files(pn, []))
@@ -44,10 +43,10 @@ class Text(unittest.TestCase):
         self.assertIn("was saved", solidworks_text.queued_part_notes(saved, REPO, busy, lambda pn: files(pn, []))[0])
 
     def test_other_parts_and_other_changes_are_not_warned_about(self):
-        opened_other = sw_watcher.differences({}, snapshot((ASM, False)))
+        opened_other = open_documents.differences({}, snapshot((ASM, False)))
         busy = {"HCR-00001-001": "Checking in 1 part"}
         self.assertEqual(solidworks_text.queued_part_notes(opened_other, REPO, busy, lambda pn: [PRT]), [])
-        closed = sw_watcher.differences(snapshot((PRT, False)), {})
+        closed = open_documents.differences(snapshot((PRT, False)), {})
         self.assertEqual(solidworks_text.queued_part_notes(closed, REPO, busy, lambda pn: [PRT]), [])
 
 

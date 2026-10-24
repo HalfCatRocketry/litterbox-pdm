@@ -18,8 +18,8 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import com
+from litterbox.core import file_types
+from litterbox.cad import cad_programs
 from litterbox.errors import LitterboxError
 
 
@@ -81,12 +81,12 @@ def open_path(path, open_with=None, startfile=None, popen=None, show_hidden=None
                     "Fix it under open_with in C:\\Litterbox\\settings.yaml.")
             (popen or subprocess.Popen)([program, str(path)])
         elif startfile is not None:
-            if path.suffix.lower() in file_types.SOLIDWORKS_EXTENSIONS and show_hidden is not None:
+            if path.suffix.lower() in file_types.CAD_EXTENSIONS and show_hidden is not None:
                 show_hidden()
             startfile(str(path))
         elif hasattr(os, "startfile"):
-            if path.suffix.lower() in file_types.SOLIDWORKS_EXTENSIONS:
-                (show_hidden or com.show_hidden_solidworks)()
+            if path.suffix.lower() in file_types.CAD_EXTENSIONS:
+                (show_hidden or (lambda: cad_programs.before_opening(path)))()
             os.startfile(str(path))                                    # Windows
         else:
             (popen or subprocess.Popen)(["open" if sys.platform == "darwin" else "xdg-open", str(path)])

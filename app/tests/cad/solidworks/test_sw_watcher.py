@@ -9,9 +9,10 @@ import unittest
 from unittest import mock
 
 from litterbox import diagnostics
+from litterbox.cad import open_documents
 from litterbox.cad.solidworks import sw_documents
 from litterbox.cad.solidworks import sw_watcher
-from litterbox.cad.solidworks.sw_documents import OpenDocument
+from litterbox.cad.open_documents import OpenDocument
 
 
 class FakeDoc:
@@ -55,8 +56,8 @@ class Documents(unittest.TestCase):
                             FakeDoc(""))                                        # new, never saved: left out
         found = sw_documents.open_documents(sw)
         self.assertEqual(sorted(d.path for d in found.values()), ["C:/vault/cad/A.SLDPRT", "C:/vault/cad/B.SLDASM"])
-        a = found[sw_documents.key("C:/vault/cad/A.SLDPRT")]
-        b = found[sw_documents.key("C:/vault/cad/B.SLDASM")]
+        a = found[open_documents.key("C:/vault/cad/A.SLDPRT")]
+        b = found[open_documents.key("C:/vault/cad/B.SLDASM")]
         self.assertEqual((a.unsaved, a.read_only, a.visible), (True, False, True))
         self.assertEqual((b.unsaved, b.read_only, b.visible), (False, True, False))
 
@@ -64,21 +65,21 @@ class Documents(unittest.TestCase):
         self.assertEqual(sw_documents.open_documents(FakeSolidWorks()), {})
 
     def test_paths_compare_the_way_windows_does(self):
-        self.assertEqual(sw_documents.key("C:/vault/cad/../cad/A.SLDPRT"), sw_documents.key("C:/vault/cad/A.SLDPRT"))
+        self.assertEqual(open_documents.key("C:/vault/cad/../cad/A.SLDPRT"), open_documents.key("C:/vault/cad/A.SLDPRT"))
 
 
 class Differences(unittest.TestCase):
     def test_opened_closed_modified_saved(self):
         a, b, c = "C:/v/a.SLDPRT", "C:/v/b.SLDPRT", "C:/v/c.SLDPRT"
-        old = {sw_documents.key(a): doc(a), sw_documents.key(b): doc(b), sw_documents.key(c): doc(c, unsaved=True)}
-        new = {sw_documents.key(b): doc(b, unsaved=True), sw_documents.key(c): doc(c),
-               sw_documents.key("C:/v/d.SLDPRT"): doc("C:/v/d.SLDPRT")}
-        found = {(ch.what, ch.document.path) for ch in sw_watcher.differences(old, new)}
+        old = {open_documents.key(a): doc(a), open_documents.key(b): doc(b), open_documents.key(c): doc(c, unsaved=True)}
+        new = {open_documents.key(b): doc(b, unsaved=True), open_documents.key(c): doc(c),
+               open_documents.key("C:/v/d.SLDPRT"): doc("C:/v/d.SLDPRT")}
+        found = {(ch.what, ch.document.path) for ch in open_documents.differences(old, new)}
         self.assertEqual(found, {("closed", a), ("has unsaved changes", b), ("saved", c), ("opened", "C:/v/d.SLDPRT")})
 
     def test_no_change(self):
-        snapshot = {sw_documents.key("C:/v/a"): doc("C:/v/a")}
-        self.assertEqual(sw_watcher.differences(snapshot, dict(snapshot)), [])
+        snapshot = {open_documents.key("C:/v/a"): doc("C:/v/a")}
+        self.assertEqual(open_documents.differences(snapshot, dict(snapshot)), [])
 
 
 class Watcher(unittest.TestCase):

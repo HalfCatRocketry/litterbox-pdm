@@ -11,6 +11,8 @@ The settings here:
     solidworks_version  the SolidWorks everyone works in, as a year (2024), or None for no check. Setting it makes
                         the vault need this Litterbox or newer, since older ones don't check it
     currency            the team's currency code (USD), or None: costs are shown with its symbol
+    toolbox             the rule for SolidWorks Toolbox parts (core/toolbox_rules.py): "" (no check), "none" or
+                        "team". A rule makes the vault need Litterbox 0.6.0, since older ones don't check it
 Only an Admin or the Owner may change them (the permission is "manage_settings"); everyone then gets the new
 values the next time they get the latest. Projects are changed through the same file, in project_admin.py.
 

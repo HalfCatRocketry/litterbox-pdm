@@ -5,13 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from litterbox.cad.cad_program import COUNTED, EXCLUDED, SUPPRESSED
 from litterbox.cad.solidworks import sw_backend
 from litterbox.core.part_number import PN
 from litterbox.references import reference_reader
 from tests.support import temp_folders
 
 ASM = PN("HCR", 2, 1)
-COUNTED, SUPPRESSED, EXCLUDED = sw_backend.COUNTED, sw_backend.SUPPRESSED, sw_backend.EXCLUDED
 
 
 class Pretend:

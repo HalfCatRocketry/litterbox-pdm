@@ -7,6 +7,8 @@ layout.py - where everything lives inside a vault. One place for every fixed fol
     ECO/ECO-0001.yaml                 engineering change orders           ECO_DIR_NAME
     DOC-logs/PROP-0001.yaml           the document records                DOC_LOG_DIR_NAME
     documents/PROP-0001_A.docx        documents' files (Git LFS, lockable) DOC_DIR_NAME
+    toolbox/browser/...               the team's SolidWorks Toolbox, when it has one (an Admin uploads it)
+                                                                          TOOLBOX_DIR_NAME
     .litterbox/config.yaml            shared vault settings               CONFIG_PATH (CONFIG_DIR, CONFIG_FILE)
     .litterbox/people.yaml            the team                            PEOPLE_FILE
     .litterbox/workflows.yaml         sign-off templates                  WORKFLOWS_FILE
@@ -24,6 +26,7 @@ CANCELLED_PREFIX = "CANCELLED_"
 ECO_DIR_NAME = "ECO"                         # engineering change orders (change_orders/)
 DOC_LOG_DIR_NAME = "DOC-logs"                # document records (documents/), like PN-logs for parts
 DOC_DIR_NAME = "documents"                   # documents' files, like cad for parts
+TOOLBOX_DIR_NAME = "toolbox"                 # the team's Toolbox (vault/toolbox_admin.py): only Admins change it
 
 CONFIG_DIR = ".litterbox"
 CONFIG_FILE = "config.yaml"                 # a file name inside CONFIG_DIR (the others below are paths)

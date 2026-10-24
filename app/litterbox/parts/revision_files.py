@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 
 from litterbox import layout
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.core import doc_number
 from litterbox.core import filenames
 from litterbox.errors import LitterboxError
@@ -157,7 +157,7 @@ def copy_list(repo, record, files):
     new_revision = record_revisions.next_free_revision(record)
     copies, kept, problems = [], [], []
     for rel in files:
-        if record.is_document or file_types.extension(rel) in file_types.SOLIDWORKS_EXTENSIONS:
+        if record.is_document or file_types.extension(rel) in file_types.CAD_EXTENSIONS:
             new = revised_name(rel, new_revision)
             copies.append((rel, new))
             if (Path(repo) / new).exists():
@@ -181,7 +181,7 @@ def copy_set(repo, pairs, backend, log):
     for old, new in sorted(pairs, key=lambda pair: (file_types.extension(pair[0]) in file_types.DRAWING_EXTENSIONS, file_types.file_name(pair[0]).lower())):
         src, dst = abs_path(repo, old), abs_path(repo, new)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        if file_types.extension(old) in file_types.SOLIDWORKS_EXTENSIONS:
+        if file_types.extension(old) in file_types.CAD_EXTENSIONS:
             log(f"Copying {file_types.file_name(old)} as {file_types.file_name(new)}")
             backend.copy(src, dst)
         else:

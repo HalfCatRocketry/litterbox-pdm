@@ -38,6 +38,23 @@ def installed_major_version():
     return None
 
 
+def toolbox_folder(major=None):
+    """The Toolbox folder this computer's SolidWorks uses (Tools > Options > Hole Wizard/Toolbox), as the Windows
+    registry has it for the installed version (or `major`): 'Toolbox Data Location' under
+    HKEY_CURRENT_USER\\Software\\SolidWorks\\SOLIDWORKS 2024\\General (seen with SolidWorks 2024). "" if it can't be
+    told, or on any other system."""
+    major = major or installed_major_version()
+    if not major:
+        return ""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"Software\SolidWorks\SOLIDWORKS {major + 1992}\General") as key:
+            value, _kind = winreg.QueryValueEx(key, "Toolbox Data Location")
+    except Exception:
+        return ""
+    return str(value or "").strip()
+
+
 def solidworks_pids():
     """The process ids of every SLDWORKS.exe running now (empty if none, or on a system without tasklist)."""
     import subprocess

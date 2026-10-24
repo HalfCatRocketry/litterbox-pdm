@@ -6,8 +6,8 @@ SolidWorks, and propose part numbers. Nothing in the vault changes yet.
 import os
 from dataclasses import dataclass
 
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import sw_backend
+from litterbox.core import file_types
+from litterbox.cad import cad_programs
 from litterbox.core import part_number
 from litterbox.core.part_number import PN
 from litterbox.errors import LitterboxError
@@ -145,11 +145,11 @@ def prepare(repo, manifest_path, backend=None, allow_external=False, cancel=None
     candidates = [i for i in mf.items if not i.pn]
     readable = [i for i in candidates if all(os.path.isfile(p) for p in import_plan.item_files(i))]
     for item in items:
-        if import_paths.ext_of(item.main_path) not in file_types.SOLIDWORKS_EXTENSIONS:
+        if import_paths.ext_of(item.main_path) not in file_types.CAD_EXTENSIONS:
             raise import_errors.ImportFailed(f"Item {item.id}: {item.main_path} is not a SolidWorks file.")
 
     owns_backend = backend is None
-    backend = backend or sw_backend.SolidWorksBackend()
+    backend = backend or cad_programs.Backends()
     try:
         version = backend.version()
         if version:

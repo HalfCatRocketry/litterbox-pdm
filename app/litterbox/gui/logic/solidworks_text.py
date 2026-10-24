@@ -6,13 +6,12 @@ writable after a check-out (cad/solidworks/sw_reload.py).
 
 from pathlib import PurePosixPath
 
-from litterbox.cad import file_types
-from litterbox.cad.solidworks import sw_documents
-from litterbox.cad.solidworks import sw_watcher
+from litterbox.core import file_types
+from litterbox.cad import open_documents
 
 
 def _by_key(repo, rels):
-    return {sw_documents.key(f"{repo}/{rel}"): rel for rel in rels}
+    return {open_documents.key(f"{repo}/{rel}"): rel for rel in rels}
 
 
 def open_among(snapshot, repo, rels):
@@ -57,10 +56,10 @@ def writable_plan(found, repo, changed):
     (switch, reload, ask), lists of SolidWorks' own paths: `switch` are made writable where they are; `reload` are
     those the check-out downloaded a newer version of (`changed`, relative to the vault), loaded again; `ask` are the
     ones to reload that have unsaved changes, which reloading would lose."""
-    newer = {sw_documents.key(f"{repo}/{rel}") for rel in changed}
-    switch = [doc.path for doc in found if sw_documents.key(doc.path) not in newer]
-    reload = [doc.path for doc in found if sw_documents.key(doc.path) in newer]
-    ask = [doc.path for doc in found if doc.unsaved and sw_documents.key(doc.path) in newer]
+    newer = {open_documents.key(f"{repo}/{rel}") for rel in changed}
+    switch = [doc.path for doc in found if open_documents.key(doc.path) not in newer]
+    reload = [doc.path for doc in found if open_documents.key(doc.path) in newer]
+    ask = [doc.path for doc in found if doc.unsaved and open_documents.key(doc.path) in newer]
     return switch, reload, ask
 
 
@@ -88,8 +87,8 @@ def writable_failed_text(failed):
 
 def still_old(repo, changed, done):
     """The files the check-out updated (relative to the vault) that weren't just reloaded (`done`: full paths)."""
-    reloaded = {sw_documents.key(path) for path in done}
-    return [rel for rel in changed if sw_documents.key(f"{repo}/{rel}") not in reloaded]
+    reloaded = {open_documents.key(path) for path in done}
+    return [rel for rel in changed if open_documents.key(f"{repo}/{rel}") not in reloaded]
 
 
 def queued_part_notes(changes, repo, busy, files_of):
@@ -99,9 +98,9 @@ def queued_part_notes(changes, repo, busy, files_of):
     for pn, label in sorted(busy.items()):
         keys = _by_key(repo, files_of(pn))
         for change in changes:
-            if change.key not in keys or change.what not in (sw_watcher.Change.OPENED, sw_watcher.Change.SAVED):
+            if change.key not in keys or change.what not in (open_documents.Change.OPENED, open_documents.Change.SAVED):
                 continue
-            verb = "opened" if change.what == sw_watcher.Change.OPENED else "saved"
+            verb = "opened" if change.what == open_documents.Change.OPENED else "saved"
             notes.append(f"{PurePosixPath(keys[change.key]).name} was {verb} in SolidWorks while Litterbox is still "
                          f"working on {pn} ({label.lower()}). Wait until the banner says Ready before changing it.")
     return notes

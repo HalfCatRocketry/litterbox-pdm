@@ -7,7 +7,7 @@ saved. With `solidworks_popups: false` the warnings go to the log and the status
 
 from tkinter import messagebox
 
-from litterbox.cad.solidworks import sw_watcher
+from litterbox.cad import cad_programs
 from litterbox.gui.logic import solidworks_text
 from litterbox.user import settings
 
@@ -20,7 +20,10 @@ class SolidWorksWatch:
     def _start_solidworks_watcher(self):
         if not settings.solidworks_watch(self.settings):
             return
-        self.sw_watcher = sw_watcher.SolidWorksWatcher(on_change=lambda changes: self.queue.put(("solidworks", changes)))
+        self.sw_watcher = next(iter(cad_programs.watchers(lambda changes: self.queue.put(("solidworks", changes)))),
+                               None)
+        if self.sw_watcher is None:
+            return
         self.sw_watcher.start()
         self._log("Watching what SolidWorks has open (solidworks_watch in settings.yaml).")
         self._note_solidworks()

@@ -18,6 +18,7 @@ from litterbox.git import runner
 from litterbox.parts import batch_core
 from litterbox.parts import part_changes
 from litterbox.parts import permission_check
+from litterbox.parts import toolbox_check
 from litterbox.records import record_files
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
@@ -104,11 +105,15 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                         found = references_reader(repo, pn, record.revision, changed)
                     except Exception as e:
                         diagnostics.LOG(f"WARNING: could not read what {pn} uses: {e}")
+                refused = toolbox_check.check_in_problem(repo, pn, found.other_files if found is not None else None)
+                if refused:
+                    raise LitterboxError(refused)
                 record_before = (Path(repo) / record_path).read_bytes()
                 record_lifecycle.record_checkin(record, user, changed, comment,
                                                 references=found.references if found is not None else None,
                                                 quantities=found.quantities if found is not None else None,
-                                                material=found.material if found is not None else None)
+                                                material=found.material if found is not None else None,
+                                                other_files=found.other_files if found is not None else None)
                 record_store.save(repo, record)
                 message = f"{pn}: {(comment or '').strip() or 'Update'}"
                 to_commit.append((pn, message, changed, record_path, record_before))

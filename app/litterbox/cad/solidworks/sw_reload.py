@@ -16,6 +16,7 @@ Tried with SolidWorks 2024: a part open on its own becomes writable. Reloading a
 open assembly and a busy SolidWorks are still to try (docs/REMINDERS.md).
 """
 
+from litterbox.cad import open_documents
 from litterbox.cad.solidworks import com
 from litterbox.cad.solidworks import sw_documents
 
@@ -28,7 +29,7 @@ def open_read_only(paths):
         if sw is None:
             return None
         found = sw_documents.open_documents(sw)
-        wanted = list(dict.fromkeys(sw_documents.key(path) for path in paths))
+        wanted = list(dict.fromkeys(open_documents.key(path) for path in paths))
         return [found[key] for key in wanted if key in found and found[key].read_only]
 
 
@@ -36,8 +37,8 @@ def make_writable(paths, reload=()):
     """Make these open documents (full paths) read-write. Those also in `reload` are loaded again from disk first,
     without saving (the caller has asked about unsaved changes). Returns (done, failed): [path] and [(path, why)].
     Never raises."""
-    reloads = {sw_documents.key(path) for path in reload}
-    wanted = {sw_documents.key(path): path for path in paths}
+    reloads = {open_documents.key(path) for path in reload}
+    wanted = {open_documents.key(path): path for path in paths}
     tried = {}
     try:
         with com.com_thread():
@@ -45,7 +46,7 @@ def make_writable(paths, reload=()):
             if sw is None:
                 return [], [(path, "SolidWorks isn't running") for path in wanted.values()]
             for doc, path in sw_documents.each_document(sw):
-                key = sw_documents.key(path)
+                key = open_documents.key(path)
                 if key not in wanted or key in tried:
                     continue
                 try:

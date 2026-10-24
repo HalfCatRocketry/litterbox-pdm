@@ -48,6 +48,12 @@ class Boundaries(unittest.TestCase):
                        and m.name != CHECKS_THE_BUILD)
         self.assertEqual(wrong, [], "SolidWorks (COM) code belongs in litterbox/cad/solidworks")
 
+    def test_only_cad_reaches_a_cad_programs_own_code(self):
+        wrong = sorted(f"{m.name} imports {imp.target}" for m in modules().values() for imp in m.imports
+                       if (imp.target == "litterbox.cad.solidworks" or imp.target.startswith("litterbox.cad.solidworks."))
+                       and not m.name.startswith("litterbox.cad."))
+        self.assertEqual(wrong, [], "reach a CAD program through litterbox.cad.cad_programs (cad/cad_program.py)")
+
     def test_only_the_window_imports_tkinter(self):
         wrong = sorted(m.name for m in modules().values()
                        if imported_libraries(m) & set(WINDOW_LIBRARIES) and m.name != CHECKS_THE_BUILD

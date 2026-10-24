@@ -98,12 +98,15 @@ RULES = (
         "DOC-logs/*.yaml lockable",
     ]
     + [f"{any_case(ext)} {LFS}" for ext in DOCUMENT_EXTENSIONS]
+    + [                                                     # version 3 (0.6.0): the team's Toolbox
+        f"toolbox/** {LFS} lockable",                       # read-only for everyone; only Admins upload it
+    ]
 )
 
 
-VERSION = 2
+VERSION = 3
 
-MIN_LITTERBOX = "0.5.1"         # the oldest Litterbox that knows every lockable rule in RULES
+MIN_LITTERBOX = "0.6.0"         # the oldest Litterbox that knows every lockable rule in RULES
 
 BEGIN = "# >>> Litterbox rules, version {version}. Litterbox updates the lines down to '# <<< Litterbox'; don't " \
         "edit them."

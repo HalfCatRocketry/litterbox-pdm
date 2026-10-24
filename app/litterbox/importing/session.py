@@ -28,8 +28,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from litterbox.cad.solidworks import com
-from litterbox.cad.solidworks import sw_backend
+from litterbox.cad import cad_programs
 from litterbox.importing import import_duplicates
 from litterbox.importing import import_errors
 from litterbox.importing import import_finish
@@ -54,7 +53,7 @@ class ImportSession:
                  gap=import_numbering.DEFAULT_GAP, jitter=import_numbering.DEFAULT_JITTER):
         self.repo, self.post, self.log, self.org = repo, post, log, org
         self.gap, self.jitter = gap, jitter
-        self.backend_factory = backend_factory or sw_backend.SolidWorksBackend
+        self.backend_factory = backend_factory or cad_programs.Backends
         self.prepared = None                    # import_prepare.Prepared, once start() has succeeded
         self.manifest_path = ""
         self.busy = False                       # touched only on the window's thread
@@ -65,7 +64,7 @@ class ImportSession:
 
     # -- the worker thread -------------------------------------------------
     def _worker(self):
-        with com.com_thread():                 # SolidWorks (COM) is used from this thread only
+        with cad_programs.session():           # SolidWorks (COM) is used from this thread only
             try:
                 while True:
                     job = self._jobs.get()

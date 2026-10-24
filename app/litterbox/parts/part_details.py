@@ -3,7 +3,7 @@ part_details.py - Edit Details: change a part's name and description, and switch
 (only before it is ever released, and while it has no SolidWorks files).
 """
 
-from litterbox.cad import file_types
+from litterbox.core import file_types
 from litterbox.errors import LitterboxError
 from litterbox.git import lfs_locks
 from litterbox.git import repository
@@ -17,7 +17,7 @@ from litterbox.records.error_conversion import converts_errors
 
 def has_cad_files(repo, pn):
     """True if any revision of the part has a SolidWorks file in the cad folder."""
-    return any(file_types.extension(f) in file_types.SOLIDWORKS_EXTENSIONS for f in record_files.all_cad_files(repo, pn))
+    return any(file_types.extension(f) in file_types.CAD_EXTENSIONS for f in record_files.all_cad_files(repo, pn))
 
 
 @converts_errors
