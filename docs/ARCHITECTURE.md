@@ -114,8 +114,10 @@ first renaming a lone "Default" after the part (`core/configuration_names.py` de
 does it), and warns afterwards (`parts/configuration_check.py`). A backend handed to the reader or the namer is used in
 its caller's `cad_programs.session()`: one that first connects inside a session of their own breaks when it ends.
 
-Templates (0.6.2): the org's and each project's SolidWorks templates are the vault's `templates/` folder, with
-`templates/templates.yaml` saying each one's kind, owner and whether it is the default (`vault/template_store.py`).
+Templates (0.6.2): the org's and each project's SolidWorks templates are the vault's `templates/` folder (the org's
+at its top, a project's in `templates/<project>/`, `template_rules.folder_name`; a template is known by that path,
+`Template.key`), with `templates/templates.yaml` saying each one's kind, owner and whether it is the default
+(`vault/template_store.py`). A renamed project's folder is moved with `git mv` (`template_admin.rename_project`).
 The rules (one default per kind and owner, a project's before the org's) are `core/template_rules.py`, with each
 program's template extensions in `core/file_types.TEMPLATES`. `vault/template_admin.py` makes each change as one
 uploaded commit, `vault/template_access.py` says who may, and `team/guarded_push.templates_allowed` compares the index

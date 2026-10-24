@@ -253,19 +253,19 @@ class TeamAdmin:
         action = chosen[0]
         if action == "add":
             _action, project, path = chosen
-            work, file = (lambda: template_admin.add(repo, path, project)), path.replace("\\", "/").rsplit("/", 1)[-1]
+            work, key = (lambda: template_admin.add(repo, path, project)), path.replace("\\", "/").rsplit("/", 1)[-1]
         else:
-            _action, file = chosen
-            project = getattr(template_rules.find(templates, file), "project", "")
+            _action, key = chosen
+            project = getattr(template_rules.find(templates, key), "project", "")
             if action == "remove" and not messagebox.askyesno(
-                    "Templates", f"Remove the template {file}? Files already made from it are not changed.",
+                    "Templates", f"Remove the template {key}? Files already made from it are not changed.",
                     parent=window):
                 return
-            work = (lambda: template_admin.remove(repo, file)) if action == "remove" else \
-                (lambda: template_admin.make_default(repo, file))
+            work = (lambda: template_admin.remove(repo, key)) if action == "remove" else \
+                (lambda: template_admin.make_default(repo, key))
 
         def done(_result):
-            self.note = template_text.done_text(action, file)
+            self.note = template_text.done_text(action, key)
             self._say(self.note)
             self.manage_templates(window, project)
 

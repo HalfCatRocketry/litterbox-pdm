@@ -250,10 +250,16 @@ BLOCKS = [
                  "its Lead does."],
 ], [1.4, 5.1]),
 ("ul", [
-    "Right-click a top or a folder for **New Folder...**, **Rename...**, **Delete Folder...**, and **Put the ticked "
-    "here**. Right-click an item for **Details...**, **Remove from This Folder**, and the part actions.",
+    "Right-click a top or a folder for **New Folder...**, **Rename...** and **Delete Folder...** (folders only), "
+    "**Add Parts...**, and **Put the ticked here**. Right-click an item for **Details...**, **Remove from This "
+    "Folder**, and the part actions.",
+    "**Add Parts...** opens a search window of every part and document not in that folder yet. Type to search by "
+    "number, name, or description, select one or several (Ctrl or Shift), and press **Add selected**.",
+    "Parts, documents, and ECOs can go straight in a top (Personal, Team, or a project), outside every folder: "
+    "right-click the top, drag onto it, or choose it in Add to Folder.",
+    "In a top or a folder, the folders come first, then parts, documents, and ECOs, each by number.",
     "**Add to Folder...** in the Part menu, on the Documents screen, and on the ECOs screen puts the ticked parts (or "
-    "the highlighted one) in a folder you choose, or in a new one.",
+    "the highlighted one) in a folder (or a top) you choose, or in a new folder.",
     "Drag an item or a folder onto a folder to move it. Dragging an item into another top (from Personal to Team, "
     "say) copies it.",
     "Ticks are shared with the parts list, so Check Out, Release, and the other actions work on what is ticked in "
@@ -271,7 +277,8 @@ BLOCKS = [
     "too.",
     "Edit and save in SolidWorks.",
     "Press **Check In** to upload your changes and release the lock, or **Save Progress** to upload them and keep "
-    "the lock.",
+    "the lock. A window lists the parts about to go up (number, revision, and name) and asks what you changed; the "
+    "comment goes in each part's history, and may be left blank.",
 ]),
 ("p", "**Undo Checkout** discards your changes and restores the part as it is in the vault. Check In asks before "
       "checking in a part with no changes. It refuses a part saved in SolidWorks after Check In was pressed, because "
@@ -641,14 +648,16 @@ BLOCKS = [
 ("p", "Team > **Templates...** shows the org's templates and each project's. Everyone can look. Admins and the "
       "Owner change the org's; a project's Lead (and Admins, and the Owner) changes the project's:"),
 ("ul", [
-    "**Add...** copies a template file into the vault's **templates** folder and uploads it. The first template of "
-    "a kind becomes the default. Every template in the vault needs its own file name, the org's and the projects' "
-    "together, so give them clear names (HCR A size, Rover A3).",
+    "**Add...** copies a template file into the vault's **templates** folder and uploads it: the org's at the top "
+    "of the folder, a project's in a folder of the project's name (templates\\Rover). The first template of a kind "
+    "becomes the default. The org and each project can't have two templates of the same file name, but the org and "
+    "a project can.",
     "**Make Default** makes the selected template the default of its kind.",
     "**Remove...** takes a template out of the vault. Files already made from it don't change. If it was the "
     "default, the next one by name becomes the default.",
 ]),
-("p", "Litterbox refuses to upload a template change from anyone else. A renamed project keeps its templates."),
+("p", "Litterbox refuses to upload a template change from anyone else. A renamed project keeps its templates: "
+      "its folder is renamed with it."),
 ("h3", "Things to watch"),
 ("ul", [
     "**Keep the sheet format in the drawing template.** SolidWorks saves the sheet format (the border and title "
@@ -670,7 +679,78 @@ BLOCKS = [
     "date, reload its sheet format in SolidWorks while it is checked out.",
     "**SolidWorks' own File > New** still uses the templates SolidWorks is set to (Tools > Options > System Options "
     "> Default Templates and File Locations > Document Templates). Point Document Templates at the vault's templates "
-    "folder (C:\\Litterbox\\<vault>\\templates) so File > New offers the team's templates too.",
+    "folder (C:\\Litterbox\\<vault>\\templates), and your project's folder inside it, so File > New offers "
+    "the team's templates too.",
+]),
+
+("h1", "How Litterbox works"),
+("p", "This chapter is for the curious, and for whoever looks after the vault. Nothing in it needs doing by hand."),
+("h2", "The vault is a Git repository"),
+("p", "A vault is a Git repository on the team's Git host, with a copy on each computer in "
+      "C:\\Litterbox\\<vault>. Everything Litterbox keeps is a file in it:"),
+("table", ["Folder", "What it holds"], [
+    ["PN-logs, DOC-logs", "One record per part or document (HCR-100010-001.yaml): its name, revisions, history, "
+                          "purchasing info, and what it uses. Plain text."],
+    ["cad, documents", "The parts' and documents' files, named after them (HCR-100010-001_A.SLDPRT)."],
+    ["ECO", "Engineering change orders."],
+    ["cancelled-revs", "Revisions cancelled before release, kept for the history."],
+    ["folders", "The Team and project folders: one small file per change, never edited, so two people never "
+                "clash."],
+    ["templates", "The org's and projects' SolidWorks templates, and templates.yaml saying which is the default."],
+    ["toolbox", "The team's SolidWorks Toolbox, if it keeps one."],
+    [".litterbox", "The shared settings (config.yaml), the team (people.yaml), workflows, and document types."],
+], [1.6, 4.9]),
+("p", "Large files (CAD files, PDFs, pictures, and templates) are stored with **Git LFS**, Git's add-on for large "
+      "files: Git keeps a small pointer, and the file itself is kept once on the host. The vault's .gitattributes "
+      "file says which files go to Git LFS and which can be locked; Vault > Update file rules... keeps it current."),
+("h2", "Locks, read-only files, and uploads"),
+("ul", [
+    "**Check Out** takes Git LFS **locks** on the part's record and files. The host keeps the locks, so only one "
+    "person can hold a part at a time, and Litterbox makes those files writable for them alone. Every other file of "
+    "a part is **read-only** on your disk; Litterbox puts that back after every download, check-in, and undo.",
+    "Every change is a Git **commit** with your name and a message (\"HCR-100010-001: Thicker flange\"), "
+    "so the history says who did what, when, and why. If the team requires signed commits, each is signed with your "
+    "key.",
+    "An **upload** first gets everyone else's changes (a sync), then checks the upload is allowed: you are still on "
+    "the team, your Litterbox is new enough for the vault, and any changes to the Toolbox, folders, or templates are "
+    "ones you may make. Then it pushes. If someone else uploaded in the meantime, Litterbox syncs and tries again. "
+    "If it still can't, your commit stays on your computer and goes up with the next upload; nothing is left half "
+    "done.",
+    "Actions on several parts (Check In, Release, and others) do one sync, one commit, and one upload for the "
+    "whole batch, while each part still gets its own history entry. A part that can't be done is reported, and the "
+    "rest carry on.",
+    "Check In remembers each file's size and time when you press it, and refuses to upload a part saved in "
+    "SolidWorks after that, so a half-saved file is never uploaded.",
+    "Long operations (Import, Revise) write a small note in the vault's .git folder before they start. If Litterbox "
+    "stops part-way, the note says what to finish or undo next time.",
+]),
+("h2", "Downloads"),
+("p", "Litterbox gets other people's changes at Get Latest and before every upload. With **download on demand** (the "
+      "usual setting), Git leaves every CAD file as a small pointer until it is needed, and Litterbox downloads "
+      "exactly the files it needs: those you open or check out, and what an assembly uses. Files you already have "
+      "stay downloaded at each Get Latest. A hidden project's files are left out of the copies of people who aren't "
+      "in it (Git's sparse checkout), so they are never downloaded."),
+("h2", "The job queue"),
+("p", "Everything that touches the vault or SolidWorks runs in the **background**, so the window never freezes: "
+      "you click, the work becomes a **job** in a queue, and you can carry on browsing, ticking, and queueing more."),
+("ul", [
+    "Jobs run **one at a time, in the order they were queued**, because Git can change only one thing in a vault at "
+    "once. The status bar shows the job running, and how many more are waiting (\"Checking in 3 parts - 2 more "
+    "waiting\"); a job queued behind others shows \"Queued: ...\".",
+    "Each job knows the parts it changes. Those parts are **busy** until it has finished and its result is shown: "
+    "their status says so, and other changes to them are refused until then. Looking at a busy part (Open, "
+    "Details, Export) still works.",
+    "A **refresh** (re-reading your copy of the vault) is queued like any job. A newer refresh replaces one still "
+    "waiting, so they never pile up.",
+    "When a job finishes, the window shows the result and refreshes the list. If it **failed**, there is no pop-up "
+    "(you may be busy elsewhere): the status bar's dot turns red and stays red until you press **Details...** and "
+    "dismiss it, so a problem isn't missed during a break. Jobs queued after it still run.",
+    "A few things need the vault to themselves, so they can't be used while jobs are queued or running: switching "
+    "org, Import, and Get Latest from the header.",
+    "SolidWorks work in a job uses a SolidWorks that is already running, or starts one in the background and closes "
+    "it when the job is done.",
+    "With `debug_mode: true` in settings.yaml, the status bar shows how long a job has been running, so a slow host "
+    "looks slow rather than stuck.",
 ]),
 
 ("h1", "Settings and troubleshooting"),

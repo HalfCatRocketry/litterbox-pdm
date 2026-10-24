@@ -38,7 +38,7 @@ class NewPartDialog(modal_dialog.ModalDialog):
         # None if cancelled, else {"name": ..., "description": ..., "base": int or None, "variant": int or None,
         #                           "project": a project's name or None, "kind": create.PART or ASSEMBLY,
         #                           "noncad": True for a non-CAD part or assembly,
-        #                           "template": the template file to make its model from, or None}
+        #                           "template": the key of the template to make its model from, or None}
 
     The part number is two boxes, [base]-[variant]. Their grey placeholder text
     shows the number Litterbox will use if the box is left empty: the next free

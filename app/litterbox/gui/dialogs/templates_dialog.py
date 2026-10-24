@@ -2,7 +2,7 @@
 templates_dialog.py - Team > Templates...: the SolidWorks templates new parts, assemblies and drawings are made from
 (core/template_rules.py), the org's and each project's. Everyone may look; whoever may change the shown owner's
 (vault/template_access.py) adds, removes and chooses the default. show() gives the button pressed: ("add", project,
-file path), ("remove", file), ("default", file), or None for Close. The main window does the work, then opens this
+file path), ("remove", key), ("default", key) (core/template_rules.Template.key), or None for Close. The main window does the work, then opens this
 again (gui/main_window/team_admin.py).
 
     TemplatesDialog(parent, templates, owners, may_change, project="").show()
@@ -85,8 +85,8 @@ class TemplatesDialog(modal_dialog.ModalDialog):
     def _fill(self):
         self.tree.delete(*self.tree.get_children())
         rows = template_text.rows(self.templates, self._project())
-        for file, name, kind, default in rows:
-            self.tree.insert("", "end", iid=file, values=(name, kind, default))
+        for key, name, kind, default in rows:
+            self.tree.insert("", "end", iid=key, values=(name, kind, default))
         allowed, why = self.may_change(self._project())
         for button in self.buttons.values():
             button.configure(state="normal" if allowed else "disabled")

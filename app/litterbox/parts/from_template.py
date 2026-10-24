@@ -6,7 +6,7 @@ Drawing...), as an empty sheet. The file is made in the cad folder under the par
 must be checked out to you; the window checks that, and opens the file afterwards.
 
     template = from_template.default_template(repo, pn, file_types.DRAWING)     # its project's, else the org's
-    rel = from_template.make(repo, pn, template.file)                         # "cad/HCR-00042-001_A.SLDDRW"
+    rel = from_template.make(repo, pn, template.key)                          # "cad/HCR-00042-001_A.SLDDRW"
 """
 
 import posixpath
@@ -92,15 +92,16 @@ def default_template(repo, pn, kind):
 
 
 @converts_errors
-def make(repo, pn, template_file, backend=None, log=print):
-    """Make the part's new model or drawing from the vault's template `template_file`, and return its path relative
+def make(repo, pn, template_key, backend=None, log=print):
+    """Make the part's new model or drawing from the vault's template `template_key` (its Template.key, "HCR
+    A.drwdot" or "Rover/Rover A3.drwdot"), and return its path relative
     to the vault. Raises LitterboxError, with nothing made, if it can't (a model or drawing it has already, a
     template that isn't there or that SolidWorks can't use, SolidWorks newer than the org's)."""
     pn = batch_core.as_pn(pn)
     record = record_store.load(repo, pn)
-    template = template_rules.find(template_store.load(repo), template_file)
+    template = template_rules.find(template_store.load(repo), template_key)
     if template is None:
-        raise LitterboxError(f"{template_file} isn't one of the vault's templates any more.")
+        raise LitterboxError(f"{template_key} isn't one of the vault's templates any more.")
     why = problem(record, record_files.cad_files(repo, pn, record.revision), template.kind)
     if why:
         raise LitterboxError(why)

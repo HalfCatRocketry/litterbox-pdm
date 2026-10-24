@@ -21,20 +21,20 @@ def choice_label(template):
 
 
 def choice_map(templates, none=True):
-    """{label: template file} in list order, for an option menu; NONE (None) last when `none`."""
-    found = {choice_label(t): t.file for t in templates}
+    """{label: template key} in list order, for an option menu; NONE (None) last when `none`."""
+    found = {choice_label(t): t.key for t in templates}
     if none:
         found[NONE] = None
     return found
 
 
 def rows(templates, project):
-    """[(file, name, kind, "Default" or "")] for one owner's templates (the org's: template_rules.ORG), by kind
+    """[(key, name, kind, "Default" or "")] for one owner's templates (the org's: template_rules.ORG), by kind
     then name."""
     found = []
     for kind in template_rules.KINDS:
         for t in template_rules.group(templates, kind, project):
-            found.append((t.file, t.name, template_rules.LABELS[kind], "Default" if t.default else ""))
+            found.append((t.key, t.name, template_rules.LABELS[kind], "Default" if t.default else ""))
     return found
 
 
@@ -48,8 +48,8 @@ def none_yet(kind_label, project=""):
     return f"No {kind_label.lower()} templates for {where} yet (Team > Templates...)."
 
 
-def done_text(action, file):
-    name = file.rsplit(".", 1)[0]
+def done_text(action, key):
+    name = key.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     return {"add": f"Template {name} added", "remove": f"Template {name} removed",
             "default": f"Template {name} is now the default"}[action]
 

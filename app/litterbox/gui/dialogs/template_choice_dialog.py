@@ -3,7 +3,7 @@ template_choice_dialog.py - New Model... and New Drawing...: which of the vault'
 from (parts/from_template.py), its default chosen to start with.
 
     file = TemplateChoiceDialog(parent, "New Drawing", "HCR-00042-001_A.SLDDRW", templates).show()
-    # None if cancelled, else the template's file name
+    # None if cancelled, else the template's key (core/template_rules.Template.key)
 """
 
 import customtkinter as ctk

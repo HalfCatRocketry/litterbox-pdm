@@ -63,7 +63,7 @@ class Templates(Fixture, unittest.TestCase):
         self.assertEqual(self.names("Bea"), {("HCR A.drwdot", "", True), ("HCR part.prtdot", "", True)})
         self.assertEqual((self.b / "templates" / "HCR A.drwdot").read_bytes(), b"HCR A.drwdot")
         with self.assertRaisesRegex(LitterboxError, "already has a template called HCR A.drwdot"):
-            self.do("Alex", template_admin.add, self.files["HCR A.drwdot"], "Rover")
+            self.do("Alex", template_admin.add, self.files["HCR A.drwdot"])
 
     def test_a_member_cant_change_the_orgs(self):
         with self.assertRaisesRegex(LitterboxError, "Only Admins and the Owner change the org's templates"):
@@ -74,11 +74,12 @@ class Templates(Fixture, unittest.TestCase):
         self.get_latest("Bea")
         self.do("Bea", template_admin.add, self.files["Rover A3.drwdot"], "Rover")
         self.assertIn("Templates: Rover A3 added for project Rover", self.remote_log())
+        self.assertTrue((self.b / "templates" / "Rover" / "Rover A3.drwdot").is_file())       # the project's folder
         self.get_latest("Cy")
         with self.assertRaisesRegex(LitterboxError, "Only Rover's Lead, Admins and the Owner"):
             self.do("Cy", template_admin.add, self.files["Cy.drwdot"], "Rover")
         with self.assertRaisesRegex(LitterboxError, "Only Rover's Lead"):
-            self.do("Cy", template_admin.remove, "Rover A3.drwdot")
+            self.do("Cy", template_admin.remove, "Rover/Rover A3.drwdot")
 
     def test_a_change_made_by_hand_is_refused_at_upload(self):
         self.do("Alex", template_admin.add, self.files["HCR A.drwdot"])
@@ -94,16 +95,21 @@ class Templates(Fixture, unittest.TestCase):
         self.do("Alex", template_admin.add, self.files["HCR A.drwdot"])
         self.do("Alex", template_admin.add, self.files["Rover A3.drwdot"], "Rover")
         self.do("Alex", template_admin.add, self.files["Cy.drwdot"], "Rover")
-        self.do("Alex", template_admin.make_default, "Cy.drwdot")
+        self.do("Alex", template_admin.make_default, "Rover/Cy.drwdot")
         self.assertIn(("Cy.drwdot", "Rover", True), self.names("Alex"))
-        self.do("Alex", template_admin.remove, "Cy.drwdot")
+        self.do("Alex", template_admin.remove, "Rover/Cy.drwdot")
         self.assertIn(("Rover A3.drwdot", "Rover", True), self.names("Alex"))           # the default passes on
-        self.assertFalse((self.a / "templates" / "Cy.drwdot").exists())
-        self.assertNotIn("templates/Cy.drwdot", git(self.a, "ls-files", "templates").splitlines())
+        self.assertFalse((self.a / "templates" / "Rover" / "Cy.drwdot").exists())
+        self.assertNotIn("templates/Rover/Cy.drwdot", git(self.a, "ls-files", "templates").splitlines())
         self.do("Alex", project_admin.edit_project, "Rover", "Rover 2", "12")
         self.assertIn(("Rover A3.drwdot", "Rover 2", True), self.names("Alex"))
         self.assertIn("Templates: project Rover renamed to Rover 2", self.remote_log())
+        self.assertEqual(git(self.a, "ls-files", "templates").splitlines(),
+                         ["templates/HCR A.drwdot", "templates/Rover 2/Rover A3.drwdot", "templates/templates.yaml"])
+        self.assertFalse((self.a / "templates" / "Rover").exists())
         self.assertEqual(git(self.a, "status", "--porcelain"), "")
+        self.get_latest("Bea")
+        self.assertTrue((self.b / "templates" / "Rover 2" / "Rover A3.drwdot").is_file())
 
     def test_a_parts_model_and_drawing_are_made_from_templates(self):
         self.do("Alex", template_admin.add, self.files["HCR A.drwdot"])

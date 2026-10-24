@@ -33,9 +33,10 @@ class Kinds(unittest.TestCase):
 class Rules(unittest.TestCase):
     def test_the_first_of_each_kind_and_owner_is_the_default(self):
         templates = vault()
-        defaults = sorted(t.file for t in templates if t.default)
-        self.assertEqual(defaults, ["HCR B.drwdot", "HCR part.prtdot", "Rover A3.drwdot"])
+        defaults = sorted(t.key for t in templates if t.default)
+        self.assertEqual(defaults, ["HCR B.drwdot", "HCR part.prtdot", "Rover/Rover A3.drwdot"])
         self.assertEqual(template_rules.find(templates, "hcr a.DRWDOT").name, "HCR A")
+        self.assertEqual(template_rules.find(templates, "rover/rover a3.drwdot").project, "Rover")
 
     def test_a_project_part_gets_its_projects_default_then_the_orgs(self):
         templates = vault()
@@ -49,7 +50,7 @@ class Rules(unittest.TestCase):
     def test_changing_the_default_and_removing_it(self):
         templates = template_rules.made_default(vault(), "HCR A.drwdot")
         self.assertEqual(template_rules.default_for(templates, DRAWING).file, "HCR A.drwdot")
-        self.assertTrue(template_rules.find(templates, "Rover A3.drwdot").default)        # another group: untouched
+        self.assertTrue(template_rules.find(templates, "Rover/Rover A3.drwdot").default)  # another group: untouched
         templates = template_rules.removed(templates, "HCR A.drwdot")
         self.assertEqual(template_rules.default_for(templates, DRAWING).file, "HCR B.drwdot")    # the next one
         with self.assertRaises(TemplateError):
@@ -57,9 +58,14 @@ class Rules(unittest.TestCase):
         with self.assertRaises(TemplateError):
             template_rules.made_default(templates, "gone.drwdot")
 
-    def test_names_are_shared_by_the_org_and_every_project(self):
-        with self.assertRaisesRegex(TemplateError, "already has a template called HCR A.drwdot \\(for the org\\)"):
-            template_rules.added(vault(), "hcr a.drwdot", "Rover")
+    def test_names_are_each_owners_own(self):
+        with self.assertRaisesRegex(TemplateError, "The org already has a template called hcr a.drwdot"):
+            template_rules.added(vault(), "hcr a.drwdot")
+        both = template_rules.added(vault(), "HCR A.drwdot", "Rover")               # a project may use the name too
+        self.assertEqual(sorted(t.key for t in both if t.file == "HCR A.drwdot"), ["HCR A.drwdot", "Rover/HCR A.drwdot"])
+        self.assertEqual(template_rules.folder_name("Rover/Mars: 2"), "Rover-Mars- 2")
+        self.assertEqual(template_rules.folder_name("con"), "con_")
+        self.assertEqual(template_rules.folder_name(""), "")
         for bad in ("notes.txt", "a - landscape.slddrt", "", "x/y.drwdot", "a:b.prtdot", ".drwdot"):
             with self.assertRaises(TemplateError):
                 template_rules.check_file_name(bad)
@@ -72,7 +78,7 @@ class Rules(unittest.TestCase):
 
     def test_a_renamed_project_keeps_its_templates(self):
         templates = template_rules.renamed_project(vault(), "rover", "Rover 2")
-        self.assertEqual(template_rules.default_for(templates, DRAWING, "Rover 2").file, "Rover A3.drwdot")
+        self.assertEqual(template_rules.default_for(templates, DRAWING, "Rover 2").key, "Rover 2/Rover A3.drwdot")
         self.assertEqual(template_rules.find(templates, "HCR A.drwdot").project, ORG)
 
 

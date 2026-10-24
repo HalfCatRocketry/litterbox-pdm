@@ -37,6 +37,8 @@ class Store(unittest.TestCase):
             text = (Path(repo) / "templates" / "templates.yaml").read_text(encoding="utf-8")
             self.assertIn("project: Rover", text)
             self.assertEqual(template_store.path(repo, templates()[0]), Path(repo) / "templates" / "HCR A.drwdot")
+            rover = template_rules.find(templates(), "Rover/Rover A3.drwdot")
+            self.assertEqual(template_store.rel_path(rover), "templates/Rover/Rover A3.drwdot")
 
     def test_what_cant_be_read_is_left_out(self):
         self.assertEqual(template_store.parse("templates: [not, : valid"), [])
@@ -51,8 +53,10 @@ class Store(unittest.TestCase):
                                                                        "templates/templates.yaml"]), {""})
         moved = template_rules.renamed_project(before, "Rover", "Rover 2")
         self.assertEqual(template_store.changed_owners(before, moved, []), {"Rover", "Rover 2"})
-        self.assertEqual(template_store.changed_owners(before, before, ["templates/Rover A3.drwdot"]), {"Rover"})
+        self.assertEqual(template_store.changed_owners(before, before, ["templates/Rover/Rover A3.drwdot"]), {"Rover"})
+        self.assertEqual(template_store.changed_owners(before, before, ["templates/Rover/notes.txt"]), {"Rover"})
         self.assertEqual(template_store.changed_owners(before, before, ["templates/stray.bin", "cad/x.SLDPRT"]), {""})
+        self.assertEqual(template_store.changed_owners(before, before, ["templates/Elsewhere/x.drwdot"]), {""})
         self.assertEqual(template_store.changed_owners(before, before, ["templates/templates.yaml"]), set())
 
 
