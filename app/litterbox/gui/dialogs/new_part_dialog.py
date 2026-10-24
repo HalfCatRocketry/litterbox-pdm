@@ -1,6 +1,6 @@
 """
-new_part_dialog.py - New Part / New Assembly: name, description, project, and the suggested number, checked as
-you type.
+new_part_dialog.py - New Part / New Assembly: name, description, project, the template its model is made from, and
+the suggested number, checked as you type.
 """
 
 import tkinter as tk
@@ -8,18 +8,23 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
+from litterbox.cad import cad_programs
+from litterbox.core import file_types
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
+from litterbox.core import template_rules
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
 from litterbox.gui.logic import number_input
+from litterbox.gui.logic import template_text
 from litterbox.gui.widgets import modal_dialog
 from litterbox.gui.widgets import release_button
 from litterbox.parts import create
 from litterbox.parts import number_suggestions
 from litterbox.team import project_access
 from litterbox.vault import config
+from litterbox.vault import template_store
 
 NO_PROJECT = "None"
 KIND_CHOICES = ("CAD (SolidWorks files)", "Non-CAD (no CAD files: paint, stock, a kit built in its BOM)")
@@ -32,7 +37,8 @@ class NewPartDialog(modal_dialog.ModalDialog):
         NewPartDialog(parent, repo, org, kind=create.PART).show()
         # None if cancelled, else {"name": ..., "description": ..., "base": int or None, "variant": int or None,
         #                           "project": a project's name or None, "kind": create.PART or ASSEMBLY,
-        #                           "noncad": True for a non-CAD part or assembly}
+        #                           "noncad": True for a non-CAD part or assembly,
+        #                           "template": the template file to make its model from, or None}
 
     The part number is two boxes, [base]-[variant]. Their grey placeholder text
     shows the number Litterbox will use if the box is left empty: the next free
@@ -42,6 +48,11 @@ class NewPartDialog(modal_dialog.ModalDialog):
     New Assembly (kind=create.ASSEMBLY) suggests variants from the org's assembly start (500), New Part the ones
     below it. A variant typed from the other range is allowed, with a warning under the boxes and a question on
     Create.
+
+    Template: the vault's part (or assembly) templates the part may use, its project's default first, else the
+    org's (core/template_rules.py), and "None" to save the model yourself. Litterbox makes the model from it once the
+    part is created (parts/from_template.py). Without SolidWorks on this computer, or for a non-CAD part, there is
+    no choice.
 
     Choosing a project (core/projects.py) puts its digits in front of the base box, which then takes only the rest
     of the digits, and the suggestion comes from the project's block. With no project, a number in a project's
@@ -63,7 +74,9 @@ class NewPartDialog(modal_dialog.ModalDialog):
         self.result = None
         self.projects, self.project = [], None
         self.variants = (part_number.MIN_VARIANT, part_number.MAX_VARIANT)    # the kind's range, read from the vault
-        width, height = 500, 620
+        width, height = 500, 690
+        self.templates, self.template_choices = [], {template_text.NONE: None}
+        self.solidworks = cad_programs.installed()
         self.title("New Assembly" if kind == create.ASSEMBLY else "New Part")
         window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)
@@ -87,7 +100,8 @@ class NewPartDialog(modal_dialog.ModalDialog):
         ctk.CTkLabel(self, text="Kind", anchor="w").grid(row=4, column=0, sticky="ew", padx=20, pady=(10, 2))
         self.kind_var = tk.StringVar(value=KIND_CHOICES[0])
         ctk.CTkOptionMenu(self, variable=self.kind_var, values=list(KIND_CHOICES), width=260, height=34,
-                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
+                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT,
+                          command=lambda _choice: self._fill_templates()).grid(
             row=5, column=0, sticky="w", padx=20)
 
         ctk.CTkLabel(self, text="Project", anchor="w").grid(row=6, column=0, sticky="ew", padx=20, pady=(10, 2))
@@ -96,10 +110,18 @@ class NewPartDialog(modal_dialog.ModalDialog):
                                               button_hover_color=theme.ACCENT, command=self._project_chosen)
         self.project_menu.grid(row=7, column=0, sticky="w", padx=20)
 
-        ctk.CTkLabel(self, text="Part number:", anchor="w").grid(
-            row=8, column=0, sticky="ew", padx=20, pady=(14, 2))
+        ctk.CTkLabel(self, text="Template (Litterbox makes the model from it)", anchor="w").grid(
+            row=8, column=0, sticky="ew", padx=20, pady=(10, 2))
+        self.template_var = tk.StringVar(value=template_text.NONE)
+        self.template_menu = ctk.CTkOptionMenu(self, variable=self.template_var, values=[template_text.NONE],
+                                               width=width - 40, height=34, fg_color=theme.GRAY,
+                                               button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT,
+                                               dynamic_resizing=False)
+        self.template_menu.grid(row=9, column=0, sticky="w", padx=20)
+
+        ctk.CTkLabel(self, text="Part number:", anchor="w").grid(row=10, column=0, sticky="ew", padx=20, pady=(14, 2))
         numbers = ctk.CTkFrame(self, fg_color="transparent")
-        numbers.grid(row=9, column=0, sticky="w", padx=20)
+        numbers.grid(row=11, column=0, sticky="w", padx=20)
         self.prefix_label = ctk.CTkLabel(numbers, text="", font=ctk.CTkFont(size=14, weight="bold"))
         # No textvariable here: CustomTkinter only shows placeholder text without one.
         self.base_entry = ctk.CTkEntry(numbers, width=BASE_BOX_WIDTH, height=34, placeholder_text="")
@@ -113,16 +135,16 @@ class NewPartDialog(modal_dialog.ModalDialog):
         # Under the boxes: "PN available" / "PN in use:" and, when in use, the name of the part that has it.
         self.verdict = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=width - 40,
                                     font=ctk.CTkFont(size=13, weight="bold"))
-        self.verdict.grid(row=10, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.verdict.grid(row=12, column=0, sticky="ew", padx=20, pady=(8, 0))
         self.verdict_detail = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=width - 40,
                                            text_color=theme.ERROR)
-        self.verdict_detail.grid(row=11, column=0, sticky="ew", padx=20)
+        self.verdict_detail.grid(row=13, column=0, sticky="ew", padx=20)
         self.variant_note = ctk.CTkLabel(self, text="", anchor="w", justify="left", wraplength=width - 40,
                                          text_color=theme.WARN)
-        self.variant_note.grid(row=12, column=0, sticky="ew", padx=20)
+        self.variant_note.grid(row=14, column=0, sticky="ew", padx=20)
 
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=13, column=0, sticky="ew", padx=20, pady=20)
+        buttons.grid(row=15, column=0, sticky="ew", padx=20, pady=20)
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         release_button.ReleaseButton(buttons, text="Cancel", height=38, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                       command=self.destroy).grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -136,12 +158,14 @@ class NewPartDialog(modal_dialog.ModalDialog):
             config.apply(repo)              # learn this vault's digit counts before reading the boxes
             self.projects = config.get_projects(repo)
             self.variants = create.variant_range(repo, kind)
+            self.templates = template_store.load(repo)
         except (config.ConfigError, LitterboxError) as e:
             self._say(str(e), theme.ERROR)
         else:
             offered = project_access.usable_here(repo, self.projects)        # a restricted project: its members
             self.project_menu.configure(values=[NO_PROJECT] + [p.name for p in offered])
             self._refresh(first_time=True)
+        self._fill_templates()
         self.after(150, self._grab)
 
     def _say(self, text="", color=theme.MUTED, detail=""):
@@ -157,6 +181,25 @@ class NewPartDialog(modal_dialog.ModalDialog):
         what = "an assembly" if self.kind == create.ASSEMBLY else "a part"
         return (f"Variant {part_number.format_variant(variant)} is usually for {usual}. Variants for {what} are "
                 f"{part_number.format_variant(low)} to {part_number.format_variant(high)}.")
+
+    def _fill_templates(self):
+        """The Template list for the kind and project chosen: the default first, then the others, then None."""
+        kind = file_types.ASSEMBLY if self.kind == create.ASSEMBLY else file_types.PART
+        found = template_rules.choices(self.templates, kind, self._project_name() or template_rules.ORG)
+        if self.kind_var.get() == KIND_CHOICES[1]:
+            only = "None: a non-CAD part has no files"
+        elif not found:
+            only = template_text.none_yet(template_rules.LABELS[kind], self._project_name() or "")
+        elif not self.solidworks:
+            only = "None: SolidWorks isn't on this computer, so save the model yourself"
+        else:
+            self.template_choices = template_text.choice_map(found)
+            self.template_menu.configure(values=list(self.template_choices), state="normal")
+            self.template_var.set(next(iter(self.template_choices)))
+            return
+        self.template_choices = {only: None}
+        self.template_menu.configure(values=[only], state="disabled")
+        self.template_var.set(only)
 
     def _project_name(self):
         return self.project.name if self.project else None
@@ -176,6 +219,7 @@ class NewPartDialog(modal_dialog.ModalDialog):
             self.base_entry.configure(width=max(60, round(BASE_BOX_WIDTH * share)))
         self.focus_set()                    # the empty base box shows its grey suggestion again
         self._refresh(first_time=True)
+        self._fill_templates()
 
     def _base_digits(self):
         """How many digits go in the base box."""
@@ -277,5 +321,6 @@ class NewPartDialog(modal_dialog.ModalDialog):
             return
         self.result = {"name": name, "description": self.desc_var.get().strip(),
                        "base": base, "variant": variant, "project": self._project_name(), "kind": self.kind,
-                       "noncad": self.kind_var.get() == KIND_CHOICES[1]}
+                       "noncad": self.kind_var.get() == KIND_CHOICES[1],
+                       "template": self.template_choices.get(self.template_var.get())}
         self.destroy()

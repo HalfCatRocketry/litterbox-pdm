@@ -12,6 +12,7 @@ once). A screen of the main window, chosen in the sidebar; unsaved changes stay 
     | | ...                                                |  | Projects...        | |
     | |                                                    |  | Document Types...  | |
     | |                                                    |  | Toolbox...         | |
+    | |                                                    |  | Templates...       | |
     | | the highlighted person's host names, keys and roles|  | Vault Settings...  | |
     | +----------------------------------------------------+  +--------------------+ |
     | what just happened                                                              |
@@ -161,6 +162,7 @@ class TeamScreen(ctk.CTkFrame):
                    ("Document Types...", lambda: self.app.manage_doc_types(self),
                     lambda: self._why_not("manage_doc_types", team=False)),
                    ("Toolbox...", lambda: self.app.manage_toolbox(self), self._busy),
+                   ("Templates...", lambda: self.app.manage_templates(self), self._busy),
                    ("Vault Settings...", lambda: self.app.edit_vault_settings(self),
                     lambda: self._why_not("manage_settings", team=False)))
         for row, (text, command, why_not) in enumerate(entries, start=1):

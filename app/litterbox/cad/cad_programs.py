@@ -40,6 +40,12 @@ def for_files(paths):
     return found
 
 
+def for_template(path):
+    """The CadProgram whose template this is (core/file_types.TEMPLATES), or None."""
+    name = file_types.template_program(path)
+    return next((program for program in PROGRAMS if program.name == name), None)
+
+
 def installed(path=None):
     """Can Litterbox start the program for this file (or the DEFAULT one) on this computer?"""
     program = for_file(path) if path is not None else DEFAULT
@@ -142,6 +148,13 @@ class Backends:
 
     def save_pdf(self, path, out):
         return self.for_file(path).save_pdf(path, out)
+
+    def new_from_template(self, template, out):
+        """Make a new file from a template, by the template's program."""
+        program = for_template(template)
+        if program is None:
+            raise CadError(f"{file_types.file_name(template)} isn't a template of a CAD program Litterbox knows.")
+        return self.for_program(program).new_from_template(template, out)
 
     def version(self, path=None):
         """The version of the program for this file, or of the DEFAULT one."""

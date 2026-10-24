@@ -1,6 +1,7 @@
 """
 team_admin.py - what the Team screen's buttons do: who am I, setting up the team, people, roles,
-handing over the Owner role, vault settings, projects, the team's Toolbox, workflows, and saving the draft.
+handing over the Owner role, vault settings, projects, the team's Toolbox, templates, workflows, and saving the
+draft.
 """
 
 from tkinter import messagebox
@@ -9,6 +10,7 @@ from litterbox.cad import solidworks_versions
 from litterbox.errors import LitterboxError
 from litterbox.gui import theme
 from litterbox.gui.dialogs import projects_dialog
+from litterbox.gui.dialogs import templates_dialog
 from litterbox.gui.dialogs import toolbox_dialog
 from litterbox.gui.dialogs import vault_settings_dialog
 from litterbox.gui.dialogs.team import person_dialog
@@ -17,8 +19,12 @@ from litterbox.gui.dialogs.workflow import workflows_dialog
 from litterbox.gui.logic import error_text
 from litterbox.gui.logic import project_text
 from litterbox.gui.logic import team_text
+from litterbox.gui.logic import template_text
 from litterbox.gui.logic import toolbox_text
 from litterbox.gui.logic import workflow_editor
+from litterbox.core import projects as project_rules
+from litterbox.core import template_rules
+from litterbox.team import project_access
 from litterbox.team import team_editing
 from litterbox.team import team_identity
 from litterbox.team import team_model
@@ -26,6 +32,9 @@ from litterbox.team import team_setup
 from litterbox.vault import config
 from litterbox.vault import project_admin
 from litterbox.vault import settings_admin as vault_settings
+from litterbox.vault import template_access
+from litterbox.vault import template_admin
+from litterbox.vault import template_store
 from litterbox.vault import toolbox_admin
 from litterbox.workflows import workflow_editing
 from litterbox.workflows import workflow_templates
@@ -214,6 +223,53 @@ class TeamAdmin:
             self.note = toolbox_text.done_text(action, result)
             self._say(self.note)
         self.run_task(work, "", on_success=done, label=toolbox_text.JOB_LABELS[action])
+
+    def manage_templates(self, window, project=""):
+        """Templates...: the org's and the projects' SolidWorks templates. Everyone may look; Admins and the Owner
+        change the org's, a project's Lead (and Admins, the Owner) its own (vault/template_admin.py). After a change
+        the window opens again."""
+        repo = self.repo()
+        if not repo:
+            return
+        try:
+            config.apply(repo)
+            projects = config.get_projects(repo)
+            templates = template_store.load(repo)
+        except (LitterboxError, config.ConfigError) as e:
+            messagebox.showwarning("Templates", str(e), parent=window)
+            return
+        shown = [p.name for p in project_access.usable_here(repo, projects)]
+
+        def may_change(name):
+            try:
+                found = project_rules.find(name, projects) if name else None
+            except project_rules.ProjectError:
+                return False, f"There is no project called {name} any more."
+            return template_access.may_change(self.identity, found)
+
+        chosen = templates_dialog.TemplatesDialog(window, templates, shown, may_change, project).show()
+        if not chosen:
+            return
+        action = chosen[0]
+        if action == "add":
+            _action, project, path = chosen
+            work, file = (lambda: template_admin.add(repo, path, project)), path.replace("\\", "/").rsplit("/", 1)[-1]
+        else:
+            _action, file = chosen
+            project = getattr(template_rules.find(templates, file), "project", "")
+            if action == "remove" and not messagebox.askyesno(
+                    "Templates", f"Remove the template {file}? Files already made from it are not changed.",
+                    parent=window):
+                return
+            work = (lambda: template_admin.remove(repo, file)) if action == "remove" else \
+                (lambda: template_admin.make_default(repo, file))
+
+        def done(_result):
+            self.note = template_text.done_text(action, file)
+            self._say(self.note)
+            self.manage_templates(window, project)
+
+        self.run_task(work, "", on_success=done, refresh=False, label=template_text.JOB_LABELS[action])
 
     def manage_projects(self, window):
         """Projects...: the org's projects you may see. Admins and the Owner add, change and delete them; a

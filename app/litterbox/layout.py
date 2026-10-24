@@ -9,6 +9,9 @@ layout.py - where everything lives inside a vault. One place for every fixed fol
     documents/PROP-0001_A.docx        documents' files (Git LFS, lockable) DOC_DIR_NAME
     toolbox/browser/...               the team's SolidWorks Toolbox, when it has one (an Admin uploads it)
                                                                           TOOLBOX_DIR_NAME
+    folders/<time>-<id>.yaml          Team and project folders, one file per change   FOLDERS_DIR_NAME
+    templates/HCR drawing.drwdot      the org's and projects' SolidWorks templates    TEMPLATES_DIR_NAME
+    templates/templates.yaml          which template is which, and the defaults       TEMPLATES_INDEX
     .litterbox/config.yaml            shared vault settings               CONFIG_PATH (CONFIG_DIR, CONFIG_FILE)
     .litterbox/people.yaml            the team                            PEOPLE_FILE
     .litterbox/workflows.yaml         sign-off templates                  WORKFLOWS_FILE
@@ -28,6 +31,8 @@ DOC_LOG_DIR_NAME = "DOC-logs"                # document records (documents/), li
 DOC_DIR_NAME = "documents"                   # documents' files, like cad for parts
 TOOLBOX_DIR_NAME = "toolbox"                 # the team's Toolbox (vault/toolbox_admin.py): only Admins change it
 FOLDERS_DIR_NAME = "folders"                 # Team and project folders (folders/folder_store.py): one file per change
+TEMPLATES_DIR_NAME = "templates"             # SolidWorks templates new files are made from (vault/template_store.py)
+TEMPLATES_INDEX = f"{TEMPLATES_DIR_NAME}/templates.yaml"
 
 CONFIG_DIR = ".litterbox"
 CONFIG_FILE = "config.yaml"                 # a file name inside CONFIG_DIR (the others below are paths)

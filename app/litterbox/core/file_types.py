@@ -21,6 +21,13 @@ def _every(kind):
     return tuple(ext for kinds in PROGRAMS.values() for ext in kinds.get(kind, ()))
 
 
+# Each program's templates, by the kind of file made from them: a new part, assembly or drawing starts as a copy of
+# one (core/template_rules.py, vault/template_store.py).
+TEMPLATES = {
+    "SolidWorks": {PART: ".prtdot", ASSEMBLY: ".asmdot", DRAWING: ".drwdot"},
+}
+TEMPLATE_EXTENSIONS = tuple(ext for kinds in TEMPLATES.values() for ext in kinds.values())
+
 PART_EXTENSIONS = _every(PART)
 ASSEMBLY_EXTENSIONS = _every(ASSEMBLY)
 DRAWING_EXTENSIONS = _every(DRAWING)
@@ -60,6 +67,25 @@ def program_of(path):
     """The name of the CAD program whose file this is ('SolidWorks'), or None."""
     ext = extension(path)
     return next((name for name, kinds in PROGRAMS.items() if any(ext in exts for exts in kinds.values())), None)
+
+
+def template_kind(path):
+    """PART, ASSEMBLY or DRAWING for a template (what is made from it: 'Bracket.prtdot' -> PART); None for any other
+    file."""
+    ext = extension(path)
+    return next((kind for kinds in TEMPLATES.values() for kind, template in kinds.items() if template == ext), None)
+
+
+def template_program(path):
+    """The name of the CAD program whose template this is ('SolidWorks'), or None."""
+    ext = extension(path)
+    return next((name for name, kinds in TEMPLATES.items() if ext in kinds.values()), None)
+
+
+def made_from(template):
+    """The extension of a file made from this template ('.drwdot' -> '.slddrw'); '' for a file that isn't one."""
+    program, kind = template_program(template), template_kind(template)
+    return PROGRAMS[program][kind][0] if program and kind else ""
 
 
 def is_part(path):

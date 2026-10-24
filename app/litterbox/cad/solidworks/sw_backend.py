@@ -3,7 +3,7 @@ sw_backend.py - SolidWorks as the importer, Revise, Update references and Genera
 cad/cad_program.py): read a file's references, list an assembly's components (to count them, to find its Toolbox
 parts, and the configuration of each), read a part's material, read a model's configurations and rename one
 (sw_configurations.py), copy a file with its references updated (Pack and Go), point a file at a different one, save
-a STEP or PDF of it (sw_saving.py), close.
+a STEP or PDF of it (sw_saving.py), make a new part, assembly or drawing from a template, close.
 
 Through COM, so on one thread only (see importing/session.py and com.com_thread).
 """
@@ -88,6 +88,7 @@ class SolidWorksBackend:
     repoint(file, old, new)  change one reference inside the NEW file
     save_step(path, out)     save a part or assembly as an AP214 STEP file
     save_pdf(path, out)      save every sheet of a drawing as a PDF
+    new_from_template(template, out)  a new part, assembly or drawing (an empty sheet) from a template, saved
     version()                the SolidWorks version, for the log
     """
 
@@ -307,6 +308,51 @@ class SolidWorksBackend:
 
     def save_pdf(self, path, out):
         sw_saving.save_pdf(self._app(), full_path(path), full_path(out))
+
+    def new_from_template(self, template, out):
+        """Make a new file at `out` (a full path that isn't there yet) from a template, save it and close it: a part
+        or assembly as the template has it, or a drawing as an empty sheet of the template's size and sheet format
+        (no views). Made out of sight; opening it afterwards is the caller's. Tried with SolidWorks 2024: NewDocument
+        keeps a drawing template's own size and sheet format when given paper size 0, and the sheet format is kept
+        inside the template (a drawing made after its .slddrt file was deleted still has its title block). A template
+        it can't use (missing, damaged, or saved in a newer SolidWorks) gives no document."""
+        import pythoncom
+        from litterbox.cad.solidworks import com
+        from win32com.client import VARIANT
+        sw, template, out = self._app(), full_path(template), full_path(out)
+        name, wanted = os.path.basename(out), sw_saving.DOC_TYPES.get(os.path.splitext(out)[1].lower())
+        if wanted is None:
+            raise sw_errors.SolidWorksError(f"{name} isn't a SolidWorks part, assembly or drawing.")
+        if os.path.exists(out):
+            raise sw_errors.SolidWorksError(f"{name} is there already, so it wasn't made again.")
+        if not os.path.isfile(template):
+            raise sw_errors.SolidWorksError(f"The template {os.path.basename(template)} isn't on this computer.")
+        sw.DocumentVisible(False, wanted)
+        try:
+            model = sw.NewDocument(template, 0, 0, 0)
+        finally:
+            sw.DocumentVisible(True, wanted)
+        if model is None:
+            raise sw_errors.SolidWorksError(
+                f"SolidWorks {self.version() or ''} couldn't make a new file from {os.path.basename(template)}. A "
+                "template saved in a newer SolidWorks can't be used in an older one, nor can a damaged one.")
+        try:
+            made = com.call(model, "GetType")
+            if made != wanted:
+                raise sw_errors.SolidWorksError(f"{os.path.basename(template)} made the wrong kind of file for "
+                                                f"{name}.")
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            errors = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
+            warnings = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
+            ok = model.Extension.SaveAs(out, sw_saving.CURRENT_VERSION, sw_saving.SAVE_SILENT,
+                                        VARIANT(pythoncom.VT_DISPATCH, None), errors, warnings)
+            if not ok or not os.path.isfile(out):
+                raise sw_errors.SolidWorksError(f"SolidWorks could not save {name} (error {errors.value}).")
+        finally:
+            try:
+                sw.CloseDoc(com.call(model, "GetTitle"))
+            except Exception as e:
+                diagnostics.LOG(f"Could not close the new {name} in SolidWorks: {e}")
 
     def version(self):
         app = self._app()                       # a failure to connect should be reported, not hidden

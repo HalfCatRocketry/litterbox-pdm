@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -52,6 +52,8 @@ BLOCKS = [
                 "be restricted or hidden."],
     ["Folder", "A named list of parts, documents, and ECOs in Home. It only points at them, so a part can be in any "
                "number of folders."],
+    ["Template", "A SolidWorks file that new parts, assemblies, or drawings start from (.prtdot, .asmdot, .drwdot). "
+                 "The org has its own, a project can have more, and one of each kind is the default."],
 ], [1.6, 4.9]),
 
 ("h1", "Getting started"),
@@ -175,14 +177,18 @@ BLOCKS = [
 ("ol", [
     "Choose Create > **New Part**. Enter a name and, optionally, a description and project. Litterbox suggests the "
     "next free part number; you can type another.",
-    "Litterbox creates the part's record, checks it out to you, and shows the file name its model must have (for "
-    "example HCR-100010-001_A), with a Copy button.",
-    "In SolidWorks, model the part and **Save As** into the vault's cad folder (C:\\Litterbox\\<vault>\\cad\\) "
-    "under that name. A drawing has the same name with .SLDDRW.",
+    "Choose its **Template**: the default is chosen for you (see Templates). Litterbox creates the part's record, "
+    "checks it out to you, makes its model from the template under the right name (for example "
+    "HCR-100010-001_A.SLDPRT), and opens it in SolidWorks.",
+    "Model the part and save it. For a drawing, choose Create > **New Drawing...**: Litterbox makes "
+    "HCR-100010-001_A.SLDDRW from the drawing template, as an empty sheet, and opens it.",
     "In Litterbox, tick the part and press **Check In**, with an optional comment. Litterbox uploads the files and "
     "the record and releases the lock.",
 ]),
 ("p", "Other people see the part after their next Get Latest."),
+("p", "With **None** as the template (or without SolidWorks on your computer), Litterbox instead shows the file name "
+      "the model must have, with a Copy button: in SolidWorks, **Save As** into the vault's cad folder "
+      "(C:\\Litterbox\\<vault>\\cad\\) under that name. A drawing has the same name with .SLDDRW."),
 
 ("h1", "Everyday work"),
 ("h2", "Part numbers and file names"),
@@ -504,11 +510,12 @@ BLOCKS = [
 ("h2", "People and access"),
 ("table", ["Access", "Permissions"], [
     ["Owner", "Everything, plus renaming the org and transferring ownership. There is exactly one Owner."],
-    ["Admin", "Manage people, roles, workflows, projects, document types, the team's Toolbox, and vault settings; "
+    ["Admin", "Manage people, roles, workflows, projects, document types, the team's Toolbox, templates, and vault "
+              "settings; "
               "override workflows; break a checkout; remake released STEP/PDF files; link documents to released "
               "parts. Admins can work in every project, restricted or hidden."],
     ["Member", "Everyday work: create, check out, check in, release (subject to workflows), and sign off. A "
-               "project's Lead can change that project."],
+               "project's Lead can change that project and its templates."],
     ["Not listed, or switched off", "Read-only: look, open, and export."],
 ], [1.7, 4.8]),
 ("p", "Team > **Roles...** lists the roles the org uses. A role ticked **Superuser** may sign any sign-off; a "
@@ -582,7 +589,7 @@ BLOCKS = [
 
 ("h1", "Working with SolidWorks"),
 ("p", "Litterbox uses the SolidWorks API to read references, count parts, find Toolbox parts, read materials, "
-      "copy files at Revise and Import, and make STEP and PDF files."),
+      "copy files at Revise and Import, make new files from templates, and make STEP and PDF files."),
 ("ul", [
     "If SolidWorks isn't running when Litterbox needs it, Litterbox starts it **in the background** and closes it "
     "afterwards. If it is running, Litterbox uses it and leaves your open documents as they are.",
@@ -610,6 +617,60 @@ BLOCKS = [
     "(Litterbox keeps one material per revision: the configuration's the file was saved in), and when a part is "
     "linked to a design table or equations file outside it (Litterbox can't keep that file with the revisions; "
     "embed it instead). Update references says when the newer revision has lost a configuration an assembly uses.",
+]),
+
+("h2", "Templates"),
+("p", "Litterbox makes a part's files from the team's SolidWorks **templates**, so every part, assembly, and drawing "
+      "starts with the same units, materials, drafting standard, and title block. There are three kinds: part "
+      "templates (.prtdot), assembly templates (.asmdot), and drawing templates (.drwdot)."),
+("ul", [
+    "**The org's and each project's.** The org has its own templates, and each project can have more. Among the "
+    "org's templates of one kind, one is the **default**, and the same among each project's. A part in a project "
+    "gets its project's default if the project has templates of that kind, otherwise the org's default. Every other "
+    "template of the project and the org can be chosen instead.",
+    "**New Part and New Assembly** have a **Template** box, with the default chosen. Litterbox makes the model from it "
+    "and opens it. Choose None to save the model yourself.",
+    "**Create > New Model...** makes the model of a part checked out to you that has none yet (one created with "
+    "None, say), and **Create > New Drawing...** makes the drawing of a part that has a model and no drawing. Both "
+    "ask which template, with the default chosen. A new drawing is an **empty sheet** of the template's size, with "
+    "its title block: add the views in SolidWorks.",
+    "The file is made in the cad folder under the part's name for its working revision, like a file you saved "
+    "there, and goes up with your next Check In. Litterbox needs SolidWorks on your computer to make it (it starts "
+    "SolidWorks in the background if it isn't running).",
+]),
+("p", "Team > **Templates...** shows the org's templates and each project's. Everyone can look. Admins and the "
+      "Owner change the org's; a project's Lead (and Admins, and the Owner) changes the project's:"),
+("ul", [
+    "**Add...** copies a template file into the vault's **templates** folder and uploads it. The first template of "
+    "a kind becomes the default. Every template in the vault needs its own file name, the org's and the projects' "
+    "together, so give them clear names (HCR A size, Rover A3).",
+    "**Make Default** makes the selected template the default of its kind.",
+    "**Remove...** takes a template out of the vault. Files already made from it don't change. If it was the "
+    "default, the next one by name becomes the default.",
+]),
+("p", "Litterbox refuses to upload a template change from anyone else. A renamed project keeps its templates."),
+("h3", "Things to watch"),
+("ul", [
+    "**Keep the sheet format in the drawing template.** SolidWorks saves the sheet format (the border and title "
+    "block) inside a drawing template, so a drawing made from it has the title block even on a computer without the "
+    "sheet format's .slddrt file. The template also remembers where that .slddrt file was, and SolidWorks only looks "
+    "there when someone reloads or changes the sheet format. Keep the team's .slddrt files where everyone has them "
+    "at the same path.",
+    "**Save templates in the org's SolidWorks version, or older.** A template saved in a newer SolidWorks can't be "
+    "used by an older one; Litterbox says so when it can't make a file. When the org moves to a newer SolidWorks, "
+    "the templates can stay as they are.",
+    "**Title blocks.** Litterbox names each file after its part and revision (HCR-100010-001_A), and, with "
+    "SolidWorks open at check-in, names a file's only configuration after the part's Name (see Configurations). A "
+    "title block that shows the file name and the configuration name ($PRP:\"SW-File Name\" and "
+    "$PRP:\"SW-Configuration Name\", or $PRPSHEET for the model on the sheet) therefore shows the part number, "
+    "revision, and Name without anyone typing them. Litterbox doesn't write other properties into the files.",
+    "**Units, materials, and drafting standards come from the template.** Set them in the template, not part by "
+    "part, so new parts agree.",
+    "**A changed template only changes new files.** Existing drawings keep their sheet format; to bring one up to "
+    "date, reload its sheet format in SolidWorks while it is checked out.",
+    "**SolidWorks' own File > New** still uses the templates SolidWorks is set to (Tools > Options > System Options "
+    "> Default Templates and File Locations > Document Templates). Point Document Templates at the vault's templates "
+    "folder (C:\\Litterbox\\<vault>\\templates) so File > New offers the team's templates too.",
 ]),
 
 ("h1", "Settings and troubleshooting"),

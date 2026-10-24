@@ -18,7 +18,7 @@ A CadProgram (one instance per program, e.g. cad/solidworks/sw_program.SOLIDWORK
     make_writable(paths, reload) make those open documents writable, reloading those in `reload` from disk first;
                                  (done, failed) as ([path], [(path, why)])
 
-A backend reads and copies files. None of its calls changes an original file:
+A backend reads and copies files, and makes new ones. None of its calls changes an original file:
 
     references(path)             [(stored, found)] for the file's direct references: the path the file keeps, and
                                  where the program finds it
@@ -34,6 +34,8 @@ A backend reads and copies files. None of its calls changes an original file:
     repoint(file, old, new)      change one reference inside the NEW file
     save_step(path, out)         save a part or assembly as a STEP file
     save_pdf(path, out)          save every sheet of a drawing as a PDF
+    new_from_template(template, out)  make a new file at `out` from a template (a part, an assembly, or a drawing
+                                 as an empty sheet), saved and closed (core/file_types.TEMPLATES)
     version()                    the program's version, for the log and the files' history
     close()                      let go of the program, and shut down one the backend started
 

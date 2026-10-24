@@ -40,6 +40,7 @@ from litterbox.team import team_store
 from litterbox.vault import config
 from litterbox.vault import config_write
 from litterbox.vault import settings_admin
+from litterbox.vault import template_admin
 
 
 @dataclass
@@ -154,10 +155,11 @@ def plan_change(repo, name, new_name=None, new_prefix=None, delete=False, locks=
 def edit_project(repo, name, new_name, new_prefix, team=None):
     """Change a project's name, starting digits and/or its `team` (as with_team() takes it; None keeps them), and
     the records of the parts that join, leave or are renamed, in one upload. Returns the ProjectChange done. A
-    renamed project's folders (folders/folder_store.py) go with it."""
+    renamed project's folders (folders/folder_store.py) and templates (vault/template_admin.py) go with it."""
     change = _apply(repo, name, new_name, new_prefix, delete=False, team=team)
     if change.new is not None and change.new.name != change.old.name:
         _carry_folders(repo, change.old.name, change.new.name)
+        _carry_templates(repo, change.old.name, change.new.name)
     return change
 
 
@@ -169,6 +171,14 @@ def _carry_folders(repo, old, new):
                                      f"project {old} renamed to {new}", push=guarded_push.push)
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: {new}'s folders couldn't be moved from its old name, {old}: {e}")
+
+
+def _carry_templates(repo, old, new):
+    """A renamed project's templates: one upload that moves them to the new name (if it had any)."""
+    try:
+        template_admin.rename_project(repo, old, new)
+    except LitterboxError as e:
+        diagnostics.LOG(f"WARNING: {new}'s templates couldn't be moved from its old name, {old}: {e}")
 
 
 @converts_errors

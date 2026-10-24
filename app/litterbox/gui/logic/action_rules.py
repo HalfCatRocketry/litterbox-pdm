@@ -33,11 +33,14 @@ ALLOWED_KINDS = {
     "create_variant": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "pending"},   # not void
     "add_to_folder": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "missing", "pending",
                       "error"},                                  # a folder may list anything
+    "new_model": {"mine"},                  # made from a template into the part you have checked out
+    "new_drawing": {"mine"},
 }
 
 
 # Actions that need CAD files: never for a non-CAD part (PartStatus.noncad), whatever its state
-CAD_ONLY = {"open", "open_drawing", "open_pdf", "generate_step_pdf", "make_cots", "update_material"}
+CAD_ONLY = {"open", "open_drawing", "open_pdf", "generate_step_pdf", "make_cots", "update_material", "new_model",
+            "new_drawing"}
 
 
 def usable(action, row):
@@ -67,7 +70,7 @@ NAME = {            # "...cannot <name> ..."
     "break_checkout": "break the checkout of", "purchasing": "change the purchasing info of",
     "export_files": "export the files of", "generate_step_pdf": "make the STEP/PDF of",
     "update_material": "update the material of", "create_variant": "make a variant of",
-    "add_to_folder": "put in a folder",
+    "add_to_folder": "put in a folder", "new_model": "make a model for", "new_drawing": "make a drawing for",
 }
 
 
@@ -77,7 +80,7 @@ PAST = {            # "<past> 2 parts"
     "break_checkout": "Broke the checkout of", "purchasing": "Changed the purchasing info of",
     "export_files": "Exported the files of", "generate_step_pdf": "Made the STEP/PDF of",
     "update_material": "Updated the material of", "create_variant": "Made a variant of",
-    "add_to_folder": "Put in a folder",
+    "add_to_folder": "Put in a folder", "new_model": "Made a model for", "new_drawing": "Made a drawing for",
 }
 
 
@@ -127,7 +130,8 @@ VIEW_ONLY = {"open", "open_drawing", "open_pdf", "references",      # these only
 EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
 
 # The ticked parts, or else the highlighted one: its window lists the parts before anything is done
-TICKED_OR_HIGHLIGHTED = EXPORTS | {"generate_step_pdf", "update_material", "add_to_folder"}
+TICKED_OR_HIGHLIGHTED = EXPORTS | {"generate_step_pdf", "update_material", "add_to_folder", "new_model",
+                                   "new_drawing"}
 
 LOOKS = VIEW_ONLY | EXPORTS | {"add_to_folder"}     # change nothing in the vault's parts, so a part with a job
                                                     # running can still be used
@@ -155,6 +159,7 @@ BUTTON_ACTIONS = {
     "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
     "Purchasing Info": "purchasing", "Export Files": "export_files", "Generate STEP/PDF": "generate_step_pdf",
     "Update Material": "update_material", "Create Variant": "create_variant", "Add to Folder": "add_to_folder",
+    "New Model": "new_model", "New Drawing": "new_drawing",
 }
 
 

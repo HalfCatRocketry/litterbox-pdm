@@ -30,6 +30,7 @@ LIFECYCLE_MENU = (("Edit Details", "edit_details"), ("Purchasing Info", "edit_pu
 
 
 CREATE_MENU = (("New Part", "new_part"), ("New Assembly", "new_assembly"), ("Create Variant", "create_variant"),
+               None, ("New Model", "new_model"), ("New Drawing", "new_drawing"),
                None, ("Import...", "import_cad"), ("Import COTS...", "import_cots"))
 
 
@@ -44,7 +45,7 @@ ADMIN_LIFECYCLE_MENU = (None, ("Break Checkout", "break_checkout"))      # only 
 ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout...",
               "Purchasing Info": "Purchasing Info...", "Export Files": "Export Files...",
               "Generate STEP/PDF": "Generate STEP/PDF...", "Create Variant": "Create Variant...",
-              "Add to Folder": "Add to Folder..."}
+              "Add to Folder": "Add to Folder...", "New Model": "New Model...", "New Drawing": "New Drawing..."}
 
 
 class Menus:

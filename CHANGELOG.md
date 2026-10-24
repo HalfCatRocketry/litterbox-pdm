@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2
+
+- **SolidWorks templates.** Litterbox now makes a part's files from the team's templates: part templates (.prtdot), assembly templates (.asmdot) and drawing templates (.drwdot).
+  - **The org's and each project's.** The org has its own templates and each project can have more; one of each kind is the default, for the org and for each project. A part in a project gets its project's default if the project has templates of that kind, otherwise the org's; the others can be chosen instead.
+  - **New Part and New Assembly** have a **Template** box, with the default chosen: Litterbox makes the model from it (HCR-00042-001_A.SLDPRT, in the cad folder) and opens it in SolidWorks. Choose None to save the model yourself, as before.
+  - **Create > New Model...** makes the model of a part checked out to you that has none yet, and **Create > New Drawing...** its drawing, as an **empty sheet** of the template's size with its title block. Both ask which template, with the default chosen. The file goes up with the part's next Check In.
+  - **Team > Templates...**: everyone can look; Admins and the Owner add, remove and choose the default of the org's templates, and a project's Lead (and Admins and the Owner) the project's. Templates are kept in the vault's new **templates** folder (with templates/templates.yaml saying which is which), each change uploaded at once. An upload with template changes the person may not make is refused. A renamed project keeps its templates. An older Litterbox leaves the folder alone, so the vault doesn't need 0.6.2.
+  - The user guide has a Templates section, with what to watch: keep the sheet format inside the drawing template (SolidWorks does, so the title block is there even without the .slddrt file), save templates in the org's SolidWorks version or older, title blocks that show the file and configuration names show the part number, revision and Name, and changing a template only changes new files.
 ## 0.6.1
 
 - **Report a problem.** Help > **Report a problem...** (and **Report...** in the red status bar's Details window) asks what you were doing, then makes a report and opens an email to the Litterbox team (contact+litterbug@halfcatrocketry.com) for you to send: with Outlook, a new message with the report attached; otherwise your email program, with Explorer showing the report to attach. The report has your comment, the versions of Litterbox, Windows, SolidWorks and Git, the problems in the status bar, the last unexpected errors with their details, Litterbox's log, your Litterbox settings and the vault's shared settings, with passwords and tokens taken out. Reports are kept in C:\Litterbox\logs\reports (the newest five).
