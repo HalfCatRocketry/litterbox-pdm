@@ -34,8 +34,28 @@ class ListAndFilenameWiring(unittest.TestCase):
         self.assertEqual(app._render(), 1)
         self.assertEqual(app.tree.rows["HCR-00007-001"]["values"],
                          ["00007-001", "B", "Bracket", "", "", "PRT", "CAD", "", "Available (Rev A released)", "", "A", "",
-                          ""])
+                          "", "", "", "", ""])
         self.assertIn("image", app.tree.rows["HCR-00007-001"])          # the tick box and status icon
+
+    def test_the_purchasing_columns(self):
+        from litterbox.gui.logic import list_columns
+        self.row.purchasing = {"supplier": "McMaster-Carr", "supplier_pn": "91251A540", "unit_cost": "1250.5",
+                               "lead_time_days": 3}
+        self.row.currency = "USD"
+        texts = {key: list_columns.BY_KEY[key].text(self.row) for key in ("supplier", "supplier_pn", "unit_cost",
+                                                                          "lead_time")}
+        self.assertEqual(texts, {"supplier": "McMaster-Carr", "supplier_pn": "91251A540", "unit_cost": "$1,250.50",
+                                 "lead_time": "3"})
+        self.assertFalse(any(list_columns.BY_KEY[key].shown for key in texts))       # offered in View > Columns
+        self.assertIn("91251A540", list_columns.search_values(self.row, ["supplier_pn"]))
+        self.assertEqual({c.key for c in list_columns.COLUMNS if c.numeric}, {"unit_cost", "lead_time"})
+
+    def test_prices_sort_as_numbers(self):
+        values = ["$0.5", "", "$1,250.50", "$0.42", "n/a", "$10"]
+        order = self.gui.list_view.sort_order(values, numeric=True)
+        self.assertEqual([values[i] for i in order], ["$0.42", "$0.5", "$10", "$1,250.50", "n/a", ""])
+        self.assertEqual([values[i] for i in self.gui.list_view.sort_order(values, numeric=True, reverse=True)][:2],
+                         ["$1,250.50", "$10"])
 
     def test_long_names_are_cut_to_the_column_width(self):
         from litterbox.parts.part_status import PartStatus

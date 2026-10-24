@@ -154,6 +154,7 @@ class OpenActions:
             on_export_bom=lambda rev, mode: self.export_bom(rev, mode, pn),
             on_update_bom=lambda: self.update_bom(pn, then=read_bom),
             on_generate=lambda part: self.generate_step_pdf([part]),
+            on_save_bom=lambda part: self.save_released_bom([part]),
             on_add_bom_item=lambda: self.add_bom_item(pn, then=read_bom),
             on_remove_bom_item=lambda stem: self.remove_bom_item(pn, stem, then=read_bom),
             document_rows=self.document_link_rows, on_open_document=self._open_document_text,

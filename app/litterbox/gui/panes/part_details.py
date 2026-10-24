@@ -61,7 +61,8 @@ class PartDetailsView(ctk.CTkFrame):
     are filled by show_references(), and the BOM tab by show_bom(): on_bom(rev, mode) asks for it to be read,
     on_export_bom(rev, mode) exports it and on_update_bom() counts its parts again (the Update BOM button, shown only
     when its quantities need it). on_tab(name) says which tab was chosen. on_generate(pn) makes a released part's
-    STEP and PDF (the Generate STEP/PDF... button, shown only while they need updating). on_add_bom_item() and
+    STEP and PDF (the Generate STEP/PDF... button, shown only while they need updating), and on_save_bom(pn) its BOM
+    file (the Save BOM File button, shown only while the release's BOM still needs saving). on_add_bom_item() and
     on_remove_bom_item(stem) add and take off BOM lines by hand (the buttons show while you may). The Documents tab
     lists the documents linked to the revision picked on the Details tab (document_rows(record, rev) gives its
     rows); on_open_document(number), on_link_document(rev) and on_unlink_document(rev, number) are its buttons."""
@@ -69,13 +70,13 @@ class PartDetailsView(ctk.CTkFrame):
     def __init__(self, master, on_open=None, on_view_eco=None, on_tab=None,
                  on_manage_references=None, on_bom=None, on_export_bom=None, on_update_bom=None, on_generate=None,
                  on_add_bom_item=None, on_remove_bom_item=None, document_rows=None, on_open_document=None,
-                 on_link_document=None, on_unlink_document=None):
+                 on_link_document=None, on_unlink_document=None, on_save_bom=None):
         super().__init__(master, fg_color="transparent")
         self.scale = scaling.scale_of(self)
         self.on_open, self.on_view_eco, self.on_tab = on_open, on_view_eco, on_tab
         self.on_manage_references = on_manage_references
         self.on_bom, self.on_export_bom, self.on_update_bom = on_bom, on_export_bom, on_update_bom
-        self.on_generate = on_generate
+        self.on_generate, self.on_save_bom = on_generate, on_save_bom
         self.on_add_bom_item, self.on_remove_bom_item = on_add_bom_item, on_remove_bom_item
         self.bom_removable = {}
         self.document_rows, self.on_open_document = document_rows, on_open_document
@@ -123,6 +124,10 @@ class PartDetailsView(ctk.CTkFrame):
                                                             fg_color=theme.ACCENT, hover_color="#18527f",
                                                             command=self._generate)
         self.generate_button.grid(row=0, column=3, padx=(10, 0))
+        self.save_bom_button = release_button.ReleaseButton(bar, text="Save BOM File", width=110, height=28,
+                                                            fg_color=theme.ACCENT, hover_color="#18527f",
+                                                            command=self._save_bom)
+        self.save_bom_button.grid(row=0, column=4, padx=(10, 0))
         self.fields = ctk.CTkScrollableFrame(tab, fg_color="transparent")
         self.fields.grid(row=1, column=0, sticky="nsew", padx=0, pady=(0, 4))
         self.fields.columnconfigure(1, weight=1)
@@ -166,6 +171,14 @@ class PartDetailsView(ctk.CTkFrame):
             self.generate_button.grid()
         else:
             self.generate_button.grid_remove()
+        if self.on_save_bom and part_details_text.bom_flagged(self.record, rev):
+            self.save_bom_button.grid()
+        else:
+            self.save_bom_button.grid_remove()
+
+    def _save_bom(self):
+        if self.record is not None and self.on_save_bom:
+            self.on_save_bom(self.record.pn)
 
     def _generate(self):
         if self.record is not None and self.on_generate:

@@ -233,7 +233,9 @@ BLOCKS = [
     "The search box looks in every column, or in one column chosen beside it. `*` matches any characters and `?` "
     "matches one, against the whole value (Te*rt finds Test Part but not My Test Part).",
     "Click a column heading to sort. Part number, Rev, Name, Description, Files, and Kind show to start with. View > "
-    "Columns adds Project, COTS, Status, Checked out by, Released rev, Imported from, and Material.",
+    "Columns adds Project, COTS, Status, Checked out by, Released rev, Imported from, Material, and the "
+    "purchasing info: Supplier, Supplier part number, Unit cost, and Lead time (days). Unit cost and Lead time sort "
+    "as numbers.",
 ]),
 ("h2", "Folders"),
 ("p", "**Home** (the Home / Vault switch above the list) shows folders instead of the parts list. A folder lists "
@@ -371,8 +373,12 @@ BLOCKS = [
 ("p", "Quantities are counted by SolidWorks at check-in: each copy at the top level of the assembly, excluding "
       "suppressed copies and those excluded from the BOM. If an assembly was checked in without SolidWorks, the BOM "
       "says it needs updating, and **Update BOM** counts it again (starting SolidWorks in the background if needed)."),
-("p", "When an assembly is released, Litterbox saves its indented BOM beside the model as "
-      "HCR-100010-500_A_BOM.csv, as a fixed record of the released revision."),
+("p", "When an assembly or a kit is released, Litterbox saves its indented BOM in the cad folder as "
+      "HCR-100010-500_A_BOM.csv, as a fixed record of the released revision: what it was made of, with names, "
+      "quantities, and costs as they stood at release. If it can't be saved then (the upload failed, say), the part "
+      "is flagged **BOM file needs saving**, and Part > **Save Released BOM** (or **Save BOM File** on the Details "
+      "tab) saves it later, with names and costs as they are when it is saved. A BOM saved with its release is never "
+      "saved again over it."),
 ("h2", "Toolbox parts"),
 ("p", "An Admin chooses the team's **Toolbox rule** in Team > Vault Settings...:"),
 ("table", ["Rule", "An assembly may use"], [
@@ -393,13 +399,16 @@ BLOCKS = [
       "stock, labels) has a part number, revisions, a lifecycle, and purchasing info, but no files."),
 ("p", "On a checked-out CAD assembly, the BOM tab's **Add item...** adds a non-CAD part with a quantity, and "
       "**Remove** takes it off. A **kit** is a non-CAD assembly made only of lines added this way, from any parts. "
-      "Added lines freeze at release and carry on to the next revision."),
+      "Added lines freeze at release and carry on to the next revision. A released kit's BOM is saved with it like "
+      "an assembly's: its only file."),
 
 ("h1", "Purchasing, costs, and materials"),
 ("h2", "Purchasing info"),
 ("p", "Lifecycle > **Purchasing Info...** sets a part's supplier, supplier part number, unit cost, and lead time in "
       "days. Purchasing info belongs to the part, not to a revision, so it needs no check-out and works on released "
-      "parts. The change is uploaded at once and recorded in the part's history."),
+      "parts. The change is uploaded at once and recorded in the part's history. View > Columns can show it in the "
+      "parts list. An assembly's columns show its own purchasing info, not a total of its parts' (the BOM tab adds "
+      "those up)."),
 ("p", "An Admin chooses the **team's currency** in Team > Vault Settings.... Costs are shown with its symbol "
       "($12.50) on the Details tab, in the BOM, and beside the Unit cost box. Unit costs are stored as plain "
       "numbers, so changing the currency doesn't convert them. An exported BOM names the currency in its column "
@@ -424,7 +433,8 @@ BLOCKS = [
       "STEP settings."),
 ("h2", "Exporting"),
 ("p", "Part > **Export Files...** copies the ticked parts' files to a folder you choose: any of model, drawing, "
-      "STEP, and PDF, from the latest released revision, the working revision, or a revision you pick, and "
+      "STEP, PDF, and the BOM saved at release, from the latest released revision, the working revision, or a "
+      "revision you pick, and "
       "optionally the parts each assembly uses. Exports always go outside C:\\Litterbox and outside any Git "
       "repository."),
 

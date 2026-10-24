@@ -30,6 +30,17 @@ def temporary_folder(test):
 POINTER = b"version https://git-lfs.github.com/spec/v1\noid sha256:" + b"0" * 64 + b"\nsize 9\n"
 
 
+class Kinds(unittest.TestCase):
+    def test_each_kind_of_file_and_the_saved_bom(self):
+        for rel, kind in (("cad/HCR-00002-001_A.SLDASM", export.MODEL), ("cad/HCR-00002-001_A.SLDDRW", export.DRAWING),
+                          ("cad/HCR-00002-001_A.STEP", export.STEP), ("cad/HCR-00002-001_A.PDF", export.PDF),
+                          ("cad/HCR-00002-001_A_BOM.csv", export.BOM), ("cad/hcr-00002-001_a_bom.CSV", export.BOM),
+                          ("cad/HCR-00002-001_A.csv", None), ("cad/notes.txt", None)):
+            self.assertEqual(export.kind_of(rel), kind, rel)
+        self.assertIn(export.BOM, export.KINDS)
+        self.assertIn("BOM", export.KIND_LABEL[export.BOM])
+
+
 class Folders(unittest.TestCase):
     def setUp(self):
         self.tmp = temporary_folder(self)

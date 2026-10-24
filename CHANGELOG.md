@@ -3,6 +3,10 @@
 ## 0.6.3
 
 - **Cancelled revisions are kept in cad\cancelled-revs**, under the cad folder, instead of a cancelled-revs folder at the top of the vault. They are stored with Git LFS and read-only, like the rest of the cad folder: kept only for the history.
+- **Purchasing columns.** View > Columns can show each part's **Supplier**, **Supplier part number**, **Unit cost** (with the team's currency) and **Lead time (days)** in the parts list. They are hidden to start with, and searchable; Unit cost and Lead time sort as numbers ($0.42 before $0.5). An assembly shows its own purchasing info, not a total of its parts' (the BOM tab adds those up).
+- **Kits keep their BOM too.** A released non-CAD assembly (a kit) now gets its BOM saved with the release, like a CAD assembly: HCR-00042-500_A_BOM.csv in the cad folder, its only file.
+- **A BOM that couldn't be saved with its release is flagged** ("BOM file needs saving"), and **Part > Save Released BOM** (or **Save BOM File** on the Details tab) saves it later, as things stand then. A BOM saved with its release is never saved again over it. Releases from before 0.6.3 are never flagged; Save Released BOM still saves a BOM for one that has none.
+- **Export Files offers the saved BOM** (BOM saved at release, .csv) beside the model, drawing, STEP and PDF.
 - **File rules version 4.** Vault > Update file rules... (an Admin or the Owner is asked once per session) adds the rule for the new folder and moves the vault's existing cancelled revisions there in the same upload, with their history. It makes everyone in the vault need Litterbox 0.6.3, so nobody keeps cancelling into the old place. It is offered again if an older Litterbox cancelled a revision into the old folder before the update. Until then, 0.6.3 already cancels into the new place, and a hidden project's cancelled revisions are left out of other people's copies in either place.
 
 ## 0.6.2

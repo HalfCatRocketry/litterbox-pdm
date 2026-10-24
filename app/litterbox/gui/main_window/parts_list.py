@@ -55,7 +55,8 @@ class PartsList:
         for column in list_columns.COLUMNS:
             tree.column(column.key, width=self._px(column.width), minwidth=self._px(36), anchor="w",
                         stretch=column.stretch)
-        self.sorter = table_sorting.TableSorter(tree, [(c.key, c.title) for c in list_columns.COLUMNS])
+        self.sorter = table_sorting.TableSorter(tree, [(c.key, c.title) for c in list_columns.COLUMNS],
+                                                numeric={c.key for c in list_columns.COLUMNS if c.numeric})
 
     def _icon_size(self):
         return self._px(ui_scale.ICON)

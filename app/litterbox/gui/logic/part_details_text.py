@@ -65,6 +65,11 @@ def files_flagged(record, rev, revisions):
     return record_exports.needed(record, step_pdf.possible_kinds(revisions.get(rev, [])))
 
 
+def bom_flagged(record, rev):
+    """True when revision `rev` is the working revision, released, and its BOM file still needs saving."""
+    return record is not None and rev == record.revision and record_exports.bom_flagged(record)
+
+
 def files_made_text(record, rev, revisions, local=True):
     """What the Details tab says about the STEP and PDF Litterbox made for a revision ("" if it made none and none
     are needed)."""

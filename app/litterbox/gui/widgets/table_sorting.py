@@ -32,14 +32,15 @@ def style_tables():
 class TableSorter:
     """Click a column heading to sort a table by it; click again to reverse. ▲ / ▼ shows the sort.
 
-        sorter = TableSorter(tree, [("pn", "Part number"), ...])
+        sorter = TableSorter(tree, [("pn", "Part number"), ...], numeric={"unit_cost"})
         ...after the table is redrawn...
         sorter.apply()
-    Numbers inside text sort as numbers, capitals are ignored, and blanks always go last.
+    Numbers inside text sort as numbers, capitals are ignored, and blanks always go last. A `numeric` column sorts by
+    the number in each cell (prices, with decimals: $0.42 before $0.5).
     """
 
-    def __init__(self, tree, titles):
-        self.tree, self.titles = tree, list(titles)
+    def __init__(self, tree, titles, numeric=()):
+        self.tree, self.titles, self.numeric = tree, list(titles), set(numeric)
         self.column, self.reverse = None, False
         for name, title in self.titles:
             self.tree.heading(name, text=title, anchor="w", command=lambda name=name: self.click(name))
@@ -58,5 +59,5 @@ class TableSorter:
             return
         ids = list(self.tree.get_children())
         values = [self.tree.set(iid, self.column) for iid in ids]
-        for position, index in enumerate(list_view.sort_order(values, self.reverse)):
+        for position, index in enumerate(list_view.sort_order(values, self.reverse, self.column in self.numeric)):
             self.tree.move(ids[index], "", position)

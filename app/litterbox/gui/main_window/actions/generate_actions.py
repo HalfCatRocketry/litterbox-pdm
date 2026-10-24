@@ -1,6 +1,7 @@
 """
 generate_actions.py - Generate STEP/PDF (Part menu): the window, then making the files in the vault or in a folder
-outside it; and making them straight after a release (run_releasing), which never holds the release up.
+outside it; and making them straight after a release (run_releasing), which never holds the release up. Save
+Released BOM (Part menu, and the Details tab's button): a released assembly's or kit's BOM file that wasn't saved.
 """
 
 from tkinter import messagebox
@@ -13,6 +14,7 @@ from litterbox.gui.logic import error_text
 from litterbox.gui.logic import export_text
 from litterbox.gui.logic import generate_text
 from litterbox.parts import generate_files
+from litterbox.parts import release_bom
 from litterbox.user import settings
 
 
@@ -83,6 +85,27 @@ class GenerateActions:
         if result.failed:
             messagebox.showerror("Generate STEP/PDF", error_text.shorten(generate_text.failure_lines(result.failed)))
 
+    # -- Save Released BOM ----------------------------------------------------------------------------------------
+    def save_released_bom(self, pns=None):
+        """Save the BOM file of the ticked (or highlighted) released assemblies and kits, or of `pns` (the Details
+        tab's button), where it wasn't saved with the release."""
+        if pns is None:
+            plan = self._plan("save_bom")
+            if not plan:
+                return
+            pns = plan.targets
+        repo = self.repo()
+        self.run_task(lambda: release_bom.save(repo, pns, later=True), "", on_success=self._boms_saved,
+                      label="Saving the released BOM", parts=pns)
+
+    def _boms_saved(self, result):
+        done, failed = result
+        self.note = generate_text.boms_saved_text(done, later=True) if done else "No BOM was saved"
+        self._say(self.note, "warn" if failed else "normal")
+        if failed:
+            messagebox.showwarning("Save Released BOM", error_text.shorten(generate_text.failure_lines(failed)),
+                                   parent=self)
+
     # -- after a release ------------------------------------------------------------------------------------------
     def run_releasing(self, work, pns, done_text, on_success=None, **options):
         """Queue work() (something that may release `pns`: Release, a sign-off, Complete, Override), then in the
@@ -112,7 +135,7 @@ class GenerateActions:
             self.note = f"{self.note}. {saved}" if self.note else saved
         if files.bom_failed:
             self._log(f"BOM not saved after release: {generate_text.failure_lines(files.bom_failed)}")
-            self.note = (f"{self.note}. " if self.note else "") + "The BOM couldn't be saved with the release (see the log)"
+            self.note = (f"{self.note}. " if self.note else "") + generate_text.BOM_NOT_SAVED
         if not (files.done or files.failed):
             if files.boms or files.bom_failed:
                 self._say(self.note, "warn" if files.bom_failed else "normal")

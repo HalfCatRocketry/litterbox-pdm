@@ -95,11 +95,16 @@ def done_text(result):
     return text + (f", {len(result.failed)} failed" if result.failed else "")
 
 
-def boms_saved_text(boms):
-    """The status line after BOMs were saved with a release: [(pn, vault path)]."""
+def boms_saved_text(boms, later=False):
+    """The status line after BOMs were saved with a release (or later, by Save Released BOM): [(pn, vault path)]."""
+    when = "" if later else " with its release"
     if len(boms) == 1:
-        return f"Saved the BOM of {boms[0][0]} with its release ({boms[0][1].rsplit('/', 1)[-1]})"
-    return f"Saved the BOMs of {len(boms)} assemblies with their release"
+        return f"Saved the BOM of {boms[0][0]}{when} ({boms[0][1].rsplit('/', 1)[-1]})"
+    return f"Saved the BOMs of {len(boms)} assemblies and kits{when.replace('its', 'their')}"
+
+
+BOM_NOT_SAVED = ("The BOM couldn't be saved with the release (see the log): the part is flagged. "
+                 "Use Part > Save Released BOM.")
 
 
 def saved_text(folder, made):

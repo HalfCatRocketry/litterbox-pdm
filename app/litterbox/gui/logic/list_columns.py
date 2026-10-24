@@ -7,8 +7,10 @@ The first column, with the tick box and the status icon, is always there and isn
 
 from dataclasses import dataclass
 
+from litterbox.core import currency as currencies
 from litterbox.gui.logic import list_view
 from litterbox.gui.logic import material_text
+from litterbox.records import purchasing_info
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,7 @@ class Column:
     shown: bool                     # shown unless the person has chosen otherwise
     fit: bool = False               # long text is cut to the width with "..." (the full text is in the tooltip)
     stretch: bool = False           # takes up spare width when the window grows
+    numeric: bool = False           # sorts by the number in it (a price, a count of days)
 
     def text(self, row):
         """What the column shows for a part (a PartStatus)."""
@@ -43,7 +46,17 @@ _VALUES = {
     "released": lambda row: (row.released_revision or "",),
     "import_path": lambda row: (row.import_path or "",),
     "material": lambda row: (material_text.column_text(row),),
+    "supplier": lambda row: (_purchasing(row, purchasing_info.SUPPLIER),),
+    "supplier_pn": lambda row: (_purchasing(row, purchasing_info.SUPPLIER_PN),),
+    "unit_cost": lambda row: (currencies.money(_purchasing(row, purchasing_info.UNIT_COST),
+                                               getattr(row, "currency", "") or None),),
+    "lead_time": lambda row: (_purchasing(row, purchasing_info.LEAD_TIME_DAYS),),
 }
+
+
+def _purchasing(row, key):
+    """A field of the part's own purchasing info ("" for none; an assembly's isn't a total of its parts')."""
+    return purchasing_info.shown(getattr(row, "purchasing", None), key)
 
 
 COLUMNS = (
@@ -60,6 +73,10 @@ COLUMNS = (
     Column("released", "Released rev", 96, False),
     Column("import_path", "Imported from", 240, False, fit=True),
     Column("material", "Material", 160, False, fit=True),
+    Column("supplier", "Supplier", 160, False, fit=True),
+    Column("supplier_pn", "Supplier part number", 160, False, fit=True),
+    Column("unit_cost", "Unit cost", 90, False, numeric=True),
+    Column("lead_time", "Lead time (days)", 110, False, numeric=True),
 )
 
 

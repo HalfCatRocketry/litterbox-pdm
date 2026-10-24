@@ -7,11 +7,17 @@ record_exports.py - the STEP and PDF files Litterbox made for a part's revisions
         step: {file: cad/HCR-00042-001_A.STEP, by: Alex, at: ..., solidworks: '32.1.0',
                from: {cad/HCR-00042-001_A.SLDPRT: <sha256>}}
         pdf: {...}                    the same, made from the drawing
+        bom_wanted: true              set at release for an assembly or kit with a BOM: its BOM file is saved with
+                                      the release (parts/release_bom.py), which clears it
 
 A release asks for both again (`wanted`, set by record_lifecycle.mark_released), so a release always gets files
 made from the files it froze. Once every file the revision can have has been made, `wanted` goes. A released
 revision still `wanted` is what the window shows as "STEP/PDF needs updating". Parts released before Litterbox made these files have no entry and are never
 flagged. Which kinds a revision can have depends on its files (a PDF needs a drawing): the caller says.
+
+The BOM file is flagged the same way, apart from the STEP and PDF (a non-CAD kit has a BOM and no STEP or PDF): a
+released revision still `bom_wanted` is what the window shows as "BOM file needs saving". Parts released before
+Litterbox 0.6.3 have no such flag, and are never shown as needing one.
 """
 
 from litterbox.records import record_lifecycle
@@ -20,6 +26,7 @@ from litterbox.util import person_name
 
 
 STEP, PDF = "step", "pdf"
+BOM_WANTED = "bom_wanted"
 KINDS = (STEP, PDF)
 LABEL = {STEP: "STEP", PDF: "PDF"}
 
@@ -28,6 +35,26 @@ def is_flagged(record):
     """True when the released working revision still needs its STEP and/or PDF made."""
     return (record.status == record_model.STATUS_RELEASED and record.revision == record.released_revision
             and bool(record.exports.get(record.revision, {}).get("wanted")))
+
+
+def has_bom(record, revision):
+    """True when a revision has a BOM: parts its model uses, or BOM lines added by hand (a kit's)."""
+    return bool(record.references.get(revision) or record.bom_items.get(revision))
+
+
+def bom_flagged(record):
+    """True when the released working revision's BOM file still needs saving."""
+    return (record.status == record_model.STATUS_RELEASED and record.revision == record.released_revision
+            and bool(record.exports.get(record.revision, {}).get(BOM_WANTED)) and has_bom(record, record.revision))
+
+
+def bom_saved(record, revision):
+    """Note that a revision's BOM file was saved: its flag goes (and the entry, if nothing else is in it)."""
+    entry = record.exports.get(revision)
+    if entry is not None:
+        entry.pop(BOM_WANTED, None)
+        if not entry:
+            record.exports.pop(revision)
 
 
 def needed(record, possible):

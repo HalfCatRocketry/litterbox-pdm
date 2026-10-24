@@ -62,11 +62,26 @@ def _natural_key(text):
             for piece in re.split(r"(\d+)", text.lower()) if piece]
 
 
-def sort_order(values, reverse=False):
-    """Positions of `values` in sorted order. Blank values always come last."""
+NUMBER = re.compile(r"-?(\d+(\.\d*)?|\.\d+)")
+
+
+def number_in(text):
+    """The number in a cell's text ("$1,250.50" -> 1250.5, "€0.42" -> 0.42, "3" -> 3.0), or None."""
+    found = NUMBER.search(str(text).replace(",", ""))
+    return float(found.group()) if found else None
+
+
+def sort_order(values, reverse=False, numeric=False):
+    """Positions of `values` in sorted order. Blank values always come last. numeric=True sorts by the number in
+    each value (a price: "$0.42" before "$0.5"), with any value without one after them."""
     texts = [str(value).strip() for value in values]
     filled = [i for i, text in enumerate(texts) if text]
     blank = [i for i, text in enumerate(texts) if not text]
+    if numeric:
+        numbers = {i: number_in(texts[i]) for i in filled}
+        blank = [i for i in filled if numbers[i] is None] + blank
+        filled = sorted((i for i in filled if numbers[i] is not None), key=lambda i: numbers[i], reverse=reverse)
+        return filled + blank
     filled.sort(key=lambda i: _natural_key(texts[i]), reverse=reverse)
     return filled + blank
 

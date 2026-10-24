@@ -12,7 +12,8 @@ The STEP and PDF belong to the part's working revision, in the cad folder (expor
 A released revision takes new files only when they are flagged as needed (records/record_exports.py) or it doesn't
 have them yet, unless an Admin makes them again (`force`). after_release() makes them for parts just released, and
 never raises: a release is never held up by SolidWorks, the part stays flagged instead. It also saves a released
-assembly's BOM with it (parts/release_bom.py), which needs no SolidWorks.
+assembly's or kit's BOM with it (parts/release_bom.py), which needs no SolidWorks; one that can't be saved stays
+flagged too.
 """
 
 from dataclasses import dataclass, field

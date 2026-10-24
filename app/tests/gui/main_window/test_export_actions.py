@@ -45,6 +45,21 @@ class Wiring(unittest.TestCase):
         replace(self, module, cls, Fake)
         return asked
 
+    def test_save_released_bom_runs_later_and_says_why_not(self):
+        saved = []
+        replace(self, self.gui.generate_actions.release_bom, "save",
+                lambda repo, pns, later=False: saved.append((pns, later)) or
+                ([(PART, "cad/HCR-00007-001_A_BOM.csv")], [(PN("HCR", 8, 1), "It has no BOM.")]))
+        self.app.save_released_bom()
+        work, on_success, options = self.tasks[0]
+        self.assertEqual((options["parts"], options["label"]), ([PART], "Saving the released BOM"))
+        on_success(work())
+        self.assertEqual(saved, [([PART], True)])
+        self.assertEqual(self.said[-1], "Saved the BOM of HCR-00007-001 (HCR-00007-001_A_BOM.csv)")
+        name, args, _kwargs = self.box.calls[-1]
+        self.assertEqual((name, args[0]), ("showwarning", "Save Released BOM"))
+        self.assertIn("It has no BOM.", args[1])
+
     def test_export_files_plans_then_copies_in_the_background_and_remembers_the_folder(self):
         self.answer_dialog(self.gui.export_files_dialog, "ExportFilesDialog",
                            {"kinds": ["model"], "which": "released", "with_used": False, "folder": self.out})

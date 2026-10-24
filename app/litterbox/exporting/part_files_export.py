@@ -1,7 +1,7 @@
 """
 part_files_export.py - Export Files: copy parts' files out of the vault to a folder, for example to send to a
-vendor. The model, drawing, STEP and PDF of a chosen revision (the released one by default), of one part or many,
-and if asked of every part revision an assembly uses.
+vendor. The model, drawing, STEP, PDF and saved BOM (HCR-00042-001_A_BOM.csv, parts/release_bom.py) of a chosen
+revision (the released one by default), of one part or many, and if asked of every part revision an assembly uses.
 
 The copies are ordinary files (not read-only, not Git LFS pointers), named as in the vault. Nothing in the vault
 changes, so nothing goes in a part's history. Files not downloaded yet are downloaded first.
@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox.core import file_types
+from litterbox.core import filenames
 from litterbox.errors import LitterboxError
 from litterbox.exporting import export_folder
 from litterbox.git import lfs_download
@@ -22,15 +23,19 @@ from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
 
-MODEL, DRAWING, STEP, PDF = "model", "drawing", "step", "pdf"
-KINDS = (MODEL, DRAWING, STEP, PDF)
-KIND_LABEL = {MODEL: "Model (part or assembly)", DRAWING: "Drawing", STEP: "STEP", PDF: "PDF"}
+MODEL, DRAWING, STEP, PDF, BOM = "model", "drawing", "step", "pdf", "bom"
+KINDS = (MODEL, DRAWING, STEP, PDF, BOM)
+KIND_LABEL = {MODEL: "Model (part or assembly)", DRAWING: "Drawing", STEP: "STEP", PDF: "PDF",
+              BOM: "BOM saved at release (.csv)"}
 RELEASED, WORKING = "released", "working"
 
 
 def kind_of(rel):
-    """Which kind of file this is (MODEL, DRAWING, STEP, PDF), or None for any other."""
+    """Which kind of file this is (MODEL, DRAWING, STEP, PDF, BOM), or None for any other."""
     ext = file_types.extension(rel)
+    if ext == file_types.BOM_EXTENSION and file_types.file_name(rel).rsplit(".", 1)[0].upper().endswith(
+            filenames.BOM_SUFFIX):
+        return BOM
     if ext in file_types.MODEL_EXTENSIONS:
         return MODEL
     if ext in file_types.DRAWING_EXTENSIONS:

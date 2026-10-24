@@ -24,6 +24,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_materials
 from litterbox.records import record_model
 from litterbox.records import record_store
+from litterbox.vault import config
 
 
 @dataclass
@@ -53,6 +54,9 @@ class PartStatus:
     material: str = ""                  # the working revision's material from SolidWorks; "" for none (or not read)
     material_outdated: bool = False     # its part file's material hasn't been read (records/record_materials.py)
     draft: dict = field(default_factory=dict)       # a rejected request whoever asked is changing (workflow_drafts.py)
+    purchasing: dict = field(default_factory=dict)  # supplier, supplier_pn, unit_cost, lead_time_days (purchasing_info.py)
+    currency: str = ""                  # the team's currency (core/currency.py), for showing unit_cost; "" for none
+    bom_file_needed: bool = False       # its released revision's BOM file still needs saving (record_exports.bom_flagged)
 
 
 def released_revisions(record):
@@ -86,6 +90,7 @@ def get_status(repo, documents=False, state=None):
     if state is None:
         state = read_state(repo)
     index, locks, modified = state.index, state.locks, state.modified
+    currency = config.currency_or_none(repo) or ""
 
     rows = []
     for pn in (record_store.list_docs(repo) if documents else record_store.list_pns(repo)):
@@ -146,6 +151,9 @@ def get_status(repo, documents=False, state=None):
         needed = tuple(record_exports.needed(record, step_pdf.possible_kinds(files)))
         if needed and kind not in ("error", "missing"):
             state += " (STEP/PDF needs updating)"
+        bom_needed = record_exports.bom_flagged(record)
+        if bom_needed and kind not in ("error", "missing"):
+            state += " (BOM file needs saving)"
         if record.draft and kind not in ("void", "pending"):
             state += " (rejected request being changed)"
         if not_downloaded and kind != "void":
@@ -159,5 +167,6 @@ def get_status(repo, documents=False, state=None):
                                noncad=record.kind == record_model.KIND_NONCAD, doc_type=record.doc_type,
                                material=record_materials.material(record),
                                material_outdated=record_lifecycle.material_needs_update(record, record.revision, files),
-                               draft=record.draft))
+                               draft=record.draft, purchasing=dict(record.purchasing or {}), currency=currency,
+                               bom_file_needed=bom_needed))
     return rows

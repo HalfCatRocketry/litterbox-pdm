@@ -27,7 +27,7 @@ class ExportFilesDialog(modal_dialog.ModalDialog):
         self.result, self.litterbox_root = None, litterbox_root
         self.choices = list(choices or [("Latest released", part_files_export.RELEASED),
                                         ("Working", part_files_export.WORKING)])
-        width, height = 520, 470
+        width, height = 520, 500
         self.title("Export Files")
         window_chrome.place_over(self, parent, width, height)
         self.resizable(False, False)

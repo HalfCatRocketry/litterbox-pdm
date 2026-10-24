@@ -171,8 +171,13 @@ def mark_released(record, by, files, **details):
         raise record_model.RegistryError(f"Cannot release {record.pn}: it is a COTS (purchased) part.")
     record.status = record_model.STATUS_RELEASED
     record.released_revision = record.revision
+    entry = {}
     if record.uses_cad:
-        record.exports[record.revision] = {"wanted": True}     # its STEP and PDF are made again (record_exports.py)
+        entry["wanted"] = True                  # its STEP and PDF are made again (record_exports.py)
+    if record.references.get(record.revision) or record.bom_items.get(record.revision):
+        entry["bom_wanted"] = True              # and its BOM file saved (parts/release_bom.py)
+    if entry:
+        record.exports[record.revision] = entry
     return add_event(record, record_model.EVENT_RELEASED, by, files=list(files), **details)
 
 
