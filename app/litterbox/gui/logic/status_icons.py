@@ -94,11 +94,13 @@ def _shape(name):
     if name == "team":
         return draw.union(draw.circle(0.36, 0.32, 0.14), draw.box(0.36, 0.72, 0.24, 0.18, 0.15),
                           draw.circle(0.7, 0.36, 0.11), draw.box(0.72, 0.73, 0.18, 0.16, 0.12))
+    if name == "folder":
+        return draw.union(draw.box(0.5, 0.58, 0.42, 0.28, 0.07), draw.box(0.28, 0.28, 0.2, 0.08, 0.05))
     raise KeyError(name)
 
 
 SHAPES = ("ring", "pencil", "padlock", "warning", "check", "nut", "ban", "clock", "cross", "cloud", "busy", "list",
-          "tasks", "document", "team")
+          "tasks", "document", "team", "folder")
 
 
 def icon_png(name, size, color):

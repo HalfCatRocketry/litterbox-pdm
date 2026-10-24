@@ -113,6 +113,11 @@ class ProjectDialog(modal_dialog.ModalDialog):
                         command=self._switched).grid(row=3, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ctk.CTkLabel(frame, text=project_team_text.HIDE_NOTE, text_color=theme.MUTED, anchor="w",
                      justify="left", wraplength=640).grid(row=4, column=0, columnspan=2, sticky="ew", padx=(28, 0))
+        self.lead_folders_var = tk.BooleanVar(value=bool(project and project.lead_only_folders))
+        ctk.CTkCheckBox(frame, text=project_team_text.LEAD_FOLDERS_TEXT, variable=self.lead_folders_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ctk.CTkLabel(frame, text=project_team_text.LEAD_FOLDERS_NOTE, text_color=theme.MUTED, anchor="w",
+                     justify="left", wraplength=640).grid(row=6, column=0, columnspan=2, sticky="ew", padx=(28, 0))
         self._switched()
 
     def _members(self, row):
@@ -207,11 +212,11 @@ class ProjectDialog(modal_dialog.ModalDialog):
         self.preview.configure(text=text, text_color=COLORS[kind])
 
     def team(self):
-        """{lead, members, restricted, hidden} as chosen (all empty without a team)."""
+        """{lead, members, restricted, hidden, lead_only_folders} as chosen (all empty without a team)."""
         if self.directory is None:
-            return {"lead": "", "members": [], "restricted": False, "hidden": False}
+            return {"lead": "", "members": [], "restricted": False, "hidden": False, "lead_only_folders": False}
         return {"lead": self.lead, "members": list(self.members), "restricted": bool(self.restricted_var.get()),
-                "hidden": bool(self.hidden_var.get())}
+                "hidden": bool(self.hidden_var.get()), "lead_only_folders": bool(self.lead_folders_var.get())}
 
     def _save(self):
         team = self.team()

@@ -5,7 +5,6 @@ read in the background, only when one of them is showing. The pane can be hidden
 the right of the toolbar brings it back) or popped out into a window of its own, whose tabs are read the same way.
 """
 
-from litterbox.core.part_number import parse as parse_pn
 from litterbox.errors import LitterboxError
 from litterbox.gui.logic import bom_text
 from litterbox.gui.logic import history_text
@@ -67,8 +66,8 @@ class DetailPane:
         self._pane_job = self.after(120, self._show_details)
 
     def _pane_part(self):
-        chosen = self.tree.selection()
-        return parse_pn(chosen[0]) if len(chosen) == 1 else None
+        chosen = self._highlighted_pns()
+        return chosen[0] if len(chosen) == 1 else None
 
     def _show_details(self):
         self._pane_job = None

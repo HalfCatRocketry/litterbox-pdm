@@ -74,6 +74,7 @@ class Directory:
     roles: list = field(default_factory=list)
     extra: dict = field(default_factory=dict)       # top-level fields a newer Litterbox wrote, kept
     superuser_roles: list = field(default_factory=list)     # roles whose holders may sign any sign-off
+    folder_roles: list = field(default_factory=list)        # roles whose holders may change the Team folders (Home)
 
     def get(self, person_id):
         person_id = str(person_id).strip().lower()
@@ -93,17 +94,27 @@ class Directory:
         wanted = {r.lower() for r in self.superuser_roles}
         return bool(person and person.active and any(r.lower() in wanted for r in person.roles))
 
+    def may_change_team_folders(self, person):
+        """True if this person is active and is an Admin, the Owner, or holds a role that may change the Team
+        folders (folder_roles)."""
+        if not (person and person.active):
+            return False
+        wanted = {r.lower() for r in self.folder_roles}
+        return person.access in (OWNER, ADMIN) or any(r.lower() in wanted for r in person.roles)
+
     def to_dict(self):
         data = {"roles": list(self.roles), "people": [p.to_dict() for p in self.people]}
         if self.superuser_roles:
             data["superuser_roles"] = list(self.superuser_roles)
+        if self.folder_roles:
+            data["folder_roles"] = list(self.folder_roles)
         data.update({k: v for k, v in self.extra.items() if k not in data})
         return data
 
 
 PERSON_FIELDS = {"id", "name", "email", "host_names", "access", "roles", "active", "signing_keys"}
 
-DIRECTORY_FIELDS = {"roles", "people", "superuser_roles"}
+DIRECTORY_FIELDS = {"roles", "people", "superuser_roles", "folder_roles"}
 
 
 def text_list(value, what):
@@ -134,7 +145,8 @@ def from_dict(data):
             extra={k: v for k, v in entry.items() if k not in PERSON_FIELDS}))
     directory = Directory(people, text_list(data.get("roles"), "roles"),
                           extra={k: v for k, v in data.items() if k not in DIRECTORY_FIELDS},
-                          superuser_roles=text_list(data.get("superuser_roles"), "superuser_roles"))
+                          superuser_roles=text_list(data.get("superuser_roles"), "superuser_roles"),
+                          folder_roles=text_list(data.get("folder_roles"), "folder_roles"))
     validate(directory)
     return directory
 
@@ -151,6 +163,7 @@ def validate(directory):
     # A superuser role that is no longer a role is dropped (an older Litterbox may have removed the role)
     directory.superuser_roles = list(dict.fromkeys(canon[r.lower()] for r in directory.superuser_roles
                                                    if r.lower() in canon))
+    directory.folder_roles = list(dict.fromkeys(canon[r.lower()] for r in directory.folder_roles if r.lower() in canon))
     owners = 0
     for p in directory.people:
         if not ID_PATTERN.match(p.id):

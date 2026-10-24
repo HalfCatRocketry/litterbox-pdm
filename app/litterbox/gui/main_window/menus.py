@@ -8,7 +8,6 @@ import tkinter as tk
 from tkinter import messagebox
 
 from litterbox import version
-from litterbox.core.part_number import parse as parse_pn
 from litterbox.git import vault_size
 from litterbox.gui.dialogs import legend_dialog
 from litterbox.gui.logic import action_rules
@@ -22,7 +21,7 @@ from litterbox.gui.widgets import menu_bar
 PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), ("Open PDF", "open_pdf"), None,
              ("References...", "show_references"), ("Details", "show_history"), None,
              ("Generate STEP/PDF", "generate_step_pdf"), ("Update Material", "update_material"),
-             ("Export Files", "export_files"))
+             ("Export Files", "export_files"), None, ("Add to Folder", "add_to_folder"))
 
 
 LIFECYCLE_MENU = (("Edit Details", "edit_details"), ("Purchasing Info", "edit_purchasing"), None, ("Release", "release"), ("Revise", "revise"),
@@ -44,7 +43,8 @@ ADMIN_LIFECYCLE_MENU = (None, ("Break Checkout", "break_checkout"))      # only 
 # Where an entry reads differently from its button
 ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout...",
               "Purchasing Info": "Purchasing Info...", "Export Files": "Export Files...",
-              "Generate STEP/PDF": "Generate STEP/PDF...", "Create Variant": "Create Variant..."}
+              "Generate STEP/PDF": "Generate STEP/PDF...", "Create Variant": "Create Variant...",
+              "Add to Folder": "Add to Folder..."}
 
 
 class Menus:
@@ -72,8 +72,8 @@ class Menus:
 
     def _fill_actions(self, menu, entries):
         """Add part actions to a menu, greyed out when the ticked or highlighted parts don't allow them."""
-        states = action_rules.button_states(self._ticked_pns(), [parse_pn(i) for i in self.tree.selection()],
-                                            self.rows_by_pn, self.jobs.pending_parts())
+        states = action_rules.button_states(self._ticked_pns(), self._highlighted_pns(), self.rows_by_pn,
+                                            self.jobs.pending_parts())
         end = menu.index("end")
         offset = 0 if end is None else end + 1               # entries already in the menu
         reasons = []
@@ -186,6 +186,10 @@ class Menus:
                                                "for CAD files, on Git and Git LFS.", parent=self)
 
     # -- the right-click menu -------------------------------------------------------------------------------------
+    def _home_part_menu(self):
+        """Home's right-click menu on a part: the same actions as the parts list's."""
+        return EVERYDAY_MENU + (None,) + PART_MENU + (None,) + self._lifecycle_entries()
+
     def _on_right_click(self, event):
         """Right-click a part: if its box isn't ticked, it becomes the only ticked part (so it is plain what the
         menu acts on), then the menu shows the actions."""

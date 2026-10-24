@@ -27,6 +27,7 @@ ECO_DIR_NAME = "ECO"                         # engineering change orders (change
 DOC_LOG_DIR_NAME = "DOC-logs"                # document records (documents/), like PN-logs for parts
 DOC_DIR_NAME = "documents"                   # documents' files, like cad for parts
 TOOLBOX_DIR_NAME = "toolbox"                 # the team's Toolbox (vault/toolbox_admin.py): only Admins change it
+FOLDERS_DIR_NAME = "folders"                 # Team and project folders (folders/folder_store.py): one file per change
 
 CONFIG_DIR = ".litterbox"
 CONFIG_FILE = "config.yaml"                 # a file name inside CONFIG_DIR (the others below are paths)

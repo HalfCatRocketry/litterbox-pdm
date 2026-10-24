@@ -23,6 +23,8 @@ from litterbox import diagnostics
 from litterbox import layout
 from litterbox.core import projects as project_rules
 from litterbox.errors import LitterboxError
+from litterbox.folders import folder_access
+from litterbox.folders import folder_store
 from litterbox.git import lfs_locks
 from litterbox.git import remote
 from litterbox.git import repository
@@ -31,6 +33,7 @@ from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 from litterbox.records import record_store
 from litterbox.records.error_conversion import converts_errors
+from litterbox.team import guarded_push
 from litterbox.team import project_access
 from litterbox.team import team_permissions
 from litterbox.team import team_store
@@ -57,9 +60,9 @@ class ProjectChange:
 
 
 def team_of(project):
-    """{lead, members, restricted, hidden} of a project, as edit_project's `team` takes them."""
+    """{lead, members, restricted, hidden, lead_only_folders} of a project, as edit_project's `team` takes them."""
     return {"lead": project.lead, "members": list(project.members), "restricted": project.restricted,
-            "hidden": project.hidden}
+            "hidden": project.hidden, "lead_only_folders": project.lead_only_folders}
 
 
 def with_team(repo, project, team):
@@ -67,7 +70,8 @@ def with_team(repo, project, team):
     the members must be people on the team, and the Lead switched on. Raises ProjectError."""
     team = dict(team or {})
     project = project_rules.with_team(project, team.get("lead", ""), team.get("members") or (),
-                                      team.get("restricted", False), team.get("hidden", False))
+                                      team.get("restricted", False), team.get("hidden", False),
+                                      team.get("lead_only_folders", False))
     directory = team_store.load(repo) if (project.lead or project.members) else None
     if directory is not None:
         for person_id in ([project.lead] if project.lead else []) + list(project.members):
@@ -149,8 +153,22 @@ def plan_change(repo, name, new_name=None, new_prefix=None, delete=False, locks=
 @converts_errors
 def edit_project(repo, name, new_name, new_prefix, team=None):
     """Change a project's name, starting digits and/or its `team` (as with_team() takes it; None keeps them), and
-    the records of the parts that join, leave or are renamed, in one upload. Returns the ProjectChange done."""
-    return _apply(repo, name, new_name, new_prefix, delete=False, team=team)
+    the records of the parts that join, leave or are renamed, in one upload. Returns the ProjectChange done. A
+    renamed project's folders (folders/folder_store.py) go with it."""
+    change = _apply(repo, name, new_name, new_prefix, delete=False, team=team)
+    if change.new is not None and change.new.name != change.old.name:
+        _carry_folders(repo, change.old.name, change.new.name)
+    return change
+
+
+def _carry_folders(repo, old, new):
+    """A renamed project's folders: one change that moves them to the new name (if it had any)."""
+    try:
+        if folder_store.tree_of(folder_store.load(repo), folder_access.PROJECT, old):
+            folder_store.save_change(repo, folder_access.PROJECT, old, [{"op": folder_store.RENAMED, "name": new}],
+                                     f"project {old} renamed to {new}", push=guarded_push.push)
+    except LitterboxError as e:
+        diagnostics.LOG(f"WARNING: {new}'s folders couldn't be moved from its old name, {old}: {e}")
 
 
 @converts_errors

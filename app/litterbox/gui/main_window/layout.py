@@ -1,6 +1,7 @@
 """
 layout.py - building the main window: the menu bar, the header (org, who you are, Get Latest), the
-sidebar, the parts screen (toolbar, search, list) beside the details pane, the log drawer and the status bar.
+sidebar, the parts screen (toolbar, the Home / Vault switch and search, the list or Home) beside the details pane,
+the log drawer and the status bar.
 Each area's behaviour lives in its own file (menus.py, sidebar.py, parts_list.py, detail_pane.py, status_bar.py).
 
     +-----------------------------------------------------------------------+
@@ -170,9 +171,10 @@ class WindowLayout:
         outer.columnconfigure(0, weight=1)
         row = ctk.CTkFrame(outer, fg_color="transparent")
         row.grid(row=0, column=0, sticky="ew")
-        row.columnconfigure(0, weight=1, minsize=self._px(150))
+        row.columnconfigure(1, weight=1, minsize=self._px(150))
+        self._build_view_switch(row).grid(row=0, column=0, padx=(0, 6))
         self.search = ctk.CTkEntry(row, placeholder_text="Search  (* and ? are wildcards)", height=32)
-        self.search.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.search.grid(row=0, column=1, sticky="ew", padx=(0, 6))
         self.search.bind("<KeyRelease>", lambda event: self._render())
         tooltip.Tooltip(self.search, "Plain text finds it anywhere: bracket finds Motor Bracket.\n"
                                      "* stands for any characters and ? for one, and then the whole value must "
@@ -182,10 +184,11 @@ class WindowLayout:
                                                 values=list_columns.search_choices(self.list_keys),
                                                 fg_color=theme.GRAY, button_color=theme.GRAY_HOVER,
                                                 button_hover_color=theme.ACCENT, command=lambda value: self._render())
-        self.search_in_menu.grid(row=0, column=1, padx=(0, 6))
+        self.search_in_menu.grid(row=0, column=2, padx=(0, 6))
         tooltip.Tooltip(self.search_in_menu, "Which column the search looks in.")
-        menu_bar.DropButton(row, "Columns", self._fill_columns_menu, height=32, width=96, fg_color=theme.GRAY,
-                            hover_color=theme.GRAY_HOVER).grid(row=0, column=2)
+        self.columns_button = menu_bar.DropButton(row, "Columns", self._fill_columns_menu, height=32, width=96,
+                                                  fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER)
+        self.columns_button.grid(row=0, column=3)
         self.ticks_box = ctk.CTkFrame(outer, fg_color="transparent")
         self.ticks_box.grid(row=0, column=1, sticky="e", padx=(10, 0))
         self.acting_label = ctk.CTkLabel(self.ticks_box, text="", text_color=theme.MUTED, anchor="e")
@@ -202,7 +205,7 @@ class WindowLayout:
         """On a narrow window the ticks note and Clear move under the search box, which keeps its room."""
         try:
             needed = self._px(150) + self.search_in_menu.winfo_reqwidth() + self._px(110) + \
-                self.ticks_box.winfo_reqwidth() + self._px(20)
+                self.ticks_box.winfo_reqwidth() + self.view_switch.winfo_reqwidth() + self._px(26)
         except Exception:
             return
         if width < needed:
@@ -211,7 +214,7 @@ class WindowLayout:
             self.ticks_box.grid_configure(row=0, column=1, sticky="e", padx=(10, 0), pady=(0, 0))
 
     def _build_list(self, parent):
-        frame = ctk.CTkFrame(parent, fg_color=theme.BG_PANEL, corner_radius=8)
+        frame = self.list_frame = ctk.CTkFrame(parent, fg_color=theme.BG_PANEL, corner_radius=8)
         frame.grid(row=2, column=0, sticky="nsew", padx=(8, 4), pady=(0, 6))
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
@@ -237,6 +240,7 @@ class WindowLayout:
         across = ctk.CTkScrollbar(frame, orientation="horizontal", command=self.tree.xview)
         across.grid(row=1, column=0, sticky="ew", padx=(6, 0), pady=(0, 2))
         self.tree.configure(yscrollcommand=down.set, xscrollcommand=across.set)
+        self._build_home(parent)                                    # Home's folders, shown instead of the list
 
     # -- the details pane --------------------------------------------------------------------------------------
     def _build_detail_pane(self, parent):

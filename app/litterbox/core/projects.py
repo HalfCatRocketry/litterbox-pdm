@@ -20,6 +20,7 @@ The org's projects are kept in the vault's config (vault/config.py: get_projects
       members: [bea, cy]
       restricted: true
       hidden: true
+      folders: lead               # only the Lead (and Admins) change its folders in Home; members may otherwise
 """
 
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ class Project:
     members: tuple = ()         # person ids, the Lead not among them
     restricted: bool = False    # only members (and the Lead, Admins, the Owner) may work on its parts
     hidden: bool = False        # restricted, and nobody else sees it
+    lead_only_folders: bool = False     # only its Lead (and Admins, the Owner) change its folders (folders/)
 
     def is_member(self, person_id):
         """True for the Lead and the members."""
@@ -136,7 +138,7 @@ def new_project(name, prefix, projects, digits=None):
     return Project(name, prefix)
 
 
-def with_team(project, lead="", members=(), restricted=False, hidden=False):
+def with_team(project, lead="", members=(), restricted=False, hidden=False, lead_only_folders=False):
     """The project with this Lead, these members, restricted or hidden. Raises ProjectError if restricted or hidden
     without a Lead. Hidden is always restricted; the Lead isn't listed among the members; no one is listed twice."""
     lead = str(lead or "").strip()
@@ -149,7 +151,8 @@ def with_team(project, lead="", members=(), restricted=False, hidden=False):
         person = str(person or "").strip()
         if person and person != lead and person not in kept:
             kept.append(person)
-    return replace(project, lead=lead, members=tuple(kept), restricted=restricted, hidden=bool(hidden))
+    return replace(project, lead=lead, members=tuple(kept), restricted=restricted, hidden=bool(hidden),
+                   lead_only_folders=bool(lead_only_folders))
 
 
 def from_data(data, digits=None):
@@ -168,7 +171,7 @@ def from_data(data, digits=None):
             raise ProjectError(f"The members of project {entry.get('name')} must be a list of people's ids.")
         project = new_project(entry.get("name"), entry.get("prefix"), projects, digits)
         projects.append(with_team(project, entry.get("lead"), members, entry.get("restricted") is True,
-                                  entry.get("hidden") is True))
+                                  entry.get("hidden") is True, entry.get("folders") == "lead"))
     return projects
 
 
@@ -184,5 +187,7 @@ def to_data(projects):
             entry["restricted"] = True
         if project.hidden:
             entry["hidden"] = True
+        if project.lead_only_folders:
+            entry["folders"] = "lead"
         data.append(entry)
     return data

@@ -51,14 +51,14 @@ class RolesWindow(unittest.TestCase):
         self.applied = []
         self.window = self.gui.roles_dialog.RolesDialog(
             FakeParent(), ["Quality", "Chief"], lambda role: [], superusers=["Chief"],
-            apply=lambda roles, superusers: self.applied.append((roles, superusers)) or "")
+            apply=lambda roles, superusers, folders: self.applied.append((roles, superusers)) or "")
 
     def select(self, role):
         self.window.tree.selection_set(role)
         self.window._selected()
 
     def test_the_box_follows_the_selected_role_and_changes_it(self):
-        self.assertEqual(self.window.tree.rows["Chief"]["values"], ["Chief", "Yes"])
+        self.assertEqual(self.window.tree.rows["Chief"]["values"], ["Chief", "Yes", ""])
         self.select("Chief")
         self.assertTrue(self.window.superuser_var.get())
         self.select("Quality")
@@ -68,9 +68,23 @@ class RolesWindow(unittest.TestCase):
         self.window._save()
         self.assertEqual(self.applied, [(["Quality", "Chief"], ["Quality", "Chief"])])
 
+    def test_the_team_folders_box_follows_the_selected_role(self):
+        applied = []
+        window = self.gui.roles_dialog.RolesDialog(
+            FakeParent(), ["Quality", "Manager"], lambda role: [], folder_roles=["manager"],
+            apply=lambda roles, superusers, folders: applied.append(folders) or "")
+        self.assertEqual(window.tree.rows["Manager"]["values"], ["Manager", "", "Yes"])
+        window.tree.selection_set("Quality")
+        window._selected()
+        self.assertFalse(window.folders_var.get())
+        window.folders_var.set(True)
+        window._folders_ticked()
+        window._save()
+        self.assertEqual(applied, [["Quality", "Manager"]])
+
     def test_adding_the_standard_roles_ticks_chief(self):
         window = self.gui.roles_dialog.RolesDialog(FakeParent(), ["Quality"], lambda role: [],
-                                                   apply=lambda roles, superusers: self.applied.append(superusers) or "")
+                                                   apply=lambda roles, superusers, folders: self.applied.append(superusers) or "")
         window._standard()
         window._save()
         self.assertEqual(self.applied, [["Chief"]])

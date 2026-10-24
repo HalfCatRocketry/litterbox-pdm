@@ -15,6 +15,7 @@ from litterbox.errors import LitterboxError
 from litterbox.git import remote
 from litterbox.gui import scaling
 from litterbox.gui.logic import action_rules
+from litterbox.gui.logic import home_data
 from litterbox.gui.logic import download_text
 from litterbox.gui.logic import job_text
 from litterbox.gui.logic import list_columns
@@ -152,7 +153,7 @@ class PartsList:
         would act on is one it can be used on, and has no job in progress."""
         if not getattr(self, "action_buttons", None):
             return
-        highlighted = [parse_pn(iid) for iid in self.tree.selection()]
+        highlighted = self._highlighted_pns()
         states = action_rules.button_states(self._ticked_pns(), highlighted, self.rows_by_pn, self.jobs.pending_parts())
         for text, button in self.action_buttons.items():
             button.configure(state="normal" if states.get(text) else "disabled")
@@ -169,8 +170,8 @@ class PartsList:
         action = action_rules.BUTTON_ACTIONS.get(text)
         if action is None:
             return ""
-        highlighted = [parse_pn(iid) for iid in self.tree.selection()]
-        return action_rules.why_not(action, self._ticked_pns(), highlighted, self.rows_by_pn, self.jobs.pending_parts())
+        return action_rules.why_not(action, self._ticked_pns(), self._highlighted_pns(), self.rows_by_pn,
+                                    self.jobs.pending_parts())
 
     def _deselect_all(self):
         """Clear every box (and the highlight)."""
@@ -179,9 +180,18 @@ class PartsList:
         self._update_buttons()
 
     def _ticked_pns(self):
-        """The ticked parts that are shown in the list right now (a tick on a filtered-out part is ignored)."""
+        """The ticked parts that are shown in the list right now (a tick on a filtered-out part is ignored); in Home,
+        the ticked parts and documents Home lists."""
+        if getattr(self, "home_shown", False):
+            return self._home_ticked()
         ticked = getattr(self, "ticked", set())
         return [parse_pn(iid) for iid in self.tree.get_children() if iid in ticked]
+
+    def _highlighted_pns(self):
+        """The highlighted part: the list's, or Home's when it is shown."""
+        if getattr(self, "home_shown", False):
+            return self._home_highlighted()
+        return [parse_pn(iid) for iid in self.tree.selection()]
 
     def _index_rows(self):
         """rows_by_pn: every part's row and every document's (the Documents screen uses the same actions)."""
@@ -200,7 +210,7 @@ class PartsList:
         """The parts an action applies to: see action_rules.choose_targets (or what act_on gave)."""
         if self._acting_on is not None:
             return list(self._acting_on)
-        highlighted = [parse_pn(iid) for iid in self.tree.selection()]
+        highlighted = self._highlighted_pns()
         if action is None:
             return highlighted
         return action_rules.choose_targets(action, self._ticked_pns(), highlighted)
@@ -289,12 +299,14 @@ class PartsList:
                 who, behind = who_job.result(), behind_job.result()
             if project_visibility.apply(repo, who):           # a hidden project's parts came or went
                 rows = part_status.get_status(repo)
+            folders = home_data.load(repo)                    # Home's folders, projects and ECO titles
             if diagnostics.DEBUG:
                 diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
-            return rows, who, behind, docs
+            return rows, who, behind, docs, folders
 
         def show(result):
-            rows, who, behind, docs = result
+            rows, who, behind, docs, folders = result
+            self.home_trees, self.home_projects, self.eco_titles = folders
             self.doc_rows = docs
             self.identity = who
             self._show_identity()
@@ -349,7 +361,7 @@ class PartsList:
         keys = list_columns.search_keys(choice)
         rows = list_view.filter_rows(self.rows, self.search.get(), self.view.get(),
                                      values=lambda row: list_columns.search_values(row, keys))
-        self.ticked &= {str(row.pn) for row in self.rows}                     # parts that no longer exist lose their tick
+        self.ticked &= {str(row.pn) for row in list(self.rows) + list(self.doc_rows)}    # gone: no tick
         if self.view.get() != "Void":                                         # so do void parts that are now hidden
             self.ticked -= {str(row.pn) for row in self.rows if row.kind == "void"}
         self._index_rows()
@@ -370,6 +382,8 @@ class PartsList:
             self.tree.selection_set(*keep)
         self.sorter.apply()
         self._update_buttons()
+        if getattr(self, "home_shown", False):
+            self._render_home()
         return len(rows)
 
     def get_latest(self):

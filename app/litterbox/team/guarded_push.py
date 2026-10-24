@@ -1,14 +1,17 @@
 """
 guarded_push.py - every upload Litterbox makes: sync, then push, syncing and retrying if someone else pushed first
-(git/remote.push_with_retry). After every sync, before pushing, three checks stop the upload: the vault's latest team
+(git/remote.push_with_retry). After every sync, before pushing, four checks stop the upload: the vault's latest team
 list must still let you upload (team_store.check_before_push), this Litterbox must still be allowed to work in
-the vault (vault/compatibility.py: someone may have raised its format or min_litterbox_version meanwhile), and only
-an Admin or the Owner may upload a change to the team's Toolbox (the vault's toolbox/ folder, vault/toolbox_admin.py).
+the vault (vault/compatibility.py: someone may have raised its format or min_litterbox_version meanwhile), only
+an Admin or the Owner may upload a change to the team's Toolbox (the vault's toolbox/ folder, vault/toolbox_admin.py),
+and changes to the Team and project folders must be ones you may make (folders/folder_access.py).
 They read what the sync has just fetched, so they ask the server nothing more.
 """
 
 from litterbox import layout
 from litterbox.errors import LitterboxError
+from litterbox.folders import folder_access
+from litterbox.folders import folder_store
 from litterbox.git import remote
 from litterbox.git import repository
 from litterbox.team import team_identity
@@ -36,6 +39,20 @@ def toolbox_allowed(repo):
                              f"({layout.TOOLBOX_DIR_NAME}/), which only an Admin or the Owner may change.")
 
 
+def folders_allowed(repo):
+    """Raise LitterboxError (nothing uploaded) if your commits change Team or project folders you may not change."""
+    changes = folder_store.unpushed_changes(repo, repository.paths_changed_in(repo, repository.UNPUSHED))
+    if not changes:
+        return
+    who = team_identity.current(repo, probe=False)
+    if who.state == team_identity.UNVERIFIED:                  # not known on this computer yet: ask the host once
+        who = team_identity.current(repo)
+    problems = folder_access.check_upload(changes, who, config.get_projects(repo))
+    if problems:
+        raise folder_access.FoldersRefused("Nothing was uploaded: your changes include folder changes you may not "
+                                           "make. " + " ".join(problems))
+
+
 def push(repo, attempts=3):
     """Sync, check, push. Raises PeopleError (nothing uploaded) if you may no longer upload, and LitterboxError
     (nothing uploaded) if the vault now needs a newer Litterbox. Your commits stay on your computer either way."""
@@ -43,4 +60,5 @@ def push(repo, attempts=3):
         team_store.check_before_push(repo, fetch=False)        # the sync has just fetched
         still_compatible(repo)
         toolbox_allowed(repo)
+        folders_allowed(repo)
     remote.push_with_retry(repo, attempts, after_sync=checks)

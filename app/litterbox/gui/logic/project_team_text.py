@@ -12,6 +12,9 @@ RESTRICT_TEXT = "Restrict Project"
 RESTRICT_NOTE = ("Only its members, its Lead, Admins and the Owner may make its part numbers, change its parts, and "
                  "ask for or sign its workflows.")
 HIDE_TEXT = "Hide Project"
+LEAD_FOLDERS_TEXT = "Only the Lead changes its folders"
+LEAD_FOLDERS_NOTE = ("Each member sees the project's folders in Home. Unticked, any member can change them; ticked, "
+                     "only the Lead (and Admins and the Owner).")
 HIDE_NOTE = ("Restricted, and nobody else sees it or its parts at all: Litterbox leaves them out of their copy of "
              "the vault.")
 NEEDS_LEAD = "Choose a Project Lead first: a restricted or hidden project needs one."

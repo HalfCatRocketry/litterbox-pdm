@@ -18,11 +18,12 @@ class EcoScreen(ctk.CTkFrame):
     """The list of ECOs. show(ecos, problems) fills it: `ecos` are change_orders Eco objects (newest first);
     `problems` is {number: why} for files that couldn't be read. on_view(eco) opens one."""
 
-    def __init__(self, master, on_view):
+    def __init__(self, master, on_view, on_add_to_folder=None):
         super().__init__(master, fg_color="transparent")
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)
         self.ecos, self.order, self.problems, self.on_view = {}, [], {}, on_view
+        self.on_add_to_folder = on_add_to_folder          # on_add_to_folder([ECO number]): Home's folders
 
         ctk.CTkLabel(self, text="Engineering change orders", font=ctk.CTkFont(size=18, weight="bold"),
                      anchor="w").grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 6))
@@ -40,6 +41,10 @@ class EcoScreen(ctk.CTkFrame):
                           command=lambda value: self._fill()).grid(row=0, column=1, padx=(0, 8))
         release_button.ReleaseButton(bar, text="View", width=90, height=34, fg_color=theme.ACCENT,
                                      hover_color="#18527f", command=self._view).grid(row=0, column=2)
+        if on_add_to_folder is not None:
+            release_button.ReleaseButton(bar, text="Add to Folder...", width=130, height=34, fg_color=theme.GRAY,
+                                         hover_color=theme.GRAY_HOVER, command=self._add_to_folder).grid(
+                row=0, column=3, padx=(8, 0))
 
         frame = ctk.CTkFrame(self, fg_color=theme.BG_PANEL, corner_radius=10)
         frame.grid(row=2, column=0, sticky="nsew", padx=16, pady=(8, 0))
@@ -75,6 +80,11 @@ class EcoScreen(ctk.CTkFrame):
             self.note.configure(text="There are no ECOs yet. One is made when a workflow that requires an ECO starts.")
         else:
             self.note.configure(text=eco_text.table_note(len(rows), len(self.ecos), self.problems))
+
+    def _add_to_folder(self):
+        chosen = self.tree.selection()
+        if chosen and chosen[0] in self.ecos:
+            self.on_add_to_folder([chosen[0]])
 
     def _view(self):
         chosen = self.tree.selection()

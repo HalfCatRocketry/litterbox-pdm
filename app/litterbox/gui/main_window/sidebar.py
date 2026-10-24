@@ -124,7 +124,7 @@ class Sidebar:
         if name == "tasks":
             return tasks_screen.TasksScreen(self.content, self)
         if name == "ecos":
-            return eco_screen.EcoScreen(self.content, self._view_eco_object)
+            return eco_screen.EcoScreen(self.content, self._view_eco_object, on_add_to_folder=self.add_to_folder)
         if name == "team":
             return team_screen.TeamScreen(self.content, self)
         if name == "documents":

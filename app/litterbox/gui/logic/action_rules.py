@@ -31,6 +31,8 @@ ALLOWED_KINDS = {
     "generate_step_pdf": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "pending"},
     "update_material": {"ok", "mine", "stray", "unclaimed", "released", "cots", "pending"},    # not someone else's
     "create_variant": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "pending"},   # not void
+    "add_to_folder": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "missing", "pending",
+                      "error"},                                  # a folder may list anything
 }
 
 
@@ -56,7 +58,7 @@ def unusable_reason(action, row):
 
 # These can be done to several parts at once; the rest need exactly one part selected.
 MULTI = {"checkout", "checkin", "save", "undo", "release", "reopen", "void", "make_cots", "export_files",
-         "generate_step_pdf", "update_material"}
+         "generate_step_pdf", "update_material", "add_to_folder"}
 
 
 NAME = {            # "...cannot <name> ..."
@@ -65,6 +67,7 @@ NAME = {            # "...cannot <name> ..."
     "break_checkout": "break the checkout of", "purchasing": "change the purchasing info of",
     "export_files": "export the files of", "generate_step_pdf": "make the STEP/PDF of",
     "update_material": "update the material of", "create_variant": "make a variant of",
+    "add_to_folder": "put in a folder",
 }
 
 
@@ -74,6 +77,7 @@ PAST = {            # "<past> 2 parts"
     "break_checkout": "Broke the checkout of", "purchasing": "Changed the purchasing info of",
     "export_files": "Exported the files of", "generate_step_pdf": "Made the STEP/PDF of",
     "update_material": "Updated the material of", "create_variant": "Made a variant of",
+    "add_to_folder": "Put in a folder",
 }
 
 
@@ -123,9 +127,10 @@ VIEW_ONLY = {"open", "open_drawing", "open_pdf", "references",      # these only
 EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
 
 # The ticked parts, or else the highlighted one: its window lists the parts before anything is done
-TICKED_OR_HIGHLIGHTED = EXPORTS | {"generate_step_pdf", "update_material"}
+TICKED_OR_HIGHLIGHTED = EXPORTS | {"generate_step_pdf", "update_material", "add_to_folder"}
 
-LOOKS = VIEW_ONLY | EXPORTS     # change nothing in the vault, so a part with a job running can still be used
+LOOKS = VIEW_ONLY | EXPORTS | {"add_to_folder"}     # change nothing in the vault's parts, so a part with a job
+                                                    # running can still be used
 
 
 def choose_targets(action, ticked, highlighted):
@@ -149,7 +154,7 @@ BUTTON_ACTIONS = {
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
     "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
     "Purchasing Info": "purchasing", "Export Files": "export_files", "Generate STEP/PDF": "generate_step_pdf",
-    "Update Material": "update_material", "Create Variant": "create_variant",
+    "Update Material": "update_material", "Create Variant": "create_variant", "Add to Folder": "add_to_folder",
 }
 
 

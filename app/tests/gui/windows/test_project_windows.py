@@ -30,7 +30,7 @@ class ProjectWindow(unittest.TestCase):
     def test_it_starts_as_the_project_is(self):
         dialog = self.window()
         self.assertEqual(dialog.lead_var.get(), "Cy Day")
-        self.assertEqual(dialog.team(), {"lead": "cy", "members": ["bea"], "restricted": True, "hidden": False})
+        self.assertEqual(dialog.team(), {"lead": "cy", "members": ["bea"], "restricted": True, "hidden": False, "lead_only_folders": False})
         self.assertEqual(list(dialog.member_list.rows), ["bea"])
         self.assertEqual(list(dialog.team_list.rows), ["alex", "dee"])        # not the Lead, not a member, not off
 
@@ -60,7 +60,7 @@ class ProjectWindow(unittest.TestCase):
         dialog._lead_changed()
         dialog._save()
         self.assertEqual(dialog.result, {"name": "Rover", "prefix": "12", "team": {
-            "lead": "cy", "members": [], "restricted": True, "hidden": True}})
+            "lead": "cy", "members": [], "restricted": True, "hidden": True, "lead_only_folders": False}})
 
     def test_making_someone_the_lead_takes_them_off_the_members(self):
         dialog = self.window()
@@ -97,7 +97,7 @@ class ProjectsWindow(unittest.TestCase):
 
     def test_edit_gives_the_projects_new_team(self):
         dialog = self.window(CY)
-        team = {"lead": "cy", "members": ["bea", "dee"], "restricted": True, "hidden": False}
+        team = {"lead": "cy", "members": ["bea", "dee"], "restricted": True, "hidden": False, "lead_only_folders": False}
         self.gui.projects_dialog.project_dialog.ProjectDialog = lambda *a, **k: SimpleNamespace(
             show=lambda: {"name": "Rover", "prefix": "12", "team": team})
         dialog._edit(dialog.projects[0])
