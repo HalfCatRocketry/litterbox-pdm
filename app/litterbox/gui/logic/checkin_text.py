@@ -69,3 +69,11 @@ def open_while_busy_text(pn, label):
     """The question asked before opening a part that has a job queued or running."""
     return (f"{pn} is busy: {label.lower()}.\n\nOpening it now is safe, but don't save it in SolidWorks until the "
             "banner says Ready, or the upload can end up half in the vault.\n\nOpen it anyway?")
+
+
+def warnings_text(warnings, limit=8):
+    """What the window says after a check-in that read something worth a look (parts/configuration_check.py)."""
+    shown = list(warnings[:limit])
+    if len(warnings) > limit:
+        shown.append(f"... and {len(warnings) - limit} more (the log has them all).")
+    return "The check-in went ahead. Worth a look:\n\n" + "\n\n".join(shown)

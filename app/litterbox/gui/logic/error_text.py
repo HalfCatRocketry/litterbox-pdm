@@ -32,8 +32,8 @@ def error_advice(message):
     if "not allowed" in text or "you can't" in text or "role" in text and "need" in text:
         return "You don't have the role for that. Ask an Admin if you should."
     if "unexpected error" in text:
-        return ("Something Litterbox did not expect. Press Refresh. If it happens again, send the log below to "
-                "whoever looks after Litterbox.")
+        return ("Something Litterbox did not expect. Press Refresh. If it happens again, press Report... below "
+                "(or Help > Report a problem...) to send a problem report.")
     return "Press Refresh to see where things stand, then try again. The log below has the details."
 
 

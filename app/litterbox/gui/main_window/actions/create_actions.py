@@ -1,20 +1,23 @@
 """
-create_actions.py - New Part, Import and Import COTS.
+create_actions.py - New Part, Create Variant, Import and Import COTS.
 """
 
 from pathlib import Path
 
 from litterbox.errors import LitterboxError
+from litterbox.gui.dialogs import create_variant_dialog
 from litterbox.gui.dialogs import filename_dialog
 from litterbox.gui.dialogs import new_part_dialog
 from litterbox.gui.windows.import_window import import_window
 from litterbox.parts import checkout
 from litterbox.parts import create
+from litterbox.parts import create_variant
+from litterbox.records import record_store
 from litterbox.references import reference_rescan
 
 
 class CreateActions:
-    """New Part, New Assembly, Import and Import COTS. One part of the main window (App)."""
+    """New Part, New Assembly, Create Variant, Import and Import COTS. One part of the main window (App)."""
 
     def new_assembly(self):
         """New Assembly: New Part, with the variants set aside for assemblies (from 500, or the org's choice)."""
@@ -51,6 +54,35 @@ class CreateActions:
                 filename_dialog.FilenameDialog(self, pn)            # where to save its CAD file
 
         self.run_task(work, "Created", on_success=created)
+
+    def create_variant(self):
+        """Create Variant: copy the highlighted part to a new variant of its number, checked out to you."""
+        plan = self._plan("create_variant")
+        if not plan:
+            return
+        pn, repo = plan.targets[0], self.repo()
+        row = self.rows_by_pn.get(pn)
+        try:
+            record = record_store.load(repo, pn)
+            next_free = create.next_variant_number(repo, pn.base, pn.org, create_variant.kind_of(repo, record))
+        except Exception:
+            record, next_free = None, None
+        request = create_variant_dialog.CreateVariantDialog(
+            self, pn, record.name if record else getattr(row, "name", ""), record.description if record else "",
+            next_free).show()
+        if not request:
+            return
+        log = lambda text: self.queue.put(("log", text))
+
+        def created(result):
+            new_pn, _files = result
+            self.note = f"Created {new_pn} as a copy of {pn}, checked out to you"
+            self.pending_select = str(new_pn)
+            self.search.delete(0, "end")            # make sure the new row isn't filtered out
+
+        self.run_task(lambda: create_variant.create_variant(repo, pn, request["name"], request["description"],
+                                                            request["variant"], log=log),
+                      "Created", on_success=created, label=f"Making a variant of {pn}")
 
     def import_cots(self):
         """Open the Import COTS window: the same as Import, but every part is recorded as purchased."""

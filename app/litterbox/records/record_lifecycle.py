@@ -9,6 +9,7 @@ and the git work are up to the caller.
 from litterbox.core import file_types
 from litterbox.core.revision_letters import FIRST_REVISION, revision_number
 from litterbox.records import purchasing_info
+from litterbox.records import record_configurations
 from litterbox.records import record_materials
 from litterbox.records import record_model
 from litterbox.records import record_other_files
@@ -119,7 +120,8 @@ def material_needs_update(record, revision, files):
     return not record_materials.is_read(record, revision)
 
 
-def record_checkin(record, by, files, comment="", references=None, quantities=None, material=None, other_files=None):
+def record_checkin(record, by, files, comment="", references=None, quantities=None, material=None, other_files=None,
+                   configurations=None):
     """Log a check-in. `references` (a list, or None for 'not read this time') updates what the
     working revision uses; the event lists them when they changed. If an assembly file was checked
     in and the references could not be read, the revision is marked as needing an update.
@@ -127,7 +129,9 @@ def record_checkin(record, by, files, comment="", references=None, quantities=No
     without them, the old counts are dropped, so its BOM shows that it needs updating. `material` (text, '' for none
     assigned, or None for 'not read') is the part's material; when a part file was checked in without it, the old
     one is dropped, so it shows that it needs updating. `other_files` ([{file, toolbox}], or None) are the files the
-    assembly uses that aren't Litterbox parts (records/record_other_files.py); without them they are forgotten too."""
+    assembly uses that aren't Litterbox parts (records/record_other_files.py); without them they are forgotten too.
+    `configurations` ((own, used), or None) are the model's configurations (records/record_configurations.py);
+    without them a checked-in model's are forgotten."""
     changed = set_references(record, references) if references is not None else False
     assembly = any(file_types.is_assembly(f) for f in files)
     if references is None and assembly:
@@ -142,6 +146,10 @@ def record_checkin(record, by, files, comment="", references=None, quantities=No
         record_other_files.set_other_files(record, other_files)
     elif assembly:
         record_other_files.forget(record)
+    if configurations is not None:
+        record_configurations.set_configurations(record, *configurations)
+    elif any(file_types.is_part(f) or file_types.is_assembly(f) for f in files):
+        record_configurations.forget(record)
     material_changed = False
     if material is not None:
         material_changed = record_materials.set_material(record, material)

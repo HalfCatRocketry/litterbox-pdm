@@ -1,8 +1,9 @@
 """
 sw_backend.py - SolidWorks as the importer, Revise, Update references and Generate STEP/PDF use it (the backend of
-cad/cad_program.py): read a file's references, list an assembly's components (to count them, and to find its Toolbox
-parts), read a part's material, copy a file with its references updated (Pack and Go), point a file at a different
-one, save a STEP or PDF of it (sw_saving.py), close.
+cad/cad_program.py): read a file's references, list an assembly's components (to count them, to find its Toolbox
+parts, and the configuration of each), read a part's material, read a model's configurations and rename one
+(sw_configurations.py), copy a file with its references updated (Pack and Go), point a file at a different one, save
+a STEP or PDF of it (sw_saving.py), close.
 
 Through COM, so on one thread only (see importing/session.py and com.com_thread).
 """
@@ -12,7 +13,9 @@ import os
 import shutil
 
 from litterbox import diagnostics
+from litterbox.core import file_types
 from litterbox.cad.cad_program import COUNTED, EXCLUDED, SUPPRESSED
+from litterbox.cad.solidworks import sw_configurations
 from litterbox.cad.solidworks import sw_errors
 from litterbox.cad.solidworks import sw_process
 from litterbox.cad.solidworks import sw_saving
@@ -77,6 +80,9 @@ class SolidWorksBackend:
     references(path)         [(stored, found)] for the file's direct references
     components(path)         [(file, COUNTED / SUPPRESSED / EXCLUDED)] for an assembly's top-level components
     library_components(path) the files of an assembly's top-level components that are Toolbox parts
+    component_configurations(path)  {file: [configuration]} the configuration of a part each top-level component uses
+    configurations(path)     a model's configurations (sw_configurations.read)
+    name_configuration(path, old, new)  rename a configuration of a model that may be changed, and save it
     material(path)           a part's material in its active configuration ('' for none)
     copy(src, dst)           copy a file on disk (nothing needs to be open)
     repoint(file, old, new)  change one reference inside the NEW file
@@ -152,7 +158,7 @@ class SolidWorksBackend:
     def components(self, path):
         """One (file, state) per component at the top of an assembly, one entry for each copy (see _opened). A
         component whose file can't be found is reported as suppressed."""
-        return [(file, state) for file, state, _toolbox in self._read_components(path)]
+        return [(file, state) for file, state, _toolbox, _config in self._read_components(path)]
 
     def library_components(self, path):
         """The files of an assembly's top-level components that are Toolbox parts (see _opened): those whose model
@@ -161,11 +167,21 @@ class SolidWorksBackend:
         Tried with SolidWorks 2024: a socket head cap screw from Toolbox gives 1, an ordinary part 0. The file is
         where SolidWorks loaded it, which for a Toolbox part is always the Toolbox folder this computer's SolidWorks
         is set to use (Toolbox Data Location), whatever folder the assembly was saved with."""
-        return [file for file, _state, toolbox in self._read_components(path) if toolbox]
+        return [file for file, _state, toolbox, _config in self._read_components(path) if toolbox]
+
+    def component_configurations(self, path):
+        """{file: [configuration names]}: which configuration of each file the assembly's top-level components use
+        (see _opened). A component with no configuration to say (its file missing) is left out."""
+        found = {}
+        for file, _state, _toolbox, config in self._read_components(path):
+            if file and config:
+                found.setdefault(file, set()).add(config)
+        return {file: sorted(names) for file, names in found.items()}
 
     def _read_components(self, path):
-        """[(file, state, is a Toolbox part)] for an assembly's top-level components, read with one opening of the
-        assembly and kept while the file is unchanged (check-in asks for both the counts and the Toolbox parts)."""
+        """[(file, state, is a Toolbox part, configuration)] for an assembly's top-level components, read with one
+        opening of the assembly and kept while the file is unchanged (check-in asks for the counts, the Toolbox parts
+        and the configurations)."""
         from litterbox.cad.solidworks import com
         try:
             stamp = os.stat(path).st_mtime_ns
@@ -182,11 +198,15 @@ class SolidWorksBackend:
                     kind = com.call(com.call(doc, "Extension"), "ToolboxPartType") if doc is not None else 0
                 except Exception:
                     kind = 0
+                try:
+                    config = str(com.call(component, "ReferencedConfiguration") or "")
+                except Exception:
+                    config = ""
                 found.append((str(com.call(component, "GetPathName") or ""),
                               component_state(com.call(component, "IsSuppressed"),
                                               com.call(component, "ExcludeFromBOM"),
                                               com.call(component, "IsEnvelope")),
-                              kind == TOOLBOX_STANDARD_PART))
+                              kind == TOOLBOX_STANDARD_PART, config))
         if stamp is not None:
             self._components[full_path(path)] = (stamp, found)
         return found
@@ -210,6 +230,52 @@ class SolidWorksBackend:
             except Exception:
                 old = ""
             return material_name(name, old)
+
+    def configurations(self, path):
+        """A part's or assembly's configurations (sw_configurations.read), see _opened."""
+        part = file_types.is_part(path)
+        with self._opened(path, DOC_PART if part else DOC_ASSEMBLY) as model:
+            return sw_configurations.read(model, part)
+
+    def name_configuration(self, path, old, new):
+        """Rename configuration `old` of a part or assembly to `new` and save the file. A file the person has open is
+        changed in their SolidWorks, unless it has unsaved changes (they are theirs to save): then, or if the file
+        is read-only, it raises SolidWorksError and nothing changes. Any other is opened out of sight and closed."""
+        import pythoncom
+        from litterbox.cad.solidworks import com
+        from win32com.client import VARIANT
+        sw, path = self._app(), full_path(path)
+        doc_type = DOC_PART if file_types.is_part(path) else DOC_ASSEMBLY
+        name = os.path.basename(path)
+        model = sw.GetOpenDocumentByName(path)
+        opened = model is None
+        if not opened and com.call(model, "GetSaveFlag"):
+            raise sw_errors.SolidWorksError(f"{name} has unsaved changes in SolidWorks")
+        errors = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
+        warnings = VARIANT(pythoncom.VT_BYREF | pythoncom.VT_I4, 0)
+        if opened:
+            sw.DocumentVisible(False, doc_type)
+            try:
+                model = sw.OpenDoc6(path, doc_type, OPEN_SILENT, "", errors, warnings)
+            finally:
+                sw.DocumentVisible(True, doc_type)
+            if model is None:
+                raise sw_errors.SolidWorksError(f"SolidWorks could not open {name} (error {errors.value}).")
+        try:
+            if com.call(model, "IsOpenedReadOnly"):
+                raise sw_errors.SolidWorksError(f"{name} is read-only")
+            try:
+                sw_configurations.rename(model, old, new)
+            except ValueError as e:
+                raise sw_errors.SolidWorksError(f"{name}: {e}") from None
+            if not model.Save3(1, errors, warnings):
+                raise sw_errors.SolidWorksError(f"SolidWorks could not save {name} (error {errors.value}).")
+        finally:
+            if opened:
+                try:
+                    sw.CloseDoc(com.call(model, "GetTitle"))
+                except Exception as e:
+                    diagnostics.LOG(f"Could not close {name} in SolidWorks: {e}")
 
     def copy(self, src, dst):
         import pythoncom

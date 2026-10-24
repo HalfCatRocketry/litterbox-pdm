@@ -17,6 +17,7 @@ EVENT_LABELS = {
     "created": "Created", "checked_out": "Checked out", "checked_in": "Checked in",
     "released": "Released", "reopened": "Unreleased", "voided": "Voided", "made_cots": "Made COTS",
     "edited": "Edited details", "revised": "Revised", "revision_cancelled": "Revision cancelled",
+    "copied_from": "Copied from another part",
     "references_updated": "Parts used updated",
     "release_requested": "Requested", "release_signed": "Signed off", "release_rejected": "Request rejected",
     "release_withdrawn": "Request withdrawn", "workflow_reassigned": "Signer changed",

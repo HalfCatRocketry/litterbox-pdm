@@ -30,8 +30,8 @@ LIFECYCLE_MENU = (("Edit Details", "edit_details"), ("Purchasing Info", "edit_pu
                   ("Unrelease", "reopen"), ("Void", "void"))
 
 
-CREATE_MENU = (("New Part", "new_part"), ("New Assembly", "new_assembly"), ("Import...", "import_cad"),
-               ("Import COTS...", "import_cots"))
+CREATE_MENU = (("New Part", "new_part"), ("New Assembly", "new_assembly"), ("Create Variant", "create_variant"),
+               None, ("Import...", "import_cad"), ("Import COTS...", "import_cots"))
 
 
 EVERYDAY_MENU = (("Check Out", "check_out"), ("Check In", "check_in"), ("Save Progress", "save_progress"),
@@ -44,7 +44,7 @@ ADMIN_LIFECYCLE_MENU = (None, ("Break Checkout", "break_checkout"))      # only 
 # Where an entry reads differently from its button
 ENTRY_TEXT = {"Details": "Details and History...", "Break Checkout": "Break Checkout...",
               "Purchasing Info": "Purchasing Info...", "Export Files": "Export Files...",
-              "Generate STEP/PDF": "Generate STEP/PDF..."}
+              "Generate STEP/PDF": "Generate STEP/PDF...", "Create Variant": "Create Variant..."}
 
 
 class Menus:
@@ -168,6 +168,7 @@ class Menus:
     def _fill_help_menu(self, menu):
         menu.add_command(label="Status icons...", command=lambda: legend_dialog.LegendDialog(self, self.icons))
         menu.add_command(label="Check for updates...", command=self.check_for_updates)
+        menu.add_command(label="Report a problem...", command=self.report_problem)
         menu.add_separator()
         menu.add_command(label="About Litterbox", command=self.show_about)
 

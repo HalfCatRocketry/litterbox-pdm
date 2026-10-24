@@ -20,9 +20,11 @@ you come back from a break.
 
 import threading
 import time
+import traceback
 from collections import deque
 from dataclasses import dataclass, field
 
+from litterbox import diagnostics
 from litterbox.errors import LitterboxError, NothingToSaveError
 
 READY, WORKING, ERROR = "ready", "working", "error"
@@ -117,6 +119,7 @@ class JobQueue:
         except LitterboxError as e:
             return Outcome(job, error=str(e))
         except Exception as e:                           # anything unexpected
+            diagnostics.note_unexpected(job.label.lower(), traceback.format_exc())
             return Outcome(job, error=f"Unexpected error: {e!r}")
 
     def finished(self, job):

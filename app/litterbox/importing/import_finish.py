@@ -3,6 +3,7 @@ import_finish.py - phase 3 of an import: copy the files in, create the records, 
 journal so an import that stops half way can be put back.
 """
 
+import dataclasses
 import uuid
 
 from litterbox.git import lfs_download
@@ -81,6 +82,8 @@ def finish(repo, prepared, dry_run=False, cancel=None, progress=None, log=print)
         try:
             import_copying.copy_everything(repo, plan, backend, cancel, progress, log)
             import_copying.verify(repo, plan, backend, originals, log)
+            named = import_copying.name_configurations(plan, backend, log)
+            specs = [dataclasses.replace(spec, configuration_named=named.get(pn, "")) for spec, pn in zip(specs, pns)]
             import_copying.check_cancel(cancel)
             if progress:
                 progress(len(plan.order), len(plan.order), "Adding to the vault...")

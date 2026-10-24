@@ -4,6 +4,7 @@ is released (cancelled letters are never reused).
 """
 
 from litterbox.core.revision_letters import next_revision, revision_number
+from litterbox.records import record_configurations
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
 
@@ -46,6 +47,7 @@ def mark_revised(record, by, reason, files):
         record.quantities[record.revision] = dict(record.quantities[previous])
     if previous in record.other_files:                  # and the Toolbox parts and other files it uses
         record.other_files[record.revision] = [dict(e) for e in record.other_files[previous]]
+    record_configurations.carry_on(record, previous, record.revision)       # and its configurations
     if previous in record.bom_items:                    # lines added by hand to the BOM carry on too
         record.bom_items[record.revision] = dict(record.bom_items[previous])
     if previous in record.documents:                    # and so do linked documents
@@ -78,6 +80,7 @@ def mark_revision_cancelled(record, by, reason, files):
     record.quantities.pop(cancelled, None)
     record.bom_items.pop(cancelled, None)
     record.other_files.pop(cancelled, None)
+    record.configurations.pop(cancelled, None)
     record.documents.pop(cancelled, None)
     if cancelled in record.references_outdated:
         record.references_outdated.remove(cancelled)

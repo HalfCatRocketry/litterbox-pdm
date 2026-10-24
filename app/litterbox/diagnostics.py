@@ -5,6 +5,8 @@ diagnostics.py - where Litterbox's log messages go, and debug-mode timing.
             up in its log box. Always call it as diagnostics.LOG(...) so the replacement is seen everywhere.
     DEBUG   set from settings.yaml (debug_mode). When on, slow commands are logged and batches report where
             their time went.
+    note_unexpected(where, trace) / unexpected()
+            the last few unexpected errors with their tracebacks, for Help > Report a problem (user/bug_report.py).
 """
 
 import threading
@@ -15,10 +17,28 @@ LOG = print
 DEBUG = False
 SLOW_SECONDS = 2.0          # in debug mode, commands slower than this are logged
 
+_TIMES = {}                 # debug mode's times (see timed)
+_TIMES_LOCK = threading.Lock()
+UNEXPECTED_KEPT = 5         # unexpected errors kept for a problem report
+_UNEXPECTED = []
+
+
+def note_unexpected(where, trace):
+    """Keep an unexpected error's traceback (`where` says what Litterbox was doing) and log it."""
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    with _TIMES_LOCK:
+        _UNEXPECTED.append((stamp, str(where), str(trace)))
+        del _UNEXPECTED[:-UNEXPECTED_KEPT]
+    LOG(f"UNEXPECTED ERROR while {where}:\n{str(trace).rstrip()}")
+
+
+def unexpected():
+    """[(time, where, traceback)] of the last unexpected errors, oldest first."""
+    with _TIMES_LOCK:
+        return list(_UNEXPECTED)
+
 
 # Debug mode: how long each kind of command took, so a slow batch can be explained (see timed).
-_TIMES = {}
-_TIMES_LOCK = threading.Lock()
 
 
 def note_time(command, elapsed):

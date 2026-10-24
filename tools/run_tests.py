@@ -140,4 +140,8 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    try:                        # a test's output may hold characters the Windows console can't show (it once crashed here)
+        sys.stdout.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
     sys.exit(main())

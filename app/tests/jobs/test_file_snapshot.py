@@ -109,7 +109,7 @@ class Wiring(unittest.TestCase):
     def test_the_window_takes_the_snapshot_when_check_in_is_queued(self):
         source = gui_source()
         self.assertIn("snapshot = self._watch_files(plan.targets)", source)
-        self.assertIn("snapshot=snapshot))", source)
+        self.assertIn("snapshot=snapshot,", source)
         self.assertIn("checkin.watch_files(", source)
 
 

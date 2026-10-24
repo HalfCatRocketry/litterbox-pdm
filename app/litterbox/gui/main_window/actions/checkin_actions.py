@@ -9,6 +9,7 @@ from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import solidworks_text
 from litterbox.parts import checkin
+from litterbox.parts import configuration_naming
 from litterbox.parts import part_changes
 from litterbox.references import reference_reader
 
@@ -25,11 +26,13 @@ class CheckinActions:
         if comment is None:                                  # cancelled
             return
         comment = comment.strip() or "Update"
-        reader = reference_reader.make_reader(log=lambda text: self.queue.put(("log", text)))
+        log = lambda text: self.queue.put(("log", text))
+        reader = reference_reader.make_reader(log=log)
+        namer = configuration_naming.make_namer(log=log)
         snapshot = self._watch_files(plan.targets)
         self._run_batch(action, plan, lambda repo, pns: checkin.checkin_many(
             repo, pns, comment, keep_lock=keep_lock, allow_unchanged=allow_unchanged, references_reader=reader,
-            snapshot=snapshot))
+            snapshot=snapshot, configuration_namer=namer))
 
     def _watch_files(self, targets):
         """Remember the files' sizes and times now, so a part saved after this click is not uploaded half way

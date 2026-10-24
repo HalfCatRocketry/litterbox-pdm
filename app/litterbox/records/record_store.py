@@ -19,6 +19,7 @@ from litterbox.core import doc_number
 from litterbox.core.doc_number import DocNumber
 from litterbox.core.numbering import next_base, next_variant
 from litterbox.core.part_number import try_parse
+from litterbox.records import record_configurations
 from litterbox.records import record_lifecycle
 from litterbox.records import record_migrations
 from litterbox.records import record_model
@@ -85,12 +86,13 @@ def check_may_write():
 
 
 def create_record(repo, pn, name, created_by, description="", cots=False, imported=False, import_path="",
-                  project="", kind=record_model.KIND_CAD, doc_type=""):
+                  project="", kind=record_model.KIND_CAD, doc_type="", configuration_named=""):
     """Create the record file for a brand-new PN and return the Record.
 
     The name is required. The description is optional. import_path is only kept
     for imported parts. Raises PNExistsError if that PN already has a record, so
-    an existing record can never be overwritten.
+    an existing record can never be overwritten. `configuration_named` is the name its model's configuration was
+    given after it (records/record_configurations.py), when that was done while copying it in.
     """
     name = (name or "").strip()
     description = (description or "").strip()
@@ -106,6 +108,8 @@ def create_record(repo, pn, name, created_by, description="", cots=False, import
                     cots=bool(cots), imported=bool(imported),
                     import_path=(str(import_path).strip() if imported else ""), project=(project or "").strip(),
                     kind=kind, doc_type=doc_type)
+    if configuration_named:
+        record_configurations.set_named(record, configuration_named)
     record_lifecycle.add_event(record, record_model.EVENT_CREATED, created_by)
     record.history[-1]["at"] = record.created_at    # created event and created_at match exactly
 

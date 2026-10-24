@@ -15,6 +15,7 @@ from litterbox.core.revision_letters import FIRST_REVISION, check_revision, revi
 from litterbox.records import purchasing_info
 from litterbox.records import record_materials
 from litterbox.records import record_migrations
+from litterbox.records import record_configurations
 from litterbox.records import record_other_files
 
 
@@ -66,6 +67,7 @@ EVENT_CHECKOUT_BROKEN = "checkout_broken"       # an Admin took a part back from
 EVENT_PURCHASING_EDITED = "purchasing_edited"   # supplier, cost or lead time changed (records/purchasing_info.py)
 
 EVENT_FILES_MADE = "files_made"         # Litterbox made the STEP and/or PDF of a revision (records/record_exports.py)
+EVENT_COPIED_FROM = "copied_from"      # Create Variant: its files were copied from another part (parts/create_variant.py)
 
 
 class RegistryError(Exception):
@@ -111,7 +113,7 @@ _KNOWN_FIELDS = {
     "format", "pn", "org", "base", "variant", "revision", "released_revision", "name", "description", "project", "status", "cots",
     "imported", "import_path", "created_by", "created_by_id", "created_at", "approvals", "pending", "draft", "references", "references_outdated", "history",
     "purchasing", "quantities", "exports", "kind", "bom_items", "documents", "number", "doc_type", "materials",
-    "other_files",
+    "other_files", "configurations",
 }
 
 
@@ -152,6 +154,7 @@ class Record:
     documents: dict = field(default_factory=dict)   # revision -> the documents linked to it, e.g. {'A': ['PROP-0001']}
     materials: dict = field(default_factory=dict)   # revision -> its material from SolidWorks (records/record_materials.py)
     other_files: dict = field(default_factory=dict)  # revision -> files it uses that aren't parts (record_other_files.py)
+    configurations: dict = field(default_factory=dict)  # revision -> its configurations (record_configurations.py)
     doc_type: str = ""          # a document's type key (documents/doc_types.py); "" for a part
     extra: dict = field(default_factory=dict)       # unknown fields, kept so nothing is lost
 
@@ -212,6 +215,9 @@ class Record:
         if self.other_files:
             data["other_files"] = record_other_files.to_data(dict(sorted(
                 self.other_files.items(), key=lambda item: revision_number(item[0]))))
+        if self.configurations:
+            data["configurations"] = record_configurations.to_data(dict(sorted(
+                self.configurations.items(), key=lambda item: revision_number(item[0]))))
         if self.bom_items:
             data["bom_items"] = {rev: dict(sorted(counts.items(), key=lambda item: item[0].lower()))
                                  for rev, counts in sorted(self.bom_items.items(),
@@ -352,7 +358,8 @@ class Record:
 
         try:
             other_files = record_other_files.parse(data.get("other_files"))
-        except ValueError as e:
+            configurations = record_configurations.parse(data.get("configurations"))
+        except (ValueError, TypeError) as e:
             raise RegistryError(f"{pn}: {e}")
 
         try:
@@ -393,6 +400,7 @@ class Record:
             documents=documents,
             materials=materials,
             other_files=other_files,
+            configurations=configurations,
             doc_type=_as_text(data.get("doc_type")),
             extra={k: v for k, v in data.items() if k not in _KNOWN_FIELDS},
         )

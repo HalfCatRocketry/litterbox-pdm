@@ -186,7 +186,7 @@ class Logic(unittest.TestCase):
             "remote: Authentication failed for 'https://x'": "sign-in",
             "HCR-00001-001 is already checked out by Bea.": "Someone else",
             "Your changes are saved in the vault, but some files could not be unlocked": "Check In on the same parts",
-            "Unexpected error: KeyError('x')": "send the log",
+            "Unexpected error: KeyError('x')": "problem report",
             "something nobody has seen before": "Refresh",
         }
         for message, expected in cases.items():

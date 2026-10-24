@@ -8,6 +8,8 @@ import os
 import shutil
 
 from litterbox.core import file_types
+from litterbox.core import filenames
+from litterbox.parts import configuration_naming
 
 from litterbox.importing import import_errors
 from litterbox.importing import import_paths
@@ -60,3 +62,25 @@ def verify(repo, plan, backend, before, log):
     if changed:
         raise import_errors.ImportFailed("These original files changed while importing, which should never happen, so the "
                            "import was undone:\n" + "\n".join(changed[:8]))
+
+
+def name_configurations(plan, backend, log):
+    """Name each copied model's only configuration after its part (parts/configuration_naming.py), as New Part's
+    first check-in would: {PN: the name given} for those renamed. A copy that can't be renamed is left as it is."""
+    names = {pn: spec.name for pn, spec in zip(plan.pns, plan.specs)}
+    named = {}
+    for path in plan.order:
+        new_path = plan.copies[path]
+        if not file_types.is_part(new_path) and not file_types.is_assembly(new_path):
+            continue
+        parsed = filenames.try_parse_filename(os.path.basename(new_path))
+        if parsed is None or parsed[0] not in names:
+            continue
+        try:
+            given = configuration_naming.name_file(backend, new_path, names[parsed[0]])
+        except Exception as e:
+            log(f"NOTE: the configuration of {os.path.basename(new_path)} wasn't named after the part ({e}).")
+            continue
+        if given:
+            named[parsed[0]] = given
+    return named

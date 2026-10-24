@@ -122,6 +122,15 @@ class Backends:
     def material(self, path):
         return self.for_file(path).material(path)
 
+    def component_configurations(self, path):
+        return self.for_file(path).component_configurations(path)
+
+    def configurations(self, path):
+        return self.for_file(path).configurations(path)
+
+    def name_configuration(self, path, old, new):
+        return self.for_file(path).name_configuration(path, old, new)
+
     def copy(self, src, dst):
         return self.for_file(src).copy(src, dst)
 

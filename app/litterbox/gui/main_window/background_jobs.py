@@ -55,7 +55,8 @@ class BackgroundJobs:
     def show_errors(self):
         notes = self.jobs.errors()
         if notes:
-            error_details.ErrorDetailsWindow(self, error_text.error_report_text(notes), self.dismiss_errors)
+            error_details.ErrorDetailsWindow(self, error_text.error_report_text(notes), self.dismiss_errors,
+                                             on_report=self.report_problem)
 
     def dismiss_errors(self):
         self.jobs.dismiss_errors()
@@ -105,6 +106,8 @@ class BackgroundJobs:
                     self._finish(payload)
                 elif kind == "solidworks":
                     self._solidworks_changed(payload)
+                elif kind == "call":                     # work from another thread, to finish on the window's
+                    payload()
         except queue.Empty:
             pass
 
@@ -173,6 +176,10 @@ class BackgroundJobs:
             nothing = [str(pn) for pn, r in done if not r.uploaded]
             if nothing:
                 messagebox.showinfo("Nothing to upload", "There were no changes to save in: " + ", ".join(nothing))
+            warnings = [text for _pn, r in done for text in getattr(r, "warnings", [])]
+            if warnings:
+                messagebox.showwarning("Checked in, with something to look at", checkin_text.warnings_text(warnings),
+                                       parent=self._popup_parent())
         elif action == "undo":
             left = [name for _pn, names in done for name in names]
             if left:

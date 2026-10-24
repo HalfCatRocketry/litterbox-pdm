@@ -39,6 +39,7 @@ class PartSpec:
     import_path: str = ""
     base: int = None
     variant: int = None
+    configuration_named: str = ""   # the name its model's configuration was given when copied in (import_copying.py)
 
 
 def _plan_batch(repo, specs, org):
@@ -114,7 +115,8 @@ def clean_specs(specs):
         try:
             cleaned.append(PartSpec(
                 create.clean_name(spec.name), create.clean_description(spec.description), bool(spec.cots),
-                bool(spec.imported), str(spec.import_path or "").strip(), spec.base, spec.variant))
+                bool(spec.imported), str(spec.import_path or "").strip(), spec.base, spec.variant,
+                str(getattr(spec, "configuration_named", "") or "")))
         except create.CreateError as e:
             raise create.CreateError(f"Item {index} ({spec.name or 'no name'}): {e}") from None
     return cleaned
@@ -162,7 +164,8 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
                 try:
                     record_store.create_record(repo, pn, spec.name, user, description=spec.description,
                                            cots=spec.cots, imported=spec.imported, import_path=spec.import_path,
-                                           project=create.project_name(projects, pn.base))
+                                           project=create.project_name(projects, pn.base),
+                                           configuration_named=spec.configuration_named)
                 except record_model.PNExistsError:
                     raise NumbersTaken(f"{pn} already exists in your copy of the vault.") from None
                 written.append(record_store.record_relpath(pn))
@@ -236,7 +239,8 @@ def create_many(repo, specs, org=None, message=None):
                 try:
                     record_store.create_record(repo, pn, spec.name, user, description=spec.description,
                                            cots=spec.cots, imported=spec.imported, import_path=spec.import_path,
-                                           project=create.project_name(projects, pn.base))
+                                           project=create.project_name(projects, pn.base),
+                                           configuration_named=spec.configuration_named)
                 except record_model.PNExistsError:
                     raise create.CreateError(f"{pn} already exists in your copy of the vault.") from None
                 written.append(record_store.record_relpath(pn))

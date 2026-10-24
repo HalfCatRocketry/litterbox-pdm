@@ -16,8 +16,10 @@ from litterbox.git import lfs_locks
 from litterbox.git import repository
 from litterbox.parts import checkin
 from litterbox.parts import checkout
+from litterbox.parts import configuration_check
 from litterbox.parts import permission_check
 from litterbox.parts import undoing
+from litterbox.records import record_configurations
 from litterbox.records import record_files
 from litterbox.records import record_model
 from litterbox.records import record_store
@@ -128,7 +130,12 @@ def _plan_replacement(repo, parent, items, locks):
                 return ReplaceResult(parent, "failed", f"{new_rel} could not be downloaded. {e}")
             old_name = filenames.filename(item.child, item.old_revision, file_types.extension(new_rel))
             edits.append((item, old_name, os.path.normpath(os.path.join(str(repo), new_rel))))
-            names.append(f"{item.child} Rev {item.old_revision} -> {latest}")
+            missing = configuration_check.missing_after_update(
+                child_record, item.old_revision, latest,
+                record_configurations.uses(record).get(f"{item.child}_{item.old_revision}", []))
+            names.append(f"{item.child} Rev {item.old_revision} -> {latest}" + (
+                f" (Rev {latest} has no configuration {', '.join(missing)}: SolidWorks will show another)"
+                if missing else ""))
         if not edits:
             return ReplaceResult(parent, "skipped", "Nothing to change.")
         return record.revision, edits, names, bool(lock)

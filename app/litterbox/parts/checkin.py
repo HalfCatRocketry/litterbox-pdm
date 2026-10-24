@@ -3,9 +3,12 @@ checkin.py - Check In and Save Progress: upload a part's changes, and
 (for Check In) give back its locks.
 
 A part whose files were saved after the click is not uploaded (see util/file_snapshot.py) and stays checked out.
+With SolidWorks open, a model whose only configuration is "Default" (or the part's old Name) is first renamed after
+the part (parts/configuration_naming.py), and what is read about its configurations may give warnings
+(parts/configuration_check.py), which the result carries.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from litterbox import diagnostics
@@ -16,9 +19,11 @@ from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.parts import batch_core
+from litterbox.parts import configuration_check
 from litterbox.parts import part_changes
 from litterbox.parts import permission_check
 from litterbox.parts import toolbox_check
+from litterbox.records import record_configurations
 from litterbox.records import record_files
 from litterbox.records import record_lifecycle
 from litterbox.records import record_model
@@ -42,6 +47,7 @@ def watch_files(repo, revisions):
 class CheckinResult:
     uploaded: bool              # False if there was nothing to upload
     files: list                 # the CAD files whose changes were committed this time
+    warnings: list = field(default_factory=list)    # sentences to show once it is done (configuration_check.py)
 
 
 def _allowed(allow_unchanged, pn):
@@ -52,7 +58,8 @@ def _allowed(allow_unchanged, pn):
 
 
 @diagnostics.timed("check in")
-def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot=None):
+def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot=None,
+                   configuration_namer=None):
     """Check in (or save progress on) several parts: commit each one, upload them all together, then release the
     locks. A part with a problem (not yours, nothing changed) is reported and the others carry on. If the upload
     fails, nothing is unlocked and every commit is kept so the whole thing can be tried again.
@@ -87,6 +94,11 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                         f"{pn}: {file_snapshot.names(saved)} changed after you pressed Check In, so nothing was "
                         "uploaded for this part. It is still checked out to you. Check In again when you have "
                         "finished saving it.")
+            if configuration_namer is not None and cad:     # before the change is read, so it goes up with it
+                given = configuration_namer(repo, record, cad)
+                if given:
+                    record_configurations.set_named(record, given)
+                    modified = repository.get_modified(repo)     # the renamed file is one more change
 
             report = part_changes.build_change_report(repo, pn, user, cad, modified, unpushed)
             changed = report.changed_files
@@ -98,6 +110,7 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                 raise NoChangesError(pn, report.unchanged_files)
 
             # Commit unless the ONLY thing to do is upload commits left over from an earlier failed attempt.
+            warnings = []
             if changed or report.record_edited or not report.unpushed:
                 found = None
                 if references_reader is not None:
@@ -109,16 +122,24 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
                 if refused:
                     raise LitterboxError(refused)
                 record_before = (Path(repo) / record_path).read_bytes()
+                own_before = record_configurations.entry(record).get("own", [])
                 record_lifecycle.record_checkin(record, user, changed, comment,
                                                 references=found.references if found is not None else None,
                                                 quantities=found.quantities if found is not None else None,
                                                 material=found.material if found is not None else None,
-                                                other_files=found.other_files if found is not None else None)
+                                                other_files=found.other_files if found is not None else None,
+                                                configurations=found.configurations if found is not None else None)
                 record_store.save(repo, record)
+                try:
+                    warnings = configuration_check.warnings(repo, pn, record.revision, own_before, found)
+                    for text in warnings:
+                        diagnostics.LOG(f"WARNING: {text}")
+                except Exception as e:                      # a warning must never cost the check-in
+                    diagnostics.LOG(f"WARNING: could not check the configurations of {pn}: {e}")
                 message = f"{pn}: {(comment or '').strip() or 'Update'}"
                 to_commit.append((pn, message, changed, record_path, record_before))
             groups[pn], cads[pn] = group, cad
-            batch.results[pn] = CheckinResult(True, changed)
+            batch.results[pn] = CheckinResult(True, changed, warnings)
         except (LitterboxError, record_model.RegistryError) as e:
             batch.errors[pn] = e
 
@@ -196,7 +217,8 @@ def _checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_re
 
 
 @converts_errors
-def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, references_reader=None, snapshot=None):
+def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, references_reader=None, snapshot=None,
+            configuration_namer=None):
     """Commit your changes, upload them, then (unless keep_lock) release the locks.
 
     Order matters: commit, then push, and only then unlock. If any step fails
@@ -211,10 +233,13 @@ def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, refere
     references_reader(repo, pn, revision, changed_files) may return what an assembly uses and how many of
     each (a reference_reader.AssemblyRead), which is stored in the record in the same commit. It returns None
     when there is nothing to update, and any error it raises only costs the update, not the check-in.
+    configuration_namer(repo, record, cad_files) may rename the model's configuration after the part first
+    (parts/configuration_naming.py).
     """
     pn = batch_core.as_pn(pn)
     try:
-        return batch_core.single(_checkin_batch(repo, [pn], comment, keep_lock, allow_unchanged, references_reader, snapshot), pn)
+        return batch_core.single(_checkin_batch(repo, [pn], comment, keep_lock, allow_unchanged, references_reader, snapshot,
+                                                configuration_namer), pn)
     finally:
         if snapshot is not None:
             snapshot.release()
@@ -222,14 +247,14 @@ def checkin(repo, pn, comment="", keep_lock=False, allow_unchanged=False, refere
 
 @converts_errors
 def checkin_many(repo, pns, comment="", keep_lock=False, allow_unchanged=frozenset(), references_reader=None,
-                 snapshot=None):
+                 snapshot=None, configuration_namer=None):
     """checkin() for several parts at once, with one upload for all of them. `allow_unchanged` is the set of parts
     that may be checked in even though nothing changed. `snapshot` is from watch_files(): parts saved after it was
     taken are refused (and stay checked out). Returns (done, failed) like checkout_many()."""
     pns = batch_core.unique_pns(pns)
     try:
-        return batch_core.as_lists(_checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot),
-                         pns)
+        return batch_core.as_lists(_checkin_batch(repo, pns, comment, keep_lock, allow_unchanged, references_reader, snapshot,
+                                                  configuration_namer), pns)
     finally:
         if snapshot is not None:
             snapshot.release()

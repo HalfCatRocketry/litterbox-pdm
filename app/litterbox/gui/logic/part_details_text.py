@@ -10,6 +10,7 @@ from litterbox.gui.logic import list_view
 from litterbox.gui.logic import material_text
 from litterbox.gui.logic import purchasing_text
 from litterbox.records import record_changes
+from litterbox.records import record_configurations
 from litterbox.records import record_exports
 from litterbox.workflows import workflow_templates
 
@@ -115,6 +116,9 @@ def revision_details(record, rev, revisions, local=True, currency=None):
     material = material_text.details_text(record, rev, files)
     if material is not None:
         fields.append(("Material", material))
+    configurations = configurations_text(record, rev)
+    if configurations:
+        fields.append(("Configurations", configurations))
     made = files_made_text(record, rev, revisions, local)
     if made:
         fields.append(("STEP/PDF", made))
@@ -125,3 +129,12 @@ def revision_details(record, rev, revisions, local=True, currency=None):
     if record.import_path:
         fields.append(("Imported from", record.import_path))
     return fields
+
+
+def configurations_text(record, rev):
+    """The Details tab's line about a model's configurations (records/record_configurations.py): only for one with
+    more than one, since those are revised and released together. "" otherwise, or if they haven't been read."""
+    names = record_configurations.names(record, rev)
+    if len(names) < 2:
+        return ""
+    return f"{len(names)}: {', '.join(names)}. They are all released together"

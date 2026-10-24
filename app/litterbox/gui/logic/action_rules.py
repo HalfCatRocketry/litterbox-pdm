@@ -30,6 +30,7 @@ ALLOWED_KINDS = {
     "export_files": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "void", "pending"},
     "generate_step_pdf": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "pending"},
     "update_material": {"ok", "mine", "stray", "unclaimed", "released", "cots", "pending"},    # not someone else's
+    "create_variant": {"ok", "mine", "theirs", "stray", "unclaimed", "released", "cots", "pending"},   # not void
 }
 
 
@@ -63,7 +64,7 @@ NAME = {            # "...cannot <name> ..."
     "undo": "undo the checkout of", "edit": "edit the details of", "open": "open", "open_drawing": "open the drawing of", "open_pdf": "open the PDF of", "release": "release", "make_cots": "make COTS", "revise": "revise", "cancel_revision": "cancel the revision of", "reopen": "unrelease", "void": "void", "references": "show the references of",
     "break_checkout": "break the checkout of", "purchasing": "change the purchasing info of",
     "export_files": "export the files of", "generate_step_pdf": "make the STEP/PDF of",
-    "update_material": "update the material of",
+    "update_material": "update the material of", "create_variant": "make a variant of",
 }
 
 
@@ -72,7 +73,7 @@ PAST = {            # "<past> 2 parts"
     "undo": "Undid checkout of", "edit": "Edited", "open": "Opened", "open_drawing": "Opened the drawing of", "open_pdf": "Opened the PDF of", "release": "Released", "make_cots": "Made COTS", "revise": "Revised", "cancel_revision": "Cancelled the revision of", "reopen": "Unreleased", "void": "Voided", "references": "Showed the references of",
     "break_checkout": "Broke the checkout of", "purchasing": "Changed the purchasing info of",
     "export_files": "Exported the files of", "generate_step_pdf": "Made the STEP/PDF of",
-    "update_material": "Updated the material of",
+    "update_material": "Updated the material of", "create_variant": "Made a variant of",
 }
 
 
@@ -116,7 +117,8 @@ def plan_action(action, selected, rows_by_pn, pending=None):
     return plan
 
 
-VIEW_ONLY = {"open", "open_drawing", "open_pdf", "references"}      # these only look at a part, so the blue highlighted row will do
+VIEW_ONLY = {"open", "open_drawing", "open_pdf", "references",      # these only look at a part, so the blue highlighted row will do
+             "create_variant"}                                   # (Create Variant copies a part, leaving it as it is)
 
 EXPORTS = {"export_files"}      # copies out of the vault: the ticked parts, or else the highlighted one; never busy
 
@@ -147,7 +149,7 @@ BUTTON_ACTIONS = {
     "Release": "release", "Revise": "revise", "Cancel Revision": "cancel_revision", "Make COTS": "make_cots",
     "Unrelease": "reopen", "Void": "void", "Details": "history", "Break Checkout": "break_checkout",
     "Purchasing Info": "purchasing", "Export Files": "export_files", "Generate STEP/PDF": "generate_step_pdf",
-    "Update Material": "update_material",
+    "Update Material": "update_material", "Create Variant": "create_variant",
 }
 
 

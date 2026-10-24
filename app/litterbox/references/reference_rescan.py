@@ -1,7 +1,8 @@
 """
 reference_rescan.py - reading every assembly's references, counting its parts, and finding its Toolbox parts and
-files from outside the vault (records/record_other_files.py), again from its files and saving them in the records (for vaults whose records predate reference tracking, after a check-in without
-SolidWorks, or after a fix by hand).
+files from outside the vault (records/record_other_files.py), and its configurations and those of the parts it uses
+(records/record_configurations.py), again from its files and saving them in the records (for vaults whose records
+predate reference tracking, after a check-in without SolidWorks, or after a fix by hand).
 """
 
 
@@ -14,6 +15,7 @@ from litterbox.git import lfs_locks
 from litterbox.git import repository
 from litterbox.parts import batch_core
 from litterbox.records import record_files
+from litterbox.records import record_configurations
 from litterbox.records import record_lifecycle
 from litterbox.records import record_other_files
 from litterbox.records import record_store
@@ -91,8 +93,16 @@ def _download_used(repo, index, stems):
     lfs_download.download(repo, wanted, "parts the assembly uses")
 
 
+def _same_configurations(record, revision, read):
+    """True if the record already has these configurations ((own, used)) for the revision."""
+    own, used = read
+    entry = record_configurations.entry(record, revision)
+    return (entry.get("own") == [{"name": c["name"], "id": c.get("id")} for c in own]
+            and entry.get("uses", {}) == {stem: sorted(set(names)) for stem, names in used.items()})
+
+
 def _rescan_one(repo, pn, revisions, backend, index=None):
-    found, counted, other, problems = {}, {}, {}, []
+    found, counted, other, configured, problems = {}, {}, {}, {}, []
     with cad_programs.session():
         for revision, files in revisions.items():
             if not any(file_types.extension(f) in file_types.ASSEMBLY_EXTENSIONS for f in files):
@@ -112,12 +122,20 @@ def _rescan_one(repo, pn, revisions, backend, index=None):
             except Exception as e:                      # left unread: Release under a Toolbox rule asks again
                 diagnostics.LOG(f"WARNING: could not tell whether {pn} Rev {revision} uses Toolbox parts or files "
                                 f"from outside the vault: {e}")
+            try:
+                read = reference_reader.read_configurations(repo, pn, revision, backend, files)
+                if read is not None:
+                    configured[revision] = read[0]
+            except Exception as e:
+                diagnostics.LOG(f"WARNING: could not read the configurations of {pn} Rev {revision}: {e}")
     problem = " ".join(problems)
     current = record_store.load(repo, pn)
     if all(current.references.get(rev) == sorted(set(stems), key=str.lower)
            and rev not in current.references_outdated
            and (rev not in counted or current.quantities.get(rev) == counted[rev])
-           and (rev not in other or current.other_files.get(rev) == other[rev]) for rev, stems in found.items()):
+           and (rev not in other or current.other_files.get(rev) == other[rev])
+           and (rev not in configured or _same_configurations(current, rev, configured[rev]))
+           for rev, stems in found.items()):
         if problem:
             return f"skipped: its parts could not be counted. {problem}"
         return "unchanged"
@@ -130,6 +148,8 @@ def _rescan_one(repo, pn, revisions, backend, index=None):
                 moved = record_lifecycle.set_quantities(record, counted[revision], revision) or moved
             if revision in other:
                 moved = record_other_files.set_other_files(record, other[revision], revision) or moved
+            if revision in configured:
+                moved = record_configurations.set_configurations(record, *configured[revision], revision=revision) or moved
             if moved:
                 changed.append(revision)
         return record_lifecycle.add_event(record, "references_updated", user,

@@ -15,6 +15,8 @@ MAY_START_PROGRAMS = {
     "litterbox.team.commit_signing": "ssh-keygen, to make a signing key",
     "litterbox.user.updater": "the downloaded installer",
     "litterbox.cad.opener": "the program a file opens in",
+    "litterbox.user.report_mail": "PowerShell, to open an Outlook message with a problem report attached; Explorer, "
+                                  "to show the report",
     "litterbox.cad.solidworks.sw_process": "tasklist and taskkill, to find and end a SolidWorks it started",
 }
 # The build self-test imports every library, only to check it made it into the build.

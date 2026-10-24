@@ -26,6 +26,10 @@ A backend reads and copies files. None of its calls changes an original file:
                                  one per copy
     library_components(path)     the files of an assembly's top-level components that come from its library
     material(path)               a part's material ('' for none)
+    component_configurations(path)  {file: [configuration names]} of a part each top-level component uses
+    configurations(path)         a part's or assembly's configurations: {"own": [{name, id}], "active": name,
+                                 "materials": {name: material} (parts), "linked": [outside files it is linked to]}
+    name_configuration(path, old, new)  rename a configuration of a file that may be changed, and save it
     copy(src, dst)               copy a file, with its references kept working
     repoint(file, old, new)      change one reference inside the NEW file
     save_step(path, out)         save a part or assembly as a STEP file

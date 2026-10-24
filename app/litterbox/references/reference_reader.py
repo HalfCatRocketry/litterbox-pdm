@@ -1,6 +1,7 @@
 """
-reference_reader.py - reading which parts an assembly file uses and how many of each, and a part's material,
-through the file's CAD program (cad/cad_programs.py). Check-in calls make_reader's reader for every part or assembly whose model changed.
+reference_reader.py - reading which parts an assembly file uses and how many of each, a part's material, and a
+model's configurations (records/record_configurations.py), through the file's CAD program (cad/cad_programs.py).
+Check-in calls make_reader's reader for every part or assembly whose model changed.
 """
 
 import os
@@ -27,6 +28,8 @@ class AssemblyRead:
     quantities: dict = None
     material: str = None
     other_files: list = None    # [{file, toolbox}]: what it uses that isn't a Litterbox part (record_other_files.py)
+    configurations: tuple = None    # (own, used) for record_configurations.set_configurations; None if not read
+    configuration_details: dict = None  # {"active", "materials", "linked"} as read_configurations gives them
 
 
 def can_start_cad_program():
@@ -152,6 +155,47 @@ def read_other_files(repo, pn, revision, backend, files=None):
     return sorted(found.values(), key=lambda e: e["file"].lower())
 
 
+def model_file(repo, pn, revision, files=None):
+    """This revision's model (its assembly, else its part file), relative to the vault, or None."""
+    files = files if files is not None else record_files.cad_files(repo, pn, revision)
+    models = [rel for rel in files if file_types.extension(rel) in file_types.MODEL_EXTENSIONS]
+    return next((rel for rel in models if file_types.is_assembly(rel)), models[0] if models else None)
+
+
+def read_configurations(repo, pn, revision, backend, files=None):
+    """((own, used), details) for this revision's model, or None without one or with a CAD program that can't say.
+    `own` is [{name, id}]; `used` (assemblies) is {stem: [configuration names]} for the Litterbox parts it uses;
+    `details` is {"active", "materials", "linked"} (cad/cad_program.py)."""
+    rel = model_file(repo, pn, revision, files)
+    read = getattr(backend, "configurations", None)
+    if rel is None or read is None:
+        return None
+    full = os.path.join(str(repo), rel)
+    found = read(full)
+    used = {}
+    if file_types.is_assembly(rel) and getattr(backend, "component_configurations", None) is not None:
+        own = filenames.file_stem(pn, revision).lower()
+        for path, names in backend.component_configurations(full).items():
+            stem = reference_model.stem_of_path(path)
+            if stem and stem.lower() != own:
+                used.setdefault(stem, set()).update(names)
+    details = {"active": found.get("active", ""), "materials": dict(found.get("materials") or {}),
+               "linked": list(found.get("linked") or [])}
+    return (list(found.get("own") or []), {stem: sorted(names) for stem, names in used.items()}), details
+
+
+def _with_configurations(found, repo, pn, revision, backend, log, files=None):
+    """Add the model's configurations to what was read (left as None if they couldn't be)."""
+    try:
+        read = read_configurations(repo, pn, revision, backend, files)
+    except Exception as e:
+        log(f"WARNING: could not read the configurations of {pn}. {e}")
+        read = None
+    if read is not None:
+        found.configurations, found.configuration_details = read
+    return found
+
+
 def read_part_material(repo, pn, revision, backend, files=None):
     """The material of this revision's part file (.SLDPRT) as SolidWorks has it, '' for none assigned, or None
     when the revision has no part file."""
@@ -188,11 +232,13 @@ def make_reader(backend=None, log=None):
                 try:
                     if not assembly:
                         try:
-                            return AssemblyRead(material=read_part_material(repo, pn, revision, use, part))
+                            found = AssemblyRead(material=read_part_material(repo, pn, revision, use, part))
                         except Exception as e:
                             log(f"WARNING: could not read the material of {pn}, so it needs updating "
                                 f"(Part > Update Material). {e}")
-                            return None
+                            found = AssemblyRead()
+                        found = _with_configurations(found, repo, pn, revision, use, log, changed_files)
+                        return None if found.material is None and found.configurations is None else found
                     found = AssemblyRead(read_assembly_references(repo, pn, revision, use))
                     try:
                         found.quantities = read_assembly_quantities(repo, pn, revision, use,
@@ -204,7 +250,7 @@ def make_reader(backend=None, log=None):
                     except Exception as e:
                         log(f"WARNING: could not tell whether {pn} uses Toolbox parts or files from outside the "
                             f"vault, so its BOM needs updating. {e}")
-                    return found
+                    return _with_configurations(found, repo, pn, revision, use, log, changed_files)
                 finally:
                     if mine is not None:
                         mine.close()
