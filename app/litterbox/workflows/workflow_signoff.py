@@ -181,23 +181,30 @@ def _finish_edit(repo, action, plan, override_reason, ecos=None):
         if ecos is not None:
             ecos.note(pending)                                 # its ECO is closed too
         record.pending = {}                                    # the checks in mark_* refuse a pending part
+        by, finished = user, {}                                # whoever asked is who did it; who finished it is kept
+        if pending and pending.get("requested_by"):
+            by = person_name.PersonName(pending["requested_by"], pending.get("requested_by_id"))
+            finished = person_name.stamp({}, "completed_by", user)
         if act == workflow_templates.REMOVE_DOC:
-            record_links.unlink(record, user, (pending or {}).get("document"), reason=reason,
-                                signoffs=details["signoffs"], override=details.get("override"))
+            events = [record_links.unlink(record, by, (pending or {}).get("document"), reason=reason,
+                                          signoffs=details["signoffs"], override=details.get("override"))]
         elif act == workflow_templates.RELEASE:
             earlier = record_changes.earlier_revision(record.revision, record.released_revision)
-            record_lifecycle.mark_released(record, user, plan.files, **details)
+            events = [record_lifecycle.mark_released(record, by, plan.files, **details)]
             if earlier and change.get("disposition"):
-                record_changes.record_disposition(record, user, change["disposition"], earlier,
-                                                  f"Rev {record.revision} released")
+                events.append(record_changes.record_disposition(record, by, change["disposition"], earlier,
+                                                                f"Rev {record.revision} released"))
         elif act == workflow_templates.MAKE_COTS:
-            record_lifecycle.mark_cots(record, user, plan.files)
+            events = [record_lifecycle.mark_cots(record, by, plan.files)]
         elif act == workflow_templates.REOPEN:
-            record_lifecycle.mark_reopened(record, user, reason)
+            events = [record_lifecycle.mark_reopened(record, by, reason)]
         else:
-            record_lifecycle.mark_void(record, user, reason)
+            events = [record_lifecycle.mark_void(record, by, reason)]
             if change.get("disposition"):
-                record_changes.record_disposition(record, user, change["disposition"], record.revision, "voided")
+                events.append(record_changes.record_disposition(record, by, change["disposition"], record.revision,
+                                                                "voided"))
+        for event in events:
+            event.update(finished)
         record.approvals.append(approval)
     return edit
 

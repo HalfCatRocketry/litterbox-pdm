@@ -40,6 +40,9 @@ class TestSigning(Fixture, unittest.TestCase):
         self.assertEqual(sorted(entry["files"]), [DRW, PRT])
         released = [e for e in self.record().history if e["event"] == "released"][-1]
         self.assertEqual(released["signoffs"], ["Alex Smith", "Bea Jones"])
+        # released by whoever asked (Alex), not whoever signed last (Bea), who is kept as completed_by
+        self.assertEqual((released["by"], released["by_id"]), ("Alex Smith", "alex"))
+        self.assertEqual((released["completed_by"], released["completed_by_id"]), ("Bea Jones", "bea"))
 
     def test_a_batch_is_uploaded_once_per_step_not_once_per_part(self):
         self.second_part()
@@ -132,6 +135,8 @@ class TestSigning(Fixture, unittest.TestCase):
         self.assertEqual((record.status, record.released_revision, record.pending), (record_model.STATUS_IN_WORK, "", {}))
         self.assertEqual([e for e in record.history if e["event"] == "reopened"][-1]["reason"], "Drawing error")
         self.assertEqual(record.approvals[-1]["reason"], "Drawing error")
+        reopened = [e for e in record.history if e["event"] == "reopened"][-1]
+        self.assertEqual((reopened["by_id"], reopened["completed_by_id"]), ("alex", "cy"))   # whoever asked
 
     def test_void_completes_automatically(self):
         self.set_template(workflow_templates.VOID, rows=((MANAGER,),))
@@ -139,6 +144,8 @@ class TestSigning(Fixture, unittest.TestCase):
         r = self.do("Cy", workflow_signoff.sign_off, [PART])
         self.assertEqual(r.completed, [PART])
         self.assertEqual(self.record().status, record_model.STATUS_VOID)
+        voided = [e for e in self.record().history if e["event"] == "voided"][-1]
+        self.assertEqual((voided["by"], voided["completed_by"]), ("Alex Smith", "Cy Day"))    # whoever asked
 
     def test_make_cots_completes_automatically(self):
         self.set_template(workflow_templates.MAKE_COTS, rows=((ENGINEER,),))

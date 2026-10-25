@@ -30,10 +30,10 @@ class EcoViewWindow(ctk.CTkToplevel):
         ctk.CTkLabel(header, text=f"{eco.number}   {eco.name}", font=ctk.CTkFont(size=18, weight="bold"),
                      anchor="w").grid(row=0, column=0, columnspan=2, sticky="w")
         for number, (label, text) in enumerate(eco_text.eco_fields(eco), 1):
-            ctk.CTkLabel(header, text=label + ":", text_color=theme.MUTED, anchor="w").grid(
+            ctk.CTkLabel(header, text=label + ":", text_color=theme.MUTED, anchor="nw").grid(
                 row=number, column=0, sticky="nw", padx=(0, 10))
-            ctk.CTkLabel(header, text=text, anchor="w", justify="left", wraplength=560).grid(
-                row=number, column=1, sticky="w")
+            ctk.CTkLabel(header, text=text, anchor="nw", justify="left", wraplength=560).grid(
+                row=number, column=1, sticky="nw")      # top-aligned with its label, even wrapped
 
         description = ctk.CTkTextbox(self, height=90, fg_color=theme.BG_PANEL, wrap="word")
         description.grid(row=1, column=0, sticky="ew", padx=20, pady=(4, 8))

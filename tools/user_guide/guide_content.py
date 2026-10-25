@@ -313,7 +313,8 @@ BLOCKS = [
 ("code", ["open_with:", "  .pdf: C:\\Program Files\\Adobe\\Acrobat\\Acrobat.exe"]),
 ("h2", "The details pane"),
 ("table", ["Tab", "Contents"], [
-    ["Details", "For the chosen revision: its state, who released it and when, the workflow and signers, its ECO, "
+    ["Details", "For the chosen revision: its state, who released it (with a workflow, whoever asked for the "
+                "release: every workflow is recorded as done by whoever asked) and when, the workflow and signers, its ECO, "
                 "what its release changed (Form, Fit, Function), the disposition of its parts after a later "
                 "release, its files, material, and STEP/PDF, and the part's purchasing info."],
     ["History", "Every revision, with buttons to open older ones, and every event in the part's history."],

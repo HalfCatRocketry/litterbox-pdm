@@ -158,8 +158,8 @@ class PartDetailsView(ctk.CTkFrame):
         for number, (label, text) in enumerate(self.shown):
             ctk.CTkLabel(self.fields, text=label + ":", text_color=theme.MUTED, anchor="nw").grid(
                 row=number, column=0, sticky="nw", padx=(4, 10), pady=2)
-            ctk.CTkLabel(self.fields, text=text, anchor="w", justify="left", wraplength=self.wrap_width).grid(
-                row=number, column=1, sticky="w", pady=2)
+            ctk.CTkLabel(self.fields, text=text, anchor="nw", justify="left", wraplength=self.wrap_width).grid(
+                row=number, column=1, sticky="nw", pady=2)       # top-aligned with its label, even wrapped
         self.after_idle(self._wrap)
         self.eco_number, _how = part_details_text.eco_for(self.record, rev)
         if self.eco_number and self.on_view_eco:

@@ -86,8 +86,8 @@ class DocumentWindow(ctk.CTkToplevel):
         for number, (label, text) in enumerate(shown):
             ctk.CTkLabel(self.fields, text=label + ":", text_color=theme.MUTED, anchor="nw").grid(
                 row=number, column=0, sticky="nw", padx=(4, 10), pady=2)
-            ctk.CTkLabel(self.fields, text=text, anchor="w", justify="left", wraplength=520).grid(
-                row=number, column=1, sticky="w", pady=2)
+            ctk.CTkLabel(self.fields, text=text, anchor="nw", justify="left", wraplength=520).grid(
+                row=number, column=1, sticky="nw", pady=2)       # top-aligned with its label, even wrapped
         self.eco_number, _how = part_details_text.eco_for(self.record, rev)
         if self.eco_number and self.on_view_eco:
             self.eco_button.grid()

@@ -118,10 +118,10 @@ class ReviewDialog(modal_dialog.ModalDialog):
         frame.grid(row=row, column=0, sticky="ew", padx=20, pady=(10, 0))
         frame.columnconfigure(1, weight=1)
         for number, (label, text) in enumerate(review_text.summary_lines(self.task)):
-            ctk.CTkLabel(frame, text=label + ":", text_color=theme.MUTED, anchor="w").grid(
+            ctk.CTkLabel(frame, text=label + ":", text_color=theme.MUTED, anchor="nw").grid(
                 row=number, column=0, sticky="nw", padx=(0, 10))
-            ctk.CTkLabel(frame, text=text, anchor="w", justify="left", wraplength=900).grid(
-                row=number, column=1, sticky="w")
+            ctk.CTkLabel(frame, text=text, anchor="nw", justify="left", wraplength=900).grid(
+                row=number, column=1, sticky="nw")      # top-aligned with its label, even wrapped
 
     def _eco_panel(self, parent, eco):
         frame = ctk.CTkFrame(parent, fg_color=theme.BG_PANEL, corner_radius=10)
