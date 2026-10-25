@@ -16,7 +16,7 @@ Nobody on the team needs to know Git.
 
 - **Check out and check in.** Checking out locks a part's files on the Git host, so only one person edits it at a
   time; everyone else's copy stays read-only.
-- **Part numbers** in your org's format (for example `HCR-100010-001`), handed out without clashes.
+- **Part numbers** in your org's format (for example `ABC-100010-001`), handed out without clashes.
 - **Revisions and releases**, with sign-off workflows and change orders (ECOs) if the team wants them.
 - **Bills of materials**, counted from SolidWorks assemblies, with purchased parts, kits and costs.
 - **STEP and PDF files** made at release, for people who don't run SolidWorks.
@@ -28,7 +28,7 @@ Nobody on the team needs to know Git.
 - **[Git for Windows](https://git-scm.com/download/win)**, which includes Git LFS.
 - **A Git host that supports Git LFS file locking**: GitHub, Azure DevOps and GitLab do. Hosts limit LFS storage
   differently (GitHub's free allowance is small), and a vault's storage only grows, so check the limits first.
-- **SolidWorks**, to model. Litterbox has been tried with SolidWorks 2024. Without it you can still look at parts,
+- **SolidWorks**, to model. Litterbox has been tried with SolidWorks 2024 and 2026. Without it you can still look at parts,
   open PDFs, run workflows, and manage purchasing and documents.
 - **The `C:\Litterbox` folder.** Every vault lives in `C:\Litterbox\<vault name>` on every computer, so the paths
   inside SolidWorks assemblies work for everyone.
