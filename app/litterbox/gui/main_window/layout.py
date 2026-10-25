@@ -34,6 +34,8 @@ EVERYDAY = (("Check Out", "check_out", theme.ACCENT, "#18527f"),
             ("Save Progress", "save_progress", theme.TEAL, theme.TEAL_HOVER),
             ("Undo Checkout", "undo_checkout", theme.RED, theme.RED_HOVER))
 
+DETAIL_WIDTH = 420                      # how wide the details pane opens, at 100%
+
 
 class WindowLayout:
     """Building the main window. One part of the main window (App)."""
@@ -121,11 +123,30 @@ class WindowLayout:
         self._build_toolbar(center)
         self._build_search_row(center)
         self._build_list(center)
-        self.detail_frame = ctk.CTkFrame(self.parts_screen, fg_color=theme.BG, corner_radius=0, width=330)
+        self.detail_frame = ctk.CTkFrame(self.parts_screen, fg_color=theme.BG, corner_radius=0)
         self._build_detail_pane(self.detail_frame)
         self.parts_screen.add(self.detail_frame, weight=0)          # always open at start (hiding lasts a session)
         self._show_pane_arrow()
         self.screens = {"parts": self.parts_screen}
+        self._sash_bind = self.parts_screen.bind("<Configure>", lambda event: self._first_pane_width(event.width),
+                                                 add="+")
+
+    def _first_pane_width(self, width):
+        """Once the parts screen has a real width, open the details pane at DETAIL_WIDTH rather than as wide as its
+        tabs ask; dragging the divider changes it from there."""
+        if width <= 1:
+            return
+        self.parts_screen.unbind("<Configure>", self._sash_bind)
+        self.after_idle(self.size_details_pane)
+
+    def size_details_pane(self):
+        """Put the divider so the details pane is DETAIL_WIDTH wide (less if the window is too narrow for that)."""
+        try:
+            width = self.parts_screen.winfo_width()
+            if width > 1 and self.details_shown():
+                self.parts_screen.sashpos(0, max(width - self._px(DETAIL_WIDTH), width // 2))
+        except tk.TclError:
+            pass
 
     def _build_toolbar(self, parent):
         self.toolbar = ctk.CTkFrame(parent, fg_color="transparent")

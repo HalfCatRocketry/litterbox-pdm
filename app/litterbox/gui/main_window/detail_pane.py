@@ -37,6 +37,8 @@ class DetailPane:
             return
         if shown:
             self.parts_screen.add(self.detail_frame, weight=0)
+            self.update_idletasks()
+            self.size_details_pane()
             self.pane_pn = None
             self._show_details()
         else:
