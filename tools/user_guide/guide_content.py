@@ -218,6 +218,52 @@ BLOCKS = [
       "the model must have, with a Copy button: in SolidWorks, **Save As** into the vault's cad folder "
       "(C:\\Litterbox\\<vault>\\cad\\) under that name. A drawing has the same name with .SLDDRW."),
 
+("h2", "Creating a new part, step by step"),
+("p", "The same steps in full, for when you want to follow them one by one. The first part is the same either way; "
+      "the second depends on whether Litterbox makes the model from a template or you save it yourself."),
+("h3", "Creating the part number"),
+("ol", [
+    "In Litterbox, choose Create > **New Part** (or **New Assembly** for an assembly).",
+    "Type a **Name**: a short, plain name such as Motor Mount Bracket. Add a **Description** if it helps.",
+    "Choose a **Project** if the part belongs to one, so its number comes from the project's block.",
+    "Choose a **Template**: the default is already chosen. Choose **None: I'll save the file myself** if you have "
+    "already modelled the part, or want to start the file in SolidWorks yourself.",
+    "Leave the **Part number** boxes empty to take the number Litterbox suggests (shown in grey), or type another. "
+    "The line under the boxes says whether the number is free.",
+    "Press **Create**. Litterbox creates the part, checks it out to you, and selects it in the parts list.",
+]),
+("h3", "With a template"),
+("ol", [
+    "Litterbox makes the model from the template under the right name and opens it in SolidWorks.",
+    "Model the part, and save it with **Save** (Ctrl+S). Don't use Save As or change the name.",
+    "For a drawing, choose Create > **New Drawing...** in Litterbox, then add the views in SolidWorks and save.",
+    "Go to **Checking the part in**, below.",
+]),
+("h3", "Saving the file yourself (pasting the part number)"),
+("p", "With None as the template, Litterbox shows a **Part created** window with the file name the model must have, "
+      "for example HCR-100010-001_A: the part number, then _ and the revision. It has no extension; SolidWorks adds "
+      "it."),
+("ol", [
+    "Press **Copy filename** (or Enter). The button changes to Copied. You can close the window now.",
+    "In SolidWorks, with the part open, choose File > **Save As**.",
+    "Go to the vault's cad folder: C:\\Litterbox\\<vault>\\cad\\ (with your vault's folder name).",
+    "Click in the **File name** box, select everything in it (Ctrl+A), and paste (Ctrl+V). The box now holds "
+    "exactly HCR-100010-001_A, with nothing before or after it.",
+    "Leave **Save as type** as Part (*.prt;*.sldprt), or Assembly for an assembly, and press **Save**.",
+    "For a drawing, open or make it in SolidWorks, choose File > **Save As**, go to the same cad folder, paste the "
+    "same name, choose Drawing (*.drw;*.slddrw) as the type, and press **Save**. The drawing gets the same name as "
+    "its model, with .SLDDRW.",
+]),
+("tip", "If the name or folder is not exactly right (a different folder, an extra space, or a missing _A), Litterbox can't match the file to the part and ignores it. If you closed the window "
+        "before copying, the name is the part number from the parts list, then _A for a new part."),
+("h3", "Checking the part in"),
+("ol", [
+    "In Litterbox, tick the part's box in the parts list. Its **Files** column should show the files you saved.",
+    "Press **Check In** and add a comment if you like, such as First model.",
+    "Litterbox uploads the files and the record and releases the lock. Other people see the part after their next "
+    "Get Latest.",
+]),
+
 ("h1", "Everyday work"),
 ("h2", "Part numbers and file names"),
 ("p", "A part number is the org code, a base number, and a variant: HCR-100010-001. Related parts can share a base "
