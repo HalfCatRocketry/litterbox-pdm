@@ -9,9 +9,23 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 BLOCKS = [
+("h1", "Foreword"),                     # the owner's words: keep them as written
+("p", "Half Cat Rocketry needed a better method to manage CAD than sharing files through a common cloud drive folder, "
+      "which had become burdensome over years of modeling and manual version tracking. A better solution was needed, "
+      "and it was recognized that many student and hobbyist teams could also benefit from free PDM software designed "
+      "for modestly-sized teams."),
+("p", "Litterbox is almost entirely vibecoded, as is most of this guide, using Claude Code (Opus 5.5). The author of "
+      "this program does not have anywhere close to the coding skills required to create a PDM from scratch, but does "
+      "know a thing or two about CAD and process management in engineering. Litterbox would not have been possible "
+      "without AI coding tools that have become available in recent times, with the hope that students become "
+      "acquainted with a basic version of the tools they will encounter in their careers."),
+("p", "Litterbox is provided as-is under the MIT open-source license, for the benefit of the engineering community at "
+      "large. Half Cat Rocketry makes no attempt to monetize this software nor restrict its usage. A best-effort was "
+      "made to design it as user-friendly and forgiving as possible so that it is usable without an in-depth knowledge "
+      "of Python or Git."),
 ("h1", "What Litterbox is"),
 ("p", "Litterbox is a product data manager (PDM) for small hardware teams that design in SolidWorks. It keeps the "
       "team's CAD files in one shared vault, lets only one person edit a part at a time, numbers parts, tracks "

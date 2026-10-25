@@ -1,12 +1,18 @@
 """Builds docs/Litterbox_User_Guide.docx from guide_content.BLOCKS. Needs python-docx (pip install python-docx), which
-the program itself doesn't use. Open the result in Word once and update its contents (right-click > Update Field).
+the program itself doesn't use. With Word installed (and pywin32), Word then fills in the table of contents and
+saves Litterbox_User_Guide.pdf at the repository's top; without it, open the .docx in Word and update its contents
+(right-click > Update Field) by hand.
 
-    python tools/user_guide/build_guide.py docs/Litterbox_User_Guide.docx
+    python tools/user_guide/build_guide.py docs/Litterbox_User_Guide.docx              also writes the PDF
+    python tools/user_guide/build_guide.py docs/Litterbox_User_Guide.docx --no-pdf
+
+Edit the guide in guide_content.py, never in the .docx: each build writes the whole .docx afresh.
 """
 
+import argparse
 import re
-import sys
 from datetime import date
+from pathlib import Path
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
@@ -17,6 +23,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 from guide_content import BLOCKS, VERSION
 
+ROOT = Path(__file__).resolve().parents[2]
 FONT, MONO = "Roboto", "Roboto Mono"          # Google's Roboto family; Word substitutes if a reader lacks them
 ACCENT = RGBColor(0x1F, 0x5F, 0x8B)
 INK = RGBColor(0x22, 0x22, 0x22)
@@ -270,6 +277,43 @@ def build(path):
     document.save(path)
 
 
+def finish_in_word(path, pdf=None):
+    """Have Word fill in the table of contents and page numbers, save, and (with `pdf`) save a PDF too. python-docx
+    can't lay out pages, so only Word can. Returns False, changing nothing, where Word (or pywin32) isn't there."""
+    try:
+        import win32com.client
+        word = win32com.client.DispatchEx("Word.Application")
+    except Exception:
+        return False
+    word.Visible, word.DisplayAlerts = False, 0
+    try:
+        doc = word.Documents.Open(str(Path(path).resolve()), AddToRecentFiles=False)
+        try:
+            for contents in doc.TablesOfContents:
+                contents.Update()
+            doc.Fields.Update()
+            doc.Save()
+            if pdf:
+                doc.ExportAsFixedFormat(str(Path(pdf).resolve()), 17, CreateBookmarks=1)    # 17: PDF; bookmarks from headings
+        finally:
+            doc.Close(SaveChanges=0)
+    finally:
+        word.Quit()
+    return True
+
+
 if __name__ == "__main__":
-    build(sys.argv[1])
-    print("written", sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("docx")
+    parser.add_argument("--pdf", default=str(ROOT / "Litterbox_User_Guide.pdf"),
+                        help="where to save the PDF (default: the repository's top folder)")
+    parser.add_argument("--no-pdf", action="store_true")
+    args = parser.parse_args()
+    build(args.docx)
+    print("written", args.docx)
+    pdf = None if args.no_pdf else args.pdf
+    if finish_in_word(args.docx, pdf):
+        print("contents filled in by Word" + (f"; written {pdf}" if pdf else ""))
+    else:
+        print("Word wasn't found: open the guide in Word and update its contents (right-click > Update Field)"
+              + ("; no PDF was made" if pdf else ""))

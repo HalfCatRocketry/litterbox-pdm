@@ -21,7 +21,7 @@ the version it leads to there: 0.7.0-beta.2 may open a vault that needs 0.7.0.
 import re
 import sys
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 VAULT_FORMAT = 1
 
 _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-beta\.([1-9]\d*))?$")

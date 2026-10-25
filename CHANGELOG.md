@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.1
+
+- **Report a problem links to the privacy policy.** The window has a link to what is done with reports (PRIVACY.md, opened in your browser), and the report's CONTENTS.txt names it too.
+- **The user guide has a foreword**: why Litterbox was made, how it was made, and that it is free to use under the MIT licence.
+
 ## 1.0.0
 
 - **Litterbox is public.** The source code, the user guide and every release are now at https://github.com/HalfCatRocketry/litterbox-pdm, free under the MIT licence. Installed copies update themselves from there, as they always meant to.
