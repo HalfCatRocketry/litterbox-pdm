@@ -81,6 +81,25 @@ To report a security problem, please follow [SECURITY.md](SECURITY.md) rather th
 Litterbox's roles and permissions run on each person's computer: the Git host's access settings are what protect a
 vault.
 
+## Privacy
+
+Litterbox has no server and collects nothing on its own. It talks to GitHub only to check for updates, and to your
+team's Git host only to share your vault. A problem report goes to the maintainers only when you send it yourself,
+from your own email program, after Litterbox has listed exactly what is in it. [PRIVACY.md](PRIVACY.md) has the
+details, including what is done with reports.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org).
+
+- **Committers and reviewers:** [SentinelNorth](https://github.com/SentinelNorth)
+- **Approvers:** [SentinelNorth](https://github.com/SentinelNorth)
+
+Only installers built by this repository's release pipeline (`.github/workflows/release.yml`), from a version tag
+of this repository, are signed, and each signing is approved by hand. Installed copies also check every update
+against Litterbox's own update key before installing it (see `docs/RELEASING.md`).
+
 ## Licence
 
 Litterbox is free software under the [MIT licence](LICENSE). The installed program carries the licences of the
