@@ -105,18 +105,18 @@ newest beta, so when `0.7.0` comes out, everyone on `0.7.0-beta.N` is offered it
 installer to the run, to download from the run's page and try. It isn't signed (only tags reach the signing key),
 which doesn't matter for trying it.
 
-## The repository is private (on purpose, for now)
+## How installed copies find a release
 
-Installed copies look for updates at `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`,
-without signing in. GitHub answers that only for a public repository, so while the repository is private:
+Installed copies look for updates at `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`
+(and, with Help > Get beta versions, at the `beta-channel` release too), without signing in. So:
 
-- **Installed copies don't update themselves.** The update check quietly finds nothing.
-- **Releases are still built and published,** and anyone with access to the repository can download the installer
-  from the Releases page while signed in to GitHub, and run it. It installs over the old version and keeps every
-  setting.
-
-When the repository is made public, every copy from the first signed release on starts updating itself, with no
-change to the program.
+- **The repository must stay public.** GitHub answers those addresses only for a public repository: made private,
+  every installed copy would quietly stop finding updates.
+- **Publishing a release is publishing an update.** As soon as the publish job finishes, every copy that checks is
+  offered it, back to 0.1.0 (all were built for this repository and the same release key). Try anything risky as a
+  beta first.
+- **Never delete or rename the repository,** and never reuse its name for something else: see "Moving or renaming the
+  repository" below.
 
 ## Installing for someone new
 

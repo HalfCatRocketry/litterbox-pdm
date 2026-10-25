@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from litterbox import diagnostics
+from litterbox import version
 from litterbox.errors import LitterboxError
 from litterbox.gui.logic import bug_report_text
 from litterbox.user import bug_report
@@ -115,7 +116,7 @@ class MakingTheReport(unittest.TestCase):
             self.assertNotIn("vault-config.yaml", zipped.namelist())
 
     def test_the_email(self):
-        self.assertIn("0.6", bug_report.subject("HCR"))
+        self.assertIn(version.VERSION, bug_report.subject("HCR"))
         self.assertIn("HCR", bug_report.subject("HCR"))
         body = bug_report.body("I pressed Check In", FACTS)
         self.assertTrue(body.startswith("What I was doing:\nI pressed Check In"))

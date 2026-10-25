@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0
+
+- **Litterbox is public.** The source code, the user guide and every release are now at https://github.com/HalfCatRocketry/litterbox-pdm, free under the MIT licence. Installed copies update themselves from there, as they always meant to.
+- This release has the same features as 0.6.5. If you update from an older version, see 0.6.5 below for what's new: Report a problem shows exactly what goes in a report, Help > Get beta versions, signed update notices, and the licences of everything Litterbox is built with.
+- Litterbox is still new: please report anything that goes wrong with Help > Report a problem, and security problems as SECURITY.md says.
+
 ## 0.6.5
 
 - **Report a problem lists exactly what goes in.** The window now shows each file the report will hold, about how big it is, and what it contains: report.txt (your comment, the versions, the problems and errors), Litterbox's log, your Litterbox settings and the vault's shared settings. Tick boxes leave out the log or the settings. It also says what is taken out (passwords and tokens) and what never goes in (CAD files, documents, part records, the team list). The report itself has a CONTENTS.txt with the same list. With Outlook, Litterbox offers to open the report before you send it.
