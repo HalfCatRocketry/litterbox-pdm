@@ -158,6 +158,6 @@ def solidworks_version_prompt(year, installed):
             f"{year}, or the version here is changed.")
     if installed and installed > year:
         text += f"\n\nYour own SolidWorks is {installed}, so that includes you."
-    text += (f"\n\nEveryone will also need Litterbox {version.VERSION} or newer, since older versions don't check "
+    text += (f"\n\nEveryone will also need Litterbox {version.release()} or newer, since older versions don't check "
              "this.\n\nSet it?")
     return text

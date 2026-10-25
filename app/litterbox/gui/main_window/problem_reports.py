@@ -10,6 +10,8 @@ import traceback
 from tkinter import messagebox
 
 from litterbox import diagnostics
+from litterbox.cad import opener
+from litterbox.errors import LitterboxError
 from litterbox.gui.dialogs import bug_report_dialog
 from litterbox.gui.logic import bug_report_text
 from litterbox.gui.logic import error_text
@@ -24,15 +26,18 @@ class ProblemReports:
         """Ask for the comment, then make and send the report on a thread of its own: not through the job queue,
         since the problem being reported may be a job that never finishes."""
         problems = [(note.label, note.message) for note in self.jobs.errors()]
-        comment = bug_report_dialog.BugReportDialog(parent or self, bug_report.ADDRESS, len(problems)).show()
-        if comment is None:
-            return
         repo, org = self.repo(), self.org
+        answer = bug_report_dialog.BugReportDialog(
+            parent or self, bug_report.ADDRESS, len(problems), lambda leave_out: bug_report.contents(repo, leave_out),
+            bug_report.TAKEN_OUT, bug_report.NEVER_IN).show()
+        if answer is None:
+            return
+        comment, leave_out = answer
         self._say("Making the problem report...")
 
         def work():
             try:
-                path = bug_report.make(comment, repo, problems)
+                path = bug_report.make(comment, repo, problems, leave_out=leave_out)
                 how = report_mail.send(bug_report.ADDRESS, bug_report.subject(org),
                                        bug_report.body(comment, bug_report.facts()), path)
                 self.queue.put(("call", lambda: self._report_sent(how, path)))
@@ -43,7 +48,14 @@ class ProblemReports:
 
     def _report_sent(self, how, path):
         self._say("The problem report is ready to send.")
-        messagebox.showinfo("Report a problem", bug_report_text.sent_text(how, path), parent=self)
+        text = bug_report_text.sent_text(how, path)
+        if how != report_mail.OUTLOOK:                  # Explorer already shows the report, to attach
+            messagebox.showinfo("Report a problem", text, parent=self)
+        elif messagebox.askyesno("Report a problem", f"{text}\n\n{bug_report_text.OPEN_QUESTION}", parent=self):
+            try:
+                opener.open_path(path)
+            except LitterboxError as e:
+                messagebox.showerror("Report a problem", str(e), parent=self)
 
     def _report_failed(self, error):
         self._say("The problem report couldn't be made.", "warn")

@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -83,6 +83,18 @@ BLOCKS = [
 ("p", "Litterbox checks for a newer version at start-up and asks before it updates. Updates are signed, and "
       "Litterbox refuses an unsigned one. To turn off the check, add `update_check: false` to "
       "C:\\Litterbox\\settings.yaml. Help > Check for updates... checks by hand."),
+("ul", [
+    "**Betas.** Help > **Get beta versions** offers betas as well as releases: the next version before it is "
+    "finished, for trying new things early. Expect more bugs, and report them with Help > Report a problem. A beta "
+    "can make a vault need the version it leads to, which teammates on the released version don't have yet, so try "
+    "betas in a test vault, or move the whole team at once. When that version is released, you are offered it like "
+    "everyone else. Turning betas off keeps the beta you have until a newer release comes out.",
+    "**Signed notices.** With each check, Litterbox also reads a notice signed by the Litterbox maintainers. It can "
+    "withdraw an update key (if one were ever stolen, Litterbox stops trusting it straight away) or say that "
+    "Litterbox's releases have moved; Litterbox remembers either in settings.yaml and says so.",
+    "**Licences.** Litterbox is free software under the MIT licence. The licences of the other programs it is built "
+    "with are in the licenses folder beside Litterbox.exe (in %LOCALAPPDATA%\\Programs\\Litterbox).",
+]),
 ("h2", "Joining your team's vault"),
 ("ol", [
     "Get the vault's repository URL from your team lead: the https address from the host's Clone button.",
@@ -783,6 +795,7 @@ BLOCKS = [
       "are set in the program (columns, text size, and the open org). These are only in the file:"),
 ("table", ["Setting", "Effect"], [
     ["update_check: false", "Don't check for a newer Litterbox at start-up."],
+    ["update_channel: beta", "Offer betas too (set by Help > Get beta versions)."],
     ["download: all", "Download every CAD file, not only those you use."],
     ["open_with", "The program that opens each file type."],
     ["solidworks_watch: true", "Watch what SolidWorks has open (see Working with SolidWorks)."],
@@ -794,12 +807,16 @@ BLOCKS = [
 ("h2", "Problems"),
 ("ul", [
     "A problem turns the status bar's dot red. **Details...** says what went wrong and what to do.",
-    "**Help > Report a problem...** (or **Report...** in the Details window) asks what you were doing, then makes a "
-    "report and opens an email to the Litterbox team with it, for you to send. With Outlook, the report is attached; "
-    "otherwise attach it yourself (Explorer shows it). The report has your comment, the versions of Litterbox, "
-    "Windows, SolidWorks, and Git, the problems in the status bar, Litterbox's log, and your settings, with passwords "
-    "and tokens taken out. The log names parts and files you worked on. Reports are kept in "
-    "C:\\Litterbox\\logs\\reports.",
+    "**Help > Report a problem...** (or **Report...** in the Details window) lists exactly what goes in the report "
+    "(each file, about how big, and what it holds), asks what you were doing, then makes the report and opens an "
+    "email to the Litterbox team with it, for you to send. Nothing is sent until you press Send. With Outlook, the "
+    "report is attached and Litterbox offers to open it first; otherwise attach it yourself (Explorer shows it).",
+    "The report holds report.txt (your comment, the versions of Litterbox, Windows, Python, SolidWorks, Git, and Git "
+    "LFS, the problems in the status bar, and this session's unexpected errors), Litterbox's log, your Litterbox "
+    "settings, the vault's shared settings, and CONTENTS.txt listing them. Untick **Include Litterbox's log** or "
+    "**Include your Litterbox settings...** to leave those out. The log names parts, files, and check-in comments, "
+    "and can name people on your team. Passwords and tokens are taken out of every file, and no CAD files, "
+    "documents, part records, or the team list ever go in. Reports are kept in C:\\Litterbox\\logs\\reports.",
     "The **Log** (View > Log, or the status bar) shows every Git command and its result. The full log is "
     "C:\\Litterbox\\logs\\litterbox.log; include it when you ask for help.",
     "If an upload is refused because someone else uploaded first, Litterbox gets their changes and tries again. If "

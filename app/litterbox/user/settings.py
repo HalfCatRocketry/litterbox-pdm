@@ -6,6 +6,7 @@ These live OUTSIDE the vault, on your own computer, and are never shared:
     C:\\Litterbox\\settings.yaml        which vault the app opens, and options such as
                                        debug_mode: true      more detail in the log
                                        update_check: false   don't look for a newer Litterbox
+                                       update_channel: beta  be offered betas too (Help > Get beta versions)
                                        download: all         download every CAD file, not just those you use
     C:\\Litterbox\\logs\\litterbox.log   every git command and error, for troubleshooting
 
@@ -13,6 +14,7 @@ Nothing in here is ever allowed to crash the app: if a file can't be read or
 written, we quietly carry on with the defaults.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +40,39 @@ def update_check_enabled(data):
     if isinstance(value, str):
         return value.strip().lower() not in ("false", "no", "off", "0")
     return value is not False and value != 0
+
+
+def update_channel(data):
+    """'beta' to be offered betas as well as releases (update_channel: beta), else 'stable'. See user/updater.py."""
+    value = data.get("update_channel", "stable") if isinstance(data, dict) else "stable"
+    return "beta" if isinstance(value, str) and value.strip().lower() == "beta" else "stable"
+
+
+def update_repo(data):
+    """Where releases have moved to (update_repo: owner/name, kept from a signed notice), or None for the place this
+    build was made for. See user/update_notices.py."""
+    value = data.get("update_repo") if isinstance(data, dict) else None
+    return value.strip() if isinstance(value, str) and re.match(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$", value.strip()) \
+        else None
+
+
+def revoked_update_keys(data):
+    """Update keys a signed notice withdrew (revoked_update_keys), never to be trusted again on this computer."""
+    value = data.get("revoked_update_keys") if isinstance(data, dict) else None
+    return tuple(key for key in value if isinstance(key, str)) if isinstance(value, list) else ()
+
+
+def remember_update_notices(data, revoked=(), moved_to=""):
+    """Keep what an update check learned (updater.Found's revoked and moved_to) in `data`. True if anything is new,
+    so the settings need saving."""
+    known = revoked_update_keys(data)
+    new = [key for key in revoked if key not in known]
+    if new:
+        data["revoked_update_keys"] = list(known) + new
+    moved = bool(moved_to) and moved_to != update_repo(data)
+    if moved:
+        data["update_repo"] = moved_to
+    return bool(new) or moved
 
 
 def downloads_on_demand(data):

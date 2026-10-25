@@ -68,7 +68,7 @@ class Vault(unittest.TestCase):
         self.assertIsNone(config.get_solidworks_version(self.repo))
         config_write.set_values(self.repo, solidworks_version=2024)
         self.assertEqual(config.get_solidworks_version(self.repo), 2024)
-        self.assertEqual(self.written()["min_litterbox_version"], version.VERSION)
+        self.assertEqual(self.written()["min_litterbox_version"], version.release())
         config_write.set_values(self.repo, solidworks_version=None)
         self.assertNotIn("solidworks_version", self.written())
         self.assertIsNone(config.get_solidworks_version(self.repo))

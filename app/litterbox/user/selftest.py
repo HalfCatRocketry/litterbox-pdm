@@ -58,6 +58,11 @@ def problems(assets_dir=None):
         for spare in updater.SPARE_PUBLIC_KEYS:
             if not updater.is_public_key(spare):
                 found.append(f"the spare update key {spare!r} is not a valid public key")
+        for revoked in updater.REVOKED_PUBLIC_KEYS:
+            if not updater.is_public_key(revoked):
+                found.append(f"the revoked update key {revoked!r} is not a valid public key")
+            if revoked in updater.SPARE_PUBLIC_KEYS:
+                found.append(f"the spare update key {revoked!r} is also revoked")
     except Exception as e:
         found.append(f"signature check failed: {e!r}")
     try:

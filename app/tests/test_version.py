@@ -15,14 +15,29 @@ class Versions(unittest.TestCase):
     def test_parse(self):
         self.assertEqual(version.parse("0.1.0"), (0, 1, 0))
         self.assertEqual(version.parse("v1.12.3"), (1, 12, 3))
-        for bad in ("1.2", "1.2.3.4", "a.b.c", "", "1.2.x", "1.-2.3"):
+        for bad in ("1.2", "1.2.3.4", "a.b.c", "", "1.2.x", "1.-2.3", "1.2.3-beta", "1.2.3-beta.0", "1.2.3-rc.1",
+                    "1.2.3-beta.1x"):
             with self.assertRaises(ValueError):
                 version.parse(bad)
+
+    def test_a_beta_counts_as_its_version_for_vaults(self):
+        self.assertEqual(version.parse("0.7.0-beta.2"), (0, 7, 0))
+        self.assertEqual(version.release("0.7.0-beta.2"), "0.7.0")
+        self.assertEqual(version.release("v0.7.0"), "0.7.0")
+        self.assertTrue(version.is_beta("v0.7.0-beta.2"))
+        self.assertFalse(version.is_beta("0.7.0"))
 
     def test_numbers_not_text_decide_which_is_newer(self):
         self.assertTrue(version.is_newer("0.10.0", "0.9.0"))
         self.assertFalse(version.is_newer("0.1.0", "0.1.0"))
         self.assertFalse(version.is_newer("0.1.0", "0.1.1"))
+
+    def test_betas_come_before_their_version(self):
+        in_order = ["0.6.5", "0.7.0-beta.1", "0.7.0-beta.2", "0.7.0-beta.10", "0.7.0", "0.7.1-beta.1"]
+        self.assertEqual(sorted(reversed(in_order), key=version.order), in_order)
+        self.assertTrue(version.is_newer("0.7.0", "0.7.0-beta.3"))
+        self.assertFalse(version.is_newer("0.7.0-beta.3", "0.7.0"))
+        self.assertFalse(version.is_newer("0.7.0-beta.1", "0.7.0-beta.1"))
 
     def test_the_version_is_well_formed_and_not_older_than_the_first_release(self):
         self.assertFalse(version.is_newer("0.1.0", version.VERSION))
@@ -71,6 +86,8 @@ class VaultCompatibility(unittest.TestCase):
         version.VERSION = "9.0.0"
         compatibility.check_compatible(self.dir)
         version.VERSION = "10.0.0"                                     # compared as numbers, not text
+        compatibility.check_compatible(self.dir)
+        version.VERSION = "9.0.0-beta.1"                               # a beta counts as the version it leads to
         compatibility.check_compatible(self.dir)
 
     def test_nonsense_values_get_a_plain_message(self):

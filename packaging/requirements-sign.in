@@ -1,0 +1,3 @@
+# What the release pipeline's signing job needs (packaging/make_manifest.py). Pinned with hashes in
+# requirements-sign.txt: see docs/RELEASING.md, "Updating the pinned packages".
+cryptography>=42.0

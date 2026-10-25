@@ -96,7 +96,7 @@ class RecordsAndConfig(Digits):
         text = config.config_path(self.repo).read_text()
         self.assertIn("prefix: '05'", text)
         self.assertEqual(config.get_projects(self.repo), [projects.Project("Rover", "05")])
-        self.assertEqual(config.load(self.repo)["min_litterbox_version"], version.VERSION)
+        self.assertEqual(config.load(self.repo)["min_litterbox_version"], version.release())
 
     def test_a_hand_edit_that_overlaps_is_reported(self):
         config.config_path(self.repo).write_text(

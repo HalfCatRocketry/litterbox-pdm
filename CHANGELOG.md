@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.5
+
+- **Report a problem lists exactly what goes in.** The window now shows each file the report will hold, about how big it is, and what it contains: report.txt (your comment, the versions, the problems and errors), Litterbox's log, your Litterbox settings and the vault's shared settings. Tick boxes leave out the log or the settings. It also says what is taken out (passwords and tokens) and what never goes in (CAD files, documents, part records, the team list). The report itself has a CONTENTS.txt with the same list. With Outlook, Litterbox offers to open the report before you send it.
+- **Betas.** Help > **Get beta versions** offers betas (the next version before it is finished) as well as releases. A beta copy is offered the final version once it is out. Betas are best tried in a test vault or by the whole team at once, since a beta can make a vault need the version it leads to. Nobody is offered a beta without choosing to.
+- **Signed notices.** Each update check also reads a notice signed by the maintainers' offline key. It can withdraw an update key that was stolen or lost (Litterbox stops trusting it straight away, even before updating), or say that Litterbox's releases have moved to another place, which Litterbox then follows. Either is kept in settings.yaml.
+- **Licences.** The installed program now has a licenses folder beside Litterbox.exe with the licences of everything it is built with (Python, customtkinter, PyYAML, cryptography, pywin32 and the others).
+- **Releases are built more safely.** The key that signs updates is now used only by the last step of a release, never by the steps that install packages, build the program or run the tests, and every package a release is built with is pinned to an exact, checked file.
+
 ## 0.6.4
 
 - **My Tasks and All Workflows show new requests at a refresh**, without Get Latest: a request someone has just asked you to sign (or a change to one, or one withdrawn or finished) shows as soon as the list refreshes. A request your copy hasn't got yet says so under the list, and Review (or any of its buttons) gets the latest first, then carries on.

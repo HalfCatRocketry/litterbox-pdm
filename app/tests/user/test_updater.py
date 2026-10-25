@@ -26,10 +26,18 @@ def manifest(**changes):
     return json.dumps(data).encode()
 
 
+def serve(files):
+    """A fetch that answers like GitHub: the file, or a 404 for anything else (notices.json, say)."""
+    def fetch(url):
+        if url not in files:
+            raise updater.UpdateError(f"GitHub answered 404 for {url}")
+        return files[url]
+    return fetch
+
+
 def fetcher(raw, key=PRIVATE):
-    files = {updater.release_url(REPO, updater.MANIFEST_NAME): raw,
-             updater.release_url(REPO, updater.SIGNATURE_NAME): updater.sign(raw, key).encode()}
-    return lambda url: files[url]
+    return serve({updater.release_url(REPO, updater.MANIFEST_NAME): raw,
+                  updater.release_url(REPO, updater.SIGNATURE_NAME): updater.sign(raw, key).encode()})
 
 
 class Signing(unittest.TestCase):
@@ -65,7 +73,7 @@ class FindingUpdates(unittest.TestCase):
         files = {updater.release_url(REPO, updater.MANIFEST_NAME): raw.replace(b"0.2.0", b"9.9.9"),
                  updater.release_url(REPO, updater.SIGNATURE_NAME): updater.sign(raw, PRIVATE).encode()}
         with self.assertRaises(updater.UpdateError):
-            updater.find_update(REPO, PUBLIC, "0.1.0", fetch=lambda url: files[url])
+            updater.find_update(REPO, PUBLIC, "0.1.0", fetch=serve(files))
 
     def test_installer_must_come_from_this_projects_releases(self):
         with self.assertRaisesRegex(updater.UpdateError, "somewhere other"):

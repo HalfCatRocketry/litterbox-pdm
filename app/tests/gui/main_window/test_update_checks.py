@@ -82,6 +82,46 @@ class UpdateWiring(unittest.TestCase):
         self.assertEqual(self.tasks, [])
         self.assertIn("source files", self.box.calls[-1][1][1])
 
+    def found(self, **fields):
+        return self.updater.Found(**fields)
+
+    def keep_saves(self):
+        """settings.save stands in for writing C:\\Litterbox\\settings.yaml: it notes what would be saved."""
+        saved, original = [], self.gui.settings.save
+        self.gui.settings.save = lambda data, path=None: saved.append(dict(data)) or True
+        self.addCleanup(setattr, self.gui.settings, "save", original)
+        self.app._log = lambda text: self.said.append(text)
+        return saved
+
+    def test_what_a_check_learned_is_saved_and_the_update_offered(self):
+        saved = self.keep_saves()
+        self.box.answer = False
+        self.app._update_found(self.found(update=self.update, revoked=("k1",), moved_to="new/place"))
+        self.assertEqual(saved[-1]["revoked_update_keys"], ["k1"])
+        self.assertEqual(saved[-1]["update_repo"], "new/place")
+        self.assertIn("new/place", self.box.calls[0][1][1])                 # asked: says where updates come from
+        self.assertEqual(self.box.calls[-1][0], "askyesno")                  # then offers the update
+
+    def test_a_quiet_check_only_logs_its_problem(self):
+        saved = self.keep_saves()
+        self.app._update_found(self.found(problem="offline"), quiet=True)
+        self.assertEqual((self.box.calls, saved), ([], []))
+        self.assertIn("Update check: offline", self.said)
+        self.app._update_found(self.found(problem="offline"))
+        self.assertEqual(self.box.calls[-1][0], "showwarning")
+
+    def test_get_beta_versions_switches_the_channel_after_asking(self):
+        saved = self.keep_saves()
+        self.box.answer = False
+        self.app.toggle_beta_versions()
+        self.assertEqual(saved, [])
+        self.box.answer = True
+        self.app.toggle_beta_versions()
+        self.assertEqual(self.app.settings["update_channel"], "beta")
+        self.app.toggle_beta_versions()
+        self.assertNotIn("update_channel", self.app.settings)
+        self.assertEqual(len(saved), 2)
+
     def test_the_setting_can_switch_the_check_off(self):
         settings = self.gui.settings
         self.assertTrue(settings.update_check_enabled({}))

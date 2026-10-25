@@ -13,7 +13,7 @@ is read back from SolidWorks afterwards (IsOpenedReadOnly) rather than trusted f
 
 Each call attaches afresh, in its own COM apartment (com.com_thread), so it can run on any thread, e.g. a job.
 Tried with SolidWorks 2024: a part open on its own becomes writable. Reloading a newer version, components of an
-open assembly and a busy SolidWorks are still to try (docs/REMINDERS.md).
+open assembly and a busy SolidWorks are still to try.
 """
 
 from litterbox.cad import open_documents

@@ -7,7 +7,7 @@ C:\\Litterbox\\folders\\<org>.yaml.
     personal_folders.save(path, tree)
 
 The file is the changes that build the tree (folders/folder_model.to_ops), so it reads like the vault's folder
-changes. Kept on one computer for now (REMINDERS.md: Personal folders), so a new computer starts with none.
+changes. Kept on one computer for now, so a new computer starts with none.
 """
 
 from pathlib import Path

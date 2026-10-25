@@ -66,12 +66,36 @@ class MakingTheReport(unittest.TestCase):
             names = set(zipped.namelist())
             report = zipped.read("report.txt").decode("utf-8")
             log = zipped.read("litterbox.log").decode("utf-8")
-        self.assertEqual(names, {"report.txt", "litterbox.log", "settings.yaml", "vault-config.yaml"})
+        self.assertEqual(names, {"report.txt", "litterbox.log", "settings.yaml", "vault-config.yaml", "CONTENTS.txt"})
         self.assertIn("I pressed Check In", report)
         self.assertIn("Git: git version 2.47.0", report)
         self.assertIn("Checking in 1 part: Unexpected error", report)
         self.assertIn("KeyError: 'x'", report)
         self.assertNotIn("token123", log)
+
+    def test_the_zip_holds_exactly_what_the_window_lists(self):
+        for leave_out in ((), (bug_report.LOG,), (bug_report.SETTINGS,), (bug_report.LOG, bug_report.SETTINGS)):
+            listed = [item.name for item in bug_report.contents(str(self.vault), leave_out)]
+            with zipfile.ZipFile(self.make(leave_out=leave_out, now=datetime(2026, 1, 1, 0, len(leave_out)))) as z:
+                self.assertEqual(z.namelist(), listed + ["CONTENTS.txt"], leave_out)
+                contents = z.read("CONTENTS.txt").decode("utf-8")
+            for name in listed:
+                self.assertIn(name, contents)
+            self.assertIn("Never in a report", contents)
+
+    def test_leaving_things_out(self):
+        names = lambda leave_out: [item.name for item in bug_report.contents(str(self.vault), leave_out)]
+        self.assertEqual(names(()), ["report.txt", "litterbox.log", "settings.yaml", "vault-config.yaml"])
+        self.assertEqual(names((bug_report.LOG,)), ["report.txt", "settings.yaml", "vault-config.yaml"])
+        self.assertEqual(names((bug_report.LOG, bug_report.SETTINGS)), ["report.txt"])
+        self.assertTrue(all(item.what for item in bug_report.contents(str(self.vault))))
+
+    def test_sizes_are_listed_and_a_log_is_counted_up_to_what_goes_in(self):
+        items = {item.name: item for item in bug_report.contents(str(self.vault))}
+        self.assertIsNone(items["report.txt"].size)
+        self.assertEqual(items["settings.yaml"].size, (self.dir / "settings.yaml").stat().st_size)
+        with mock.patch.object(bug_report, "LOG_BYTES", 5):
+            self.assertEqual(bug_report.contents(str(self.vault))[1].size, 5)
 
     def test_a_comment_is_required(self):
         with self.assertRaises(LitterboxError):
@@ -130,6 +154,16 @@ class Words(unittest.TestCase):
         self.assertIn("The 1 problem in the red status bar goes in too", bug_report_text.intro("a@b.c", 1))
         self.assertIn("The 2 problems in the red status bar go in too", bug_report_text.intro("a@b.c", 2))
         self.assertNotIn("status bar", bug_report_text.intro("a@b.c", 0))
+        self.assertIn("a@b.c", bug_report_text.intro("a@b.c", 0))
+
+    def test_sizes_in_plain_words(self):
+        self.assertEqual(bug_report_text.size_text(None), "")
+        self.assertEqual(bug_report_text.size_text(10), "under 1 KB")
+        self.assertEqual(bug_report_text.size_text(12_500), "about 12 KB")
+        self.assertEqual(bug_report_text.size_text(2_000_000), "about 1.9 MB")
+        item = bug_report.Item("litterbox.log", "x", size=12_500)
+        self.assertEqual(bug_report_text.item_heading(item), "litterbox.log  (about 12 KB)")
+        self.assertEqual(bug_report_text.item_heading(bug_report.Item("report.txt", "x")), "report.txt")
 
     def test_after_sending(self):
         self.assertIn("Press Send", bug_report_text.sent_text(report_mail.OUTLOOK, "r.zip"))

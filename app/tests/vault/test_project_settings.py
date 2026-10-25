@@ -12,6 +12,7 @@ from litterbox.errors import LitterboxError
 from litterbox.vault import config
 from litterbox.vault import project_admin
 from litterbox.vault import settings_admin
+from litterbox import version
 
 
 class ProjectSettings(Fixture, unittest.TestCase):
@@ -35,7 +36,8 @@ class ProjectSettings(Fixture, unittest.TestCase):
         self.assertEqual(self.project("Rover").lead, "bea")
         self.do("Bea", project_admin.add_project, "Lander", "13", {"lead": "alex"})   # or the Lead chosen
         self.assertEqual(self.project("Lander").lead, "alex")
-        self.assertEqual(config.load(self.a)["min_litterbox_version"], project_settings.MIN_LITTERBOX)
+        minimum = config.load(self.a)["min_litterbox_version"]                         # the settings need 0.6.4
+        self.assertGreaterEqual(version.parse(minimum), version.parse(project_settings.MIN_LITTERBOX))
 
     def test_too_few_digits_are_refused_unless_an_admin_goes_ahead(self):
         self.settings(project_creators=project_settings.ANYONE, project_min_digits=3)

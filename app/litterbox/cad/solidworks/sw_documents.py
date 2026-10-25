@@ -7,7 +7,7 @@ open documents writable after a check-out).
     found = sw_documents.open_documents(sw)     # {open_documents.key(path): OpenDocument}
 
 Documents SolidWorks loaded only as parts of an open assembly count as open too: SolidWorks holds them as well.
-Tried with SolidWorks 2024 (the reload at check-out, 2026-10-22); the watcher's use of it not yet (docs/REMINDERS.md).
+Tried with SolidWorks 2024 (the reload at check-out, 2026-10-22); the watcher's use of it not yet.
 """
 
 from litterbox.cad import open_documents as docs

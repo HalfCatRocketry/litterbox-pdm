@@ -56,7 +56,7 @@ def set_values(repo, **values):
                 data.pop(key, None)
             else:
                 data[key] = year
-                _require_at_least(data, version.VERSION)     # older Litterbox wouldn't check it
+                _require_at_least(data, version.release())     # older Litterbox wouldn't check it
         elif key == "currency":
             code = config.check_currency(value)
             if code is None:
@@ -90,7 +90,7 @@ def set_values(repo, **values):
                 raise config.ConfigError(str(e)) from None
             if value:
                 data[key] = project_rules.to_data(value)
-                _require_at_least(data, version.VERSION)     # older Litterbox would hand out numbers in the blocks
+                _require_at_least(data, version.release())     # older Litterbox would hand out numbers in the blocks
             else:
                 data.pop(key, None)
         else:

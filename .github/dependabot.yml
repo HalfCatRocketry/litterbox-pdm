@@ -1,0 +1,10 @@
+# Dependabot keeps the GitHub Actions the workflows use up to date (a pull request each month when one has a new
+# version). Python packages are pinned with hashes in packaging/requirements-*.txt and updated by hand: see
+# docs/RELEASING.md, "Updating the pinned packages". Dependabot's security alerts still cover them once they are
+# switched on (Settings > Code security).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

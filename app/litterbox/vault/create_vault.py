@@ -285,7 +285,7 @@ class _Writer:
 
 def create(folder, org, start_number=1, base_digits=part_number.DEFAULT_BASE_DIGITS,
            variant_digits=part_number.DEFAULT_VARIANT_DIGITS, push=True, set_up_team=True, name=None, email=None,
-           min_version=version.VERSION, org_name=None, assembly_variant_start=None, toolbox=toolbox_rules.NO_TOOLBOX):
+           min_version=version.release(), org_name=None, assembly_variant_start=None, toolbox=toolbox_rules.NO_TOOLBOX):
     """Turn the empty cloned repository in `folder` into a Litterbox vault. Returns an InitResult. A new vault takes
     no Toolbox parts (core/toolbox_rules.py), as the user guide advises; an Admin can change that in Vault Settings.
 

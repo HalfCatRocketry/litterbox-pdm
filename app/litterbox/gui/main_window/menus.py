@@ -15,6 +15,7 @@ from litterbox.gui.logic import org_menu
 from litterbox.gui.logic import ui_scale
 from litterbox.gui.logic import vault_size_text
 from litterbox.gui.widgets import menu_bar
+from litterbox.user import settings
 
 # The menus beside the everyday buttons: (label, App method). The labels are action_rules.BUTTON_ACTIONS keys where
 # the entry depends on the ticked or highlighted parts. None is a line between entries.
@@ -170,6 +171,8 @@ class Menus:
     def _fill_help_menu(self, menu):
         menu.add_command(label="Status icons...", command=lambda: legend_dialog.LegendDialog(self, self.icons))
         menu.add_command(label="Check for updates...", command=self.check_for_updates)
+        menu.add_checkbutton(label="Get beta versions", command=self.toggle_beta_versions,
+                             variable=self._menu_flag(settings.update_channel(self.settings) == "beta"))
         menu.add_command(label="Report a problem...", command=self.report_problem)
         menu.add_separator()
         menu.add_command(label="About Litterbox", command=self.show_about)

@@ -15,6 +15,14 @@ How an update works
      program files and starts Litterbox again. Settings, logs and the vault are never touched.
 
 Nothing here runs in a development copy (see version.is_installed_build). Network errors are never fatal.
+
+Two more things come with each check:
+  * notices.json (user/update_notices.py), signed by a spare key: update keys to trust no longer, and a new place
+    to look for releases if the repository ever moves. check() returns what it learned for the settings to keep.
+  * The beta channel (update_channel: beta in settings.yaml, Help > Get beta versions): besides the newest release,
+    the newest beta is read from the "beta-channel" release (BETA_CHANNEL_TAG), and the newer of the two is offered.
+    A beta copy so moves on to the final version once it is out. Without it, betas are never offered: GitHub's
+    "latest" release is never a pre-release.
 """
 
 import base64
@@ -29,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from litterbox import version
+from litterbox.user import update_notices
 
 MANIFEST_NAME = "latest.json"
 SIGNATURE_NAME = "latest.json.sig"
@@ -38,12 +47,18 @@ TIMEOUT_SECONDS = 10
 CHUNK = 256 * 1024
 INSTALLER_NAME = re.compile(r"^[A-Za-z0-9._-]+\.exe$")
 SHA256 = re.compile(r"^[0-9a-fA-F]{64}$")
-REPO_NAME = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$")
+REPO_NAME = update_notices.REPO_NAME
+STABLE, BETA = "stable", "beta"
+BETA_CHANNEL_TAG = "beta-channel"          # the pre-release whose latest.json is always the newest beta's
 
 # Trusted as well as the release key in build_info.py. Public keys are not secret. Added in 0.4.2.
 SPARE_PUBLIC_KEYS = (
     "WWuh7zIPS+DHeWY+/qn+7BrwcTDP1VcOyJIKZmwQ5ZY=",
 )
+
+# Never trusted, even as the release key in build_info.py: keys that leaked or were lost. Added in 0.6.5. A copy also
+# keeps the ones notices.json names (settings.yaml: revoked_update_keys).
+REVOKED_PUBLIC_KEYS = ()
 
 
 class UpdateError(Exception):
@@ -108,14 +123,20 @@ def is_public_key(public_b64):
         return False
 
 
-def trusted_keys(public_key):
-    """The key(s) given (one key or a list) followed by the spare keys, without repeats."""
+def all_revoked(revoked=()):
+    """The keys built in as revoked and those given (learned from notices), without repeats."""
+    return tuple(dict.fromkeys(tuple(REVOKED_PUBLIC_KEYS) + tuple(revoked or ())))
+
+
+def trusted_keys(public_key, revoked=()):
+    """The key(s) given (one key or a list) followed by the spare keys, without repeats or revoked keys."""
     given = [public_key] if isinstance(public_key, str) else list(public_key or ())
-    return tuple(dict.fromkeys(k for k in given + list(SPARE_PUBLIC_KEYS) if k))
+    never = set(all_revoked(revoked))
+    return tuple(dict.fromkeys(k for k in given + list(SPARE_PUBLIC_KEYS) if k and k not in never))
 
 
-def signed_by_a_trusted_key(data, signature_b64, public_key):
-    return any(signature_is_good(data, signature_b64, key) for key in trusted_keys(public_key))
+def signed_by_a_trusted_key(data, signature_b64, public_key, revoked=()):
+    return any(signature_is_good(data, signature_b64, key) for key in trusted_keys(public_key, revoked))
 
 
 # ---------------------------------------------------------------------------
@@ -136,10 +157,15 @@ def release_url(repo, filename):
     return f"https://github.com/{repo}/releases/latest/download/{filename}"
 
 
-def parse_manifest(raw, signature_b64, public_key, repo):
+def beta_url(repo, filename):
+    """Where the newest beta's file of this name can be downloaded."""
+    return f"https://github.com/{repo}/releases/download/{BETA_CHANNEL_TAG}/{filename}"
+
+
+def parse_manifest(raw, signature_b64, public_key, repo, revoked=()):
     """Check latest.json (the exact bytes) against its signature and return an Update. Raises UpdateError.
-    A signature by the release key (public_key) or by a spare key is accepted."""
-    if not signed_by_a_trusted_key(raw, signature_b64, public_key):
+    A signature by the release key (public_key) or by a spare key is accepted, unless that key is revoked."""
+    if not signed_by_a_trusted_key(raw, signature_b64, public_key, revoked):
         raise UpdateError("The update information is not signed with the right key, so it was ignored.")
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -182,19 +208,79 @@ def http_get(url, limit=MAX_MANIFEST_BYTES):
     return data
 
 
-def find_update(repo=None, public_key=None, current=None, fetch=None):
-    """The newest release if it is newer than this program, else None. Raises UpdateError on any problem."""
+@dataclass
+class Found:
+    """What an update check found: the update to offer (or None), keys notices.json newly revoked, the repository
+    releases have moved to ("" if they haven't), and the problem that stopped the check ("" if none). The settings
+    keep `revoked` and `moved_to` even when there is a problem."""
+    update: Update = None
+    revoked: tuple = ()
+    moved_to: str = ""
+    problem: str = ""
+
+
+def read_notices(repo, revoked, fetch):
+    """The newest release's notices, or none if it has none, they can't be fetched or they aren't to be trusted."""
+    try:
+        raw = fetch(release_url(repo, update_notices.NOTICES_NAME))
+        signature = fetch(release_url(repo, update_notices.NOTICES_SIGNATURE_NAME)).decode("ascii", errors="replace")
+        return update_notices.parse(raw, signature, SPARE_PUBLIC_KEYS, all_revoked(revoked), signature_is_good)
+    except (UpdateError, update_notices.NoticeError):
+        return update_notices.NONE
+
+
+def _newest(repo, public_key, revoked, url, fetch):
+    raw = fetch(url(repo, MANIFEST_NAME))
+    signature = fetch(url(repo, SIGNATURE_NAME)).decode("ascii", errors="replace")
+    return parse_manifest(raw, signature, public_key, repo, all_revoked(revoked))
+
+
+def check(repo=None, public_key=None, current=None, channel=STABLE, revoked=(), fetch=None):
+    """Look for a newer Litterbox: read the notices (following a move once), then the newest release, and on the
+    beta channel the newest beta too. Returns Found; never raises for a problem with the check itself."""
     if repo is None or public_key is None:
         from litterbox import build_info
         repo = build_info.REPO if repo is None else repo
         public_key = build_info.PUBLIC_KEY if public_key is None else public_key
     if not configured(repo, public_key):
-        raise UpdateError("This copy of Litterbox is not set up to check for updates.")
+        return Found(problem="This copy of Litterbox is not set up to check for updates.")
     fetch = fetch or http_get
-    raw = fetch(release_url(repo, MANIFEST_NAME))
-    signature = fetch(release_url(repo, SIGNATURE_NAME)).decode("ascii", errors="replace")
-    update = parse_manifest(raw, signature, public_key, repo)
-    return update if version.is_newer(update.version, current) else None
+    known = all_revoked(revoked)
+    learned, moved_to = [], ""
+    notices = read_notices(repo, known, fetch)
+    if notices.moved_to and notices.moved_to.lower() != repo.lower():
+        learned += [key for key in notices.revoked if key not in known + tuple(learned)]
+        moved_to = repo = notices.moved_to
+        notices = read_notices(repo, known + tuple(learned), fetch)        # never followed further in one check
+    learned += [key for key in notices.revoked if key not in known + tuple(learned)]
+    revoked = known + tuple(learned)
+    found = Found(revoked=tuple(learned), moved_to=moved_to)
+    if not trusted_keys(public_key, revoked):
+        found.problem = (f"Every key this Litterbox trusts for updates has been withdrawn. Download the installer "
+                         f"from https://github.com/{repo}/releases instead.")
+        return found
+    offers, problems = [], []
+    for url in (release_url, beta_url) if channel == BETA else (release_url,):
+        try:
+            offers.append(_newest(repo, public_key, revoked, url, fetch))
+        except UpdateError as e:
+            problems.append(str(e))
+    if channel != BETA:
+        offers = [offer for offer in offers if not version.is_beta(offer.version)]
+    if not offers and problems:
+        found.problem = problems[0]
+        return found
+    newer = [offer for offer in offers if version.is_newer(offer.version, current)]
+    found.update = max(newer, key=lambda offer: version.order(offer.version)) if newer else None
+    return found
+
+
+def find_update(repo=None, public_key=None, current=None, fetch=None, channel=STABLE, revoked=()):
+    """The newest release if it is newer than this program, else None. Raises UpdateError on any problem."""
+    found = check(repo, public_key, current, channel, revoked, fetch)
+    if found.problem:
+        raise UpdateError(found.problem)
+    return found.update
 
 
 # ---------------------------------------------------------------------------

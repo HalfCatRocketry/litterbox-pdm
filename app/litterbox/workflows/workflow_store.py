@@ -95,7 +95,7 @@ def edit_templates(repo, change, message):
         if templates:
             # Older versions don't know about pending requests and would let a part slip past its sign-offs, so
             # the vault now asks everyone to update before working in it.
-            config_write.stamp(repo, min_version=workflow_templates.min_version_for(templates, version.VERSION))
+            config_write.stamp(repo, min_version=workflow_templates.min_version_for(templates, version.release()))
             paths.append(layout.CONFIG_PATH)
         return paths, message, result
     return shared_files.edit(repo, [layout.WORKFLOWS_FILE, layout.CONFIG_PATH], "the workflows file", make_change)

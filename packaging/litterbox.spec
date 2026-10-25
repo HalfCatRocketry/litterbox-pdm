@@ -5,9 +5,13 @@
 #
 # It makes dist/Litterbox/ (Litterbox.exe plus everything it needs). The installer script packs that folder up.
 
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
+
+sys.path.insert(0, SPECPATH)
+import third_party_licenses  # noqa: E402
 
 ROOT = Path(SPECPATH).resolve().parent
 APP = ROOT / "app"
@@ -45,3 +49,6 @@ exe = EXE(
     icon=str(PACKAGE / "gui" / "assets" / "litterbox_icon_white.ico"),
 )
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="Litterbox")
+
+# The licences of everything above, beside Litterbox.exe (the installer copies the whole folder).
+third_party_licenses.write(Path(DISTPATH) / "Litterbox" / "licenses", ROOT)

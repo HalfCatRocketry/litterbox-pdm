@@ -100,8 +100,6 @@ class BackgroundJobs:
                 kind, payload = self.queue.get_nowait()
                 if kind == "log":
                     self._log(payload)
-                elif kind == "update":
-                    self._offer_update(payload)
                 elif kind == "done":
                     self._finish(payload)
                 elif kind == "solidworks":
