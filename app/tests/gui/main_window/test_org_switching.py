@@ -30,6 +30,8 @@ class CreateVaultWiring(unittest.TestCase):
         self.cloned = []
         replace(self, self.gui.vault_clone, "clone_or_reuse",
                 lambda url, target, on_demand=True: self.cloned.append((url, target)) or target)
+        self.git = ("Alex Smith", "alex@x.com")                       # what git knows, whatever this computer has
+        replace(self, self.gui.git_identity, "current", lambda folder: self.git)
 
     def shown(self, name):
         return [call for call in self.box.calls if call[0] == name]
@@ -86,6 +88,24 @@ class CreateVaultWiring(unittest.TestCase):
         self.assertEqual(self.switched, ["HCR"])
         self.assertEqual(self.app.settings["orgs"], {"HCR": str(target)})
         self.assertTrue(self.shown("showinfo"))
+
+    def test_without_a_git_name_it_asks_first_and_sets_it_in_the_new_vault(self):
+        from types import SimpleNamespace
+        self.git, saved, self.answer = ("", ""), [], ("Alex Smith", "alex@x.com")
+        self.gui.git_identity_dialog.GitIdentityDialog = lambda *a, **k: SimpleNamespace(show=lambda: self.answer)
+        replace(self, self.gui.git_identity, "save", lambda folder, name, email: saved.append((folder, name, email)))
+        replace(self, self.gui.create_vault, "create", lambda *a, **k: "made")
+        self.app.create_vault()
+        work, _done, _on_success = self.tasks[0]
+        folder, _created = work()
+        self.assertEqual(saved, [(folder, "Alex Smith", "alex@x.com")])     # after the clone, in the vault
+
+    def test_without_a_git_name_not_now_stops(self):
+        from types import SimpleNamespace
+        self.git = ("", "")
+        self.gui.git_identity_dialog.GitIdentityDialog = lambda *a, **k: SimpleNamespace(show=lambda: None)
+        self.app.create_vault()
+        self.assertEqual(self.tasks, [])
 
 
 if __name__ == "__main__":
