@@ -43,7 +43,7 @@ class RolesDialog(modal_dialog.ModalDialog):
         width, height = 500, 640
         self.title("Roles")
         window_chrome.place_over(self, parent, width, height)
-        self.minsize(380, 420)
+        window_chrome.min_size(self, 380, 420)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)

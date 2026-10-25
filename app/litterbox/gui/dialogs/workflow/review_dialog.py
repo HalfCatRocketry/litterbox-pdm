@@ -37,7 +37,7 @@ class ReviewDialog(modal_dialog.ModalDialog):
         width, height = 1060, 800
         self.title(f"{label} workflow")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(900, 620)
+        window_chrome.min_size(self, 900, 620)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         ctk.CTkLabel(self, text=f"{label}: review", font=ctk.CTkFont(size=16, weight="bold"),

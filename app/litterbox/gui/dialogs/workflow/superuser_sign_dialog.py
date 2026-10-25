@@ -24,7 +24,7 @@ class SuperuserSignDialog(modal_dialog.ModalDialog):
         width, height = 560, 300 + 34 * len(task.superuser_slots)
         self.title(f"Approve as superuser: {task.label}")
         window_chrome.place_over(self, parent, width, height)
-        self.minsize(440, 260)
+        window_chrome.min_size(self, 440, 260)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         ctk.CTkLabel(self, text="Approve as superuser", font=ctk.CTkFont(size=16, weight="bold"), anchor="w").grid(

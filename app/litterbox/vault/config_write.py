@@ -9,6 +9,7 @@ import yaml
 
 from litterbox import version
 from litterbox.core import part_number
+from litterbox.core import project_settings
 from litterbox.core import projects as project_rules
 from litterbox.core import toolbox_rules
 from litterbox.core.part_number import check_org
@@ -69,6 +70,17 @@ def set_values(repo, **values):
             else:
                 data[key] = rule
                 _require_at_least(data, toolbox_rules.MIN_LITTERBOX)     # older Litterbox would check in anything
+        elif key in ("project_creators", "project_min_digits"):
+            try:
+                value = (project_settings.check_creators(value) if key == "project_creators"
+                         else project_settings.check_min_digits(value, config.get_digits(repo)[0]))
+            except project_rules.ProjectError as e:
+                raise config.ConfigError(str(e)) from None
+            if value in (project_settings.ADMINS, 0):
+                data.pop(key, None)
+            else:
+                data[key] = value
+                _require_at_least(data, project_settings.MIN_LITTERBOX)  # older Litterbox would let anyone past it
         elif key == "assembly_variant_start":
             data[key] = config.check_assembly_variant(value, config.get_digits(repo)[1])
         elif key == "projects":

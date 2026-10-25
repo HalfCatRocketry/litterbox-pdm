@@ -32,7 +32,7 @@ class BomItemDialog(modal_dialog.ModalDialog):
         width, height = 640, 560
         self.title("Add to BOM" if quantity else "Link a document")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(480, 420)
+        window_chrome.min_size(self, 480, 420)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)

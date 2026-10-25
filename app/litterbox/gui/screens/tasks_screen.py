@@ -115,8 +115,7 @@ class TaskList(ctk.CTkFrame):
 
     def reload(self):
         keep = self.tree.selection()
-        tasks = workflow_tasks.tasks_from_rows(self.app.rows + list(self.app.doc_rows), self.app.identity,
-                                               everything=self.everything)
+        tasks = workflow_tasks.tasks_from_rows(self.app.task_rows(), self.app.identity, everything=self.everything)
         self.tasks = {t.id: t for t in tasks}
         self.tree.delete(*self.tree.get_children())
         for iid, values in task_text.tasks_table(tasks):
@@ -158,7 +157,22 @@ class TaskList(ctk.CTkFrame):
             return
         if not task_text.button_states(task).get(key, True):
             return
+        if task.incoming:               # newer on the server than in this copy: act on it once it is here
+            self.app.latest_then(lambda: self._act_again(key, task.id))
+            return
         {"review": self.app.task_review, "complete": self.app.task_complete,
          "withdraw": self.app.task_withdraw, "override": self.app.task_override,
          "override_reject": self.app.task_override_reject, "superuser": self.app.task_superuser_sign,
          "reassign": self.app.task_reassign}[key](task)
+
+    def _act_again(self, key, task_id):
+        """After Get Latest: the same button on the same request, if it is still waiting (and now in this copy)."""
+        task = self.tasks.get(task_id)
+        if task is None:
+            self.why.configure(text="That request changed meanwhile (finished, withdrawn or changed): see the list.")
+            return
+        if task.incoming:               # Get Latest didn't bring it (it failed): the red status bar says why
+            return
+        if self.tree.exists(task_id):
+            self.tree.selection_set(task_id)
+        self._act(key)

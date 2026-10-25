@@ -1,7 +1,8 @@
 """
 project_dialog.py - the Project window: one project's name, starting digits, Lead, members (search the team, Add and
 Remove), Restrict Project and Hide Project. Opened from the Projects window (projects_dialog.py) to add a project or
-change one. Admins and the Owner may change everything; a project's Lead everything but its digits.
+change one. Admins and the Owner may change everything; a project's Lead everything but its digits. Starting digits
+fewer than the org's minimum (core/project_settings.py) are refused, or for an Admin, warned about first.
 """
 
 import tkinter as tk
@@ -10,9 +11,11 @@ from tkinter import ttk
 
 import customtkinter as ctk
 
+from litterbox.core import project_settings
 from litterbox.core import projects as project_rules
 from litterbox.gui import theme
 from litterbox.gui import window_chrome
+from litterbox.gui.dialogs import confirm_dialogs
 from litterbox.gui.logic import project_team_text
 from litterbox.gui.logic import project_text
 from litterbox.gui.widgets import modal_dialog
@@ -23,23 +26,27 @@ COLORS = {"": theme.MUTED, "ok": theme.GREEN_TEXT, "warn": theme.WARN, "error": 
 
 class ProjectDialog(modal_dialog.ModalDialog):
     """Add a project (`project` None) or change one. show() gives None if cancelled, else
-        {"name": text, "prefix": digits, "team": {"lead", "members", "restricted", "hidden"}}
+        {"name": text, "prefix": digits, "team": {"lead", "members", "restricted", "hidden"}, "short_ok": bool}
     `others` are the other projects (the digits mustn't overlap them); `directory` is the team (None: no team, so no
     Lead or members); `digits_editable` is False for a Lead, who may change everything but the digits; `used(prefix)`
-    gives the part numbers already in a block (for a new project's preview)."""
+    gives the part numbers already in a block (for a new project's preview). `min_digits` is the org's fewest starting
+    digits (0: none): `admin` is warned about fewer and may go ahead (short_ok), anyone else is refused. A new project's
+    Lead starts as `me` (whoever adds it)."""
     FOCUS = "name_entry"
 
-    def __init__(self, parent, project, others, directory, digits_editable=True, used=None):
+    def __init__(self, parent, project, others, directory, digits_editable=True, used=None, min_digits=0, admin=True,
+                 me=""):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.project, self.others, self.directory = project, list(others), directory
+        self.min_digits, self.admin, self.me = min_digits, admin, me
         self.used = used or (lambda prefix: [])
         self.result = None
         self.members = list(project.members) if project else []
         width, height = 720, 760 if directory is not None else 330
         self.title("Project")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(640, height if directory is None else 640)
+        window_chrome.min_size(self, 640, height if directory is None else 640)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         heading = f"Project {project.name}" if project else "New project"
@@ -94,10 +101,10 @@ class ProjectDialog(modal_dialog.ModalDialog):
         frame.grid(row=row, column=0, sticky="ew", padx=20, pady=(10, 0))
         frame.columnconfigure(1, weight=1)
         project = self.project
-        self.lead_choices = project_team_text.lead_choices(self.directory, project.lead if project else "")
+        lead = project.lead if project else self.me                   # whoever adds a project leads it to start
+        self.lead_choices = project_team_text.lead_choices(self.directory, lead)
         ctk.CTkLabel(frame, text="Project Lead:").grid(row=0, column=0, sticky="w", padx=(0, 8))
-        self.lead_var = tk.StringVar(value=project_team_text.lead_label(self.lead_choices,
-                                                                        project.lead if project else ""))
+        self.lead_var = tk.StringVar(value=project_team_text.lead_label(self.lead_choices, lead))
         ctk.CTkOptionMenu(frame, variable=self.lead_var, width=260, height=32,
                           values=[project_team_text.NO_LEAD] + [label for label, _id in self.lead_choices],
                           fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT,
@@ -233,9 +240,20 @@ class ProjectDialog(modal_dialog.ModalDialog):
         if self.project is not None and project == self.project:
             messagebox.showinfo("Project", "Nothing was changed.", parent=self)
             return
+        short_ok = False
+        new_digits = self.project is None or project.prefix != self.project.prefix
+        if new_digits and project_settings.too_short(project.prefix, self.min_digits):
+            text = project_settings.short_text(project.prefix, self.min_digits)
+            if not self.admin:
+                self.problem.configure(text=text + " Use more digits, or ask an Admin.")
+                return
+            if not confirm_dialogs.ConfirmDialog(self, "Project", "Fewer starting digits than the org's minimum",
+                                                 [text], note=project_text.SHORT_NOTE, confirm_text="Proceed").show():
+                return
+            short_ok = True
         if self.project is None and not messagebox.askyesno(
                 "Project", project_text.confirm_text(project.name, project.prefix, self.used(project.prefix)),
                 parent=self):
             return
-        self.result = {"name": project.name, "prefix": project.prefix, "team": team}
+        self.result = {"name": project.name, "prefix": project.prefix, "team": team, "short_ok": short_ok}
         self.destroy()

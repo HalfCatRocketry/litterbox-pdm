@@ -34,8 +34,8 @@ class DocumentWindow(ctk.CTkToplevel):
         self.scale = scaling.scale_of(self)
         self.eco_number, self.links = None, {}
         self.title(f"{record.pn} - Details")
-        self.geometry("820x600")
-        self.minsize(560, 420)
+        window_chrome.set_size(self, 820, 600)
+        window_chrome.min_size(self, 560, 420)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         ctk.CTkLabel(self, text=f"{record.pn}   {record.name}", font=ctk.CTkFont(size=18, weight="bold"),

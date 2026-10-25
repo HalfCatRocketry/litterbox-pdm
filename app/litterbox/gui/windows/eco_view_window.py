@@ -19,8 +19,8 @@ class EcoViewWindow(ctk.CTkToplevel):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.title(f"{eco.number} - {eco.name}")
-        self.geometry("720x640")
-        self.minsize(520, 460)
+        window_chrome.set_size(self, 720, 640)
+        window_chrome.min_size(self, 520, 460)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)
 

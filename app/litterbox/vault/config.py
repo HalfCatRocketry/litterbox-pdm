@@ -37,6 +37,7 @@ from litterbox import layout
 from litterbox.cad import solidworks_versions
 from litterbox.core import currency as currencies
 from litterbox.core import part_number
+from litterbox.core import project_settings
 from litterbox.core import projects as project_rules
 from litterbox.core import toolbox_rules
 from litterbox.core.part_number import PNError, check_org
@@ -212,6 +213,22 @@ def get_projects(repo):
         return project_rules.from_data(load(repo).get("projects"), base_digits)
     except project_rules.ProjectError as e:
         raise ConfigError(f"projects in {layout.CONFIG_PATH}: {e}") from None
+
+
+def get_project_creators(repo):
+    """Who may add a project (core/project_settings.py): ADMINS (the default) or ANYONE."""
+    try:
+        return project_settings.check_creators(load(repo).get("project_creators"))
+    except project_rules.ProjectError as e:
+        raise ConfigError(f"project_creators in {layout.CONFIG_PATH}: {e}") from None
+
+
+def get_project_min_digits(repo):
+    """The fewest starting digits a new project may have (core/project_settings.py); 0 for no minimum."""
+    try:
+        return project_settings.check_min_digits(load(repo).get("project_min_digits"), get_digits(repo)[0])
+    except project_rules.ProjectError as e:
+        raise ConfigError(f"project_min_digits in {layout.CONFIG_PATH}: {e}") from None
 
 
 def default_assembly_variant(variant_digits=None):

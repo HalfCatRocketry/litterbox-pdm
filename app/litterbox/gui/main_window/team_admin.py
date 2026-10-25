@@ -22,6 +22,7 @@ from litterbox.gui.logic import team_text
 from litterbox.gui.logic import template_text
 from litterbox.gui.logic import toolbox_text
 from litterbox.gui.logic import workflow_editor
+from litterbox.core import project_settings
 from litterbox.core import projects as project_rules
 from litterbox.core import template_rules
 from litterbox.team import project_access
@@ -170,7 +171,10 @@ class TeamAdmin:
                        "require_signatures": config.get_require_signatures(repo),
                        "assembly_variant_start": config.get_assembly_variant_start(repo),
                        "solidworks_version": config.get_solidworks_version(repo),
-                       "currency": config.get_currency(repo), "toolbox": config.get_toolbox_rule(repo)}
+                       "currency": config.get_currency(repo), "toolbox": config.get_toolbox_rule(repo),
+                       "project_creators": config.get_project_creators(repo),
+                       "project_min_digits": config.get_project_min_digits(repo),
+                       "base_digits": config.get_digits(repo)[0]}
         except config.ConfigError as e:
             messagebox.showwarning("Vault settings", f"The settings file has a problem:\n\n{e}", parent=window)
             return
@@ -192,6 +196,9 @@ class TeamAdmin:
             return
         if changes.get("toolbox") and not messagebox.askokcancel(
                 "SolidWorks Toolbox parts", team_text.toolbox_rule_prompt(changes["toolbox"]), parent=window):
+            return
+        prompt = team_text.project_settings_prompt(changes)
+        if prompt and not messagebox.askokcancel("Projects", prompt, parent=window):
             return
         self.run_task(lambda: vault_settings.edit(repo, **changes), "Vault settings saved")
 
@@ -272,31 +279,36 @@ class TeamAdmin:
         self.run_task(work, "", on_success=done, refresh=False, label=template_text.JOB_LABELS[action])
 
     def manage_projects(self, window):
-        """Projects...: the org's projects you may see. Admins and the Owner add, change and delete them; a
-        project's Lead changes that project (its name, Lead, members, Restrict and Hide)."""
+        """Projects...: the org's projects you may see. Admins and the Owner add, change and delete them (anyone may
+        add one if the org allows it); a project's Lead changes that project (its name, Lead, members, Restrict and
+        Hide)."""
         if not self._may("edit_project"):
             return
         repo = self.repo()
         try:
             config.apply(repo)
             current = config.get_projects(repo)
+            anyone = config.get_project_creators(repo) == project_settings.ANYONE
+            min_digits = config.get_project_min_digits(repo)
         except config.ConfigError as e:
             messagebox.showwarning("Projects", f"The settings file has a problem:\n\n{e}", parent=window)
             return
         identity = self.identity
         legacy = identity.state == team_identity.LEGACY
         person = identity.person if identity.state == team_identity.OK else None
-        chosen = projects_dialog.ProjectsDialog(window, repo, current, identity.directory, person, legacy).show()
+        chosen = projects_dialog.ProjectsDialog(window, repo, current, identity.directory, person, legacy,
+                                                may_add=anyone and person is not None, min_digits=min_digits).show()
         if not chosen:
             return
         if chosen[0] == "add":
-            _what, name, prefix, team = chosen
-            self.run_task(lambda: project_admin.add_project(repo, name, prefix, team), f"Project {name} added")
+            _what, name, prefix, team, short_ok = chosen
+            self.run_task(lambda: project_admin.add_project(repo, name, prefix, team, short_ok),
+                          f"Project {name} added")
             return
         if chosen[0] == "edit":
-            _what, name, new_name, new_prefix, team = chosen
+            _what, name, new_name, new_prefix, team, short_ok = chosen
             plan = lambda: project_admin.plan_change(repo, name, new_name, new_prefix, team=team)
-            work = lambda: project_admin.edit_project(repo, name, new_name, new_prefix, team)
+            work = lambda: project_admin.edit_project(repo, name, new_name, new_prefix, team, short_ok)
             done = f"Project {name} changed"
         else:
             _what, name = chosen

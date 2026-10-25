@@ -22,7 +22,7 @@ class BugReportDialog(modal_dialog.ModalDialog):
         width, height = 580, 520
         self.title("Report a problem")
         window_chrome.place_over(self, parent, width, height)
-        self.minsize(460, 420)
+        window_chrome.min_size(self, 460, 420)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)

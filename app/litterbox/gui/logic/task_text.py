@@ -97,9 +97,14 @@ def rejection_text(rejected):
     return f"Rejected by {rejected.get('by', '')}{when}{override}: {rejected.get('comment', '')}"
 
 
+INCOMING_NOTE = "newer on the server than in your copy: acting on it gets the latest first"
+
+
 def task_detail(task, local=True):
     """Lines under the My Tasks table: who has signed and who is still to, or why it was rejected."""
     head = ", ".join(str(p[0]) for p in task.parts)
+    if getattr(task, "incoming", False):
+        head += f"   ({INCOMING_NOTE})"
     if task.draft:
         rejected = dict(task.rejected, at=history_text.to_display_time(task.rejected.get("at", ""), local))
         text = (f"{head}\n{rejection_text(rejected)}\nReview to change it and resubmit it, or withdraw it. Its parts "

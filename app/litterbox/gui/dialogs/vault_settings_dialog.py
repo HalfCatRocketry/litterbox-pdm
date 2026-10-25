@@ -1,7 +1,8 @@
 """
 vault_settings_dialog.py - Vault Settings (Admin and Owner): the org name (Owner only), commit style, release rule,
-signed commits, the variant assemblies start at, the SolidWorks version everyone works in, the team's currency, and
-the rule for SolidWorks Toolbox parts (core/toolbox_rules.py).
+signed commits, the variant assemblies start at, the SolidWorks version everyone works in, the team's currency, the
+rule for SolidWorks Toolbox parts (core/toolbox_rules.py), and who may add projects and the fewest starting digits a
+project may have (core/project_settings.py).
 """
 
 import datetime
@@ -17,16 +18,20 @@ from litterbox.gui.logic import number_input
 from litterbox.gui.widgets import release_button
 from litterbox.cad import solidworks_versions
 from litterbox.core import currency
+from litterbox.core import part_number
+from litterbox.core import project_settings
 from litterbox.core import toolbox_rules
 from litterbox.vault import config
 
 ANY_VERSION = "Any version (no check)"
 NO_CURRENCY = "None (numbers only)"
+NO_MINIMUM = "No minimum (default)"
 
 
 class VaultSettingsDialog(modal_dialog.ModalDialog):
     """The vault's shared settings, as one dict: org_name, commit_style, release_rule, require_signatures,
-    assembly_variant_start, solidworks_version, currency and toolbox (see config.py). show() gives the chosen values or None; org_name is
+    assembly_variant_start, solidworks_version, currency, toolbox, project_creators and project_min_digits (see
+    config.py; `current` may also say the part numbers' base_digits). show() gives the chosen values or None; org_name is
     only among them when may_rename (the Owner), otherwise it is shown but can't be edited. `installed` is the year
     of this computer's SolidWorks (None without one), shown under the SolidWorks choice."""
 
@@ -39,7 +44,7 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         window_chrome.set_window_icon(self)
         current = current or {}
         self.result, self.may_rename = None, may_rename
-        width, height = 580, 640
+        width, height = 580, 720
         self.title("Vault settings")
         window_chrome.place_over(self, parent, width, height, down=4)
         self.resizable(False, False)
@@ -132,6 +137,7 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         ctk.CTkLabel(pair, text="Check In and Release refuse an assembly that breaks it. The team's Toolbox is in "
                                 "Team > Toolbox....", anchor="w", justify="left", wraplength=240,
                      text_color=theme.MUTED).grid(row=2, column=1, sticky="new", pady=(4, 0))
+        self._project_settings(body, row + 1, current)
         buttons = ctk.CTkFrame(self, fg_color="transparent")
         buttons.grid(row=1, column=0, sticky="ew", padx=20, pady=(14, 16))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
@@ -142,11 +148,42 @@ class VaultSettingsDialog(modal_dialog.ModalDialog):
         self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.after(150, self._grab)
 
+    def _project_settings(self, body, row, current):
+        """Who may add projects, and the fewest starting digits one may have, side by side."""
+        pair = ctk.CTkFrame(body, fg_color="transparent")
+        pair.grid(row=row, column=0, sticky="ew", padx=20, pady=(10, 0))
+        pair.columnconfigure((0, 1), weight=1, uniform="p")
+        self.creator_choices = {(label + " (default)" if key == project_settings.ADMINS else label): key
+                                for key, label in project_settings.CREATOR_LABELS.items()}
+        names = {key: label for label, key in self.creator_choices.items()}
+        self.creators_var = tk.StringVar(value=names.get(current.get("project_creators"), next(iter(self.creator_choices))))
+        ctk.CTkLabel(pair, text="Who may add projects:", anchor="w").grid(row=0, column=0, sticky="ew")
+        ctk.CTkOptionMenu(pair, variable=self.creators_var, values=list(self.creator_choices), width=240,
+                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
+            row=1, column=0, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(pair, text="Whoever adds a project becomes its Lead, unless they choose another.", anchor="w",
+                     justify="left", wraplength=240, text_color=theme.MUTED).grid(row=2, column=0, sticky="new",
+                                                                                   pady=(4, 0), padx=(0, 10))
+        digits = current.get("base_digits") or part_number.BASE_DIGITS
+        self.digit_choices = {NO_MINIMUM: 0}
+        self.digit_choices.update({f"At least {n} digit{'s' if n != 1 else ''}": n for n in range(1, digits)})
+        names = {n: label for label, n in self.digit_choices.items()}
+        self.digits_var = tk.StringVar(value=names.get(current.get("project_min_digits") or 0, NO_MINIMUM))
+        ctk.CTkLabel(pair, text="A project's starting digits:", anchor="w").grid(row=0, column=1, sticky="ew")
+        ctk.CTkOptionMenu(pair, variable=self.digits_var, values=list(self.digit_choices), width=240,
+                          fg_color=theme.GRAY, button_color=theme.GRAY_HOVER, button_hover_color=theme.ACCENT).grid(
+            row=1, column=1, pady=(4, 0), sticky="w")
+        ctk.CTkLabel(pair, text="Fewer digits set aside more part numbers. Admins are warned; anyone else is "
+                                "refused. Projects already made keep theirs.", anchor="w", justify="left",
+                     wraplength=240, text_color=theme.MUTED).grid(row=2, column=1, sticky="new", pady=(4, 0))
+
     def _ok(self):
         result = {key: choices[var.get()] for key, (var, choices) in self.vars.items()}
         result["solidworks_version"] = self.versions.get(self.version_var.get())
         result["currency"] = self.currencies.get(self.currency_var.get())
         result["toolbox"] = self.toolbox_choices.get(self.toolbox_var.get(), toolbox_rules.OFF)
+        result["project_creators"] = self.creator_choices[self.creators_var.get()]
+        result["project_min_digits"] = self.digit_choices[self.digits_var.get()]
         if self.may_rename:
             try:
                 result["org_name"] = config.check_org_name(self.name_var.get())

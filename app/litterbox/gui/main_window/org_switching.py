@@ -10,8 +10,10 @@ from tkinter import messagebox
 from litterbox import diagnostics
 from litterbox.core import part_number
 from litterbox.errors import LitterboxError
+from litterbox.git import git_identity
 from litterbox.git import read_only
 from litterbox.gui.dialogs import clone_dialog
+from litterbox.gui.dialogs import git_identity_dialog
 from litterbox.gui.dialogs import org_dialog
 from litterbox.gui.logic import org_menu
 from litterbox.user import settings
@@ -132,9 +134,17 @@ class OrgSwitching:
         if not messagebox.askyesno("Create new org", org_menu.fixed_settings_text(
                 checked.org, org_name, start, base_digits, variant_digits, checked.warnings, assembly), parent=self):
             return
+        wanted = git_identity.wanted(git_identity.current(Path.home()))      # git can't commit without them
+        me = None
+        if wanted.missing:
+            me = git_identity_dialog.GitIdentityDialog(self, wanted, checked.org).show()
+            if not me:
+                return
 
         def work():
             folder = vault_clone.clone_or_reuse(url, target, settings.downloads_on_demand(self.settings))
+            if me:
+                git_identity.save(folder, *me)
             return folder, create_vault.create(folder, org, start, base_digits, variant_digits, org_name=org_name,
                                                assembly_variant_start=assembly)
 

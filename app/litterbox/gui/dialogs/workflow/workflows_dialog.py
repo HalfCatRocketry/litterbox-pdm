@@ -41,7 +41,7 @@ class WorkflowsDialog(modal_dialog.ModalDialog):
         width, height = 820, 640
         self.title(title)
         window_chrome.place_over(self, parent, width, height)
-        self.minsize(720, 520)
+        window_chrome.min_size(self, 720, 520)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)

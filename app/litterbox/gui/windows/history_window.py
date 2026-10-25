@@ -18,8 +18,8 @@ class HistoryWindow(ctk.CTkToplevel):
         window_chrome.set_window_icon(self)
         self.loaded = set()
         self.title(f"{record.pn} - Details")
-        self.geometry("860x640")
-        self.minsize(580, 440)
+        window_chrome.set_size(self, 860, 640)
+        window_chrome.min_size(self, 580, 440)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         ctk.CTkLabel(self, text=f"{record.pn}   {record.name}", font=ctk.CTkFont(size=18, weight="bold"),

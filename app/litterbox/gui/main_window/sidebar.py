@@ -91,7 +91,7 @@ class Sidebar:
         counts = list_view.view_counts(self.rows)
         for view in list_view.VIEWS:
             nav[("parts", view)].set_count(counts[view] if self.rows else "")
-        mine = workflow_tasks.count_for_me(workflow_tasks.tasks_from_rows(self.rows + list(self.doc_rows), self.identity))
+        mine = workflow_tasks.count_for_me(workflow_tasks.tasks_from_rows(self.task_rows(), self.identity))
         nav[("tasks", None)].set_count(mine or "")
 
     def set_view(self, view):

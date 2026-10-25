@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "0.6.3"
+VERSION = "0.6.4"
 
 BLOCKS = [
 ("h1", "What Litterbox is"),
@@ -68,8 +68,10 @@ BLOCKS = [
     "**SolidWorks**, to model. Without it you can look at parts, open PDFs, run workflows, and manage purchasing "
     "and documents. Anything that reads or writes SolidWorks files needs it.",
 ]),
-("p", "Git needs your name and email the first time you use it. Litterbox asks for them if they are missing. You "
-      "can also set them in a terminal:"),
+("p", "Git puts your name and email on every change, and can't save changes without them. When a vault opens and "
+      "git doesn't know them, Litterbox asks, filled in from the team list, and sets them for that vault only. If "
+      "git has a different name from the team list's, Litterbox offers to use the team list's. You can also set "
+      "them for every repository in a terminal:"),
 ("code", ['git config --global user.name "Alex Smith"', 'git config --global user.email "alex@example.com"']),
 ("h2", "Installing Litterbox"),
 ("ol", [
@@ -206,6 +208,12 @@ BLOCKS = [
 ("p", "A **project** reserves a block of part numbers: with 6 digits, project Rover starting 12 owns 120000 to "
       "129999. Choose a project in New Part, New Assembly, or Import, and Litterbox suggests the next number in its "
       "block. With no project, Litterbox never hands out a number inside a block."),
+("p", "Admins and the Owner add projects (New Project...), or anyone on the team when an Admin allows it in Team > "
+      "Vault Settings... (**Who may add projects**). Whoever adds a project is its Lead to start with. Vault "
+      "Settings can also set **a project's starting digits**: the fewest a new project may have, so nobody sets "
+      "aside too many numbers (with 6 digits, a project starting 1 owns 100000 part numbers). Anyone else is "
+      "refused fewer; an Admin is warned and may Proceed. Projects already made keep their digits. Either setting "
+      "makes the vault need Litterbox 0.6.4."),
 ("p", "Team > **Projects...** lists the projects you can see. Each project can have a **Project Lead**, "
       "**members**, and two options. All of these are optional:"),
 ("table", ["Option", "Effect"], [
@@ -479,6 +487,8 @@ BLOCKS = [
     "When the last person signs, the action happens. If it fails (for example, offline), the sign-offs are kept "
     "and **Complete** in My Tasks finishes it.",
 ]),
+("p", "My Tasks and All Workflows show new requests (and changes to them) at every refresh, before Get Latest. "
+      "One your copy hasn't got yet says so under the list; Review, or any of its buttons, gets the latest first."),
 ("p", "Only people who may sign for the parts' projects are offered as signers (see Projects)."),
 ("p", "The requester or an Admin can withdraw a request until it is done. An Admin can **Override Approve** or "
       "**Override Reject**, recorded as an override with a reason, and can change who signs in **All Workflows** "

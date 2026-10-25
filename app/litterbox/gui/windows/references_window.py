@@ -28,8 +28,8 @@ class ReferencesWindow(ctk.CTkToplevel):
         window_chrome.set_window_icon(self)
         self.pn = pn
         self.title(f"References - {pn.short}")
-        self.geometry("980x640")
-        self.minsize(720, 460)
+        window_chrome.set_size(self, 980, 640)
+        window_chrome.min_size(self, 720, 460)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         self.on_replace = on_replace

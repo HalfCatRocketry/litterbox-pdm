@@ -4,6 +4,7 @@ and which vault settings changed.
 """
 
 from litterbox import version
+from litterbox.core import project_settings
 from litterbox.core import toolbox_rules
 
 
@@ -118,6 +119,21 @@ def changed_settings(current, chosen):
     if not chosen:
         return {}
     return {key: value for key, value in chosen.items() if current.get(key) != value}
+
+
+def project_settings_prompt(changes):
+    """The "Are you sure?" before the project settings (core/project_settings.py) are turned on; "" when the
+    changes don't turn one on."""
+    lines = []
+    if changes.get("project_creators") == project_settings.ANYONE:
+        lines.append("Anyone on the team will be able to add a project, and becomes its Lead.")
+    if changes.get("project_min_digits"):
+        lines.append(f"A new project will need at least {changes['project_min_digits']} starting digits: Admins and "
+                     "the Owner are warned about fewer, anyone else is refused. Projects already made keep theirs.")
+    if not lines:
+        return ""
+    return " ".join(lines) + (f"\n\nEveryone will also need Litterbox {project_settings.MIN_LITTERBOX} or newer, "
+                              "since older versions don't keep to these settings.")
 
 
 def toolbox_rule_prompt(rule):

@@ -64,7 +64,7 @@ class WorkflowRequestDialog(modal_dialog.ModalDialog):
         width, height = 1060, 800
         self.title(f"{label} workflow")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(900, 620)
+        window_chrome.min_size(self, 900, 620)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         heading = f"{label}: change and resubmit" if draft else f"{label}: start a workflow"

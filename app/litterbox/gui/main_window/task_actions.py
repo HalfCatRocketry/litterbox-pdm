@@ -17,6 +17,7 @@ from litterbox.gui.logic import error_text
 from litterbox.gui.logic import request_parts
 from litterbox.gui.logic import task_text
 from litterbox.team import project_access
+from litterbox.workflows import incoming_requests
 from litterbox.workflows import signoff_slots
 from litterbox.workflows import workflow_request
 from litterbox.workflows import workflow_responses
@@ -33,6 +34,16 @@ class TaskActions:
         """The My Tasks screen, once it has been opened (a list, so callers can loop over it)."""
         screen = getattr(self, "screens", {}).get("tasks")
         return [screen] if screen is not None else []
+
+    def task_rows(self):
+        """The rows My Tasks and All Workflows are worked out from: the parts and documents, with the requests the
+        server has that this copy hasn't got yet (read at the last refresh)."""
+        return incoming_requests.apply(self.rows + list(self.doc_rows), getattr(self, "incoming_requests", {}))
+
+    def latest_then(self, then):
+        """A request this copy hasn't got yet: Get Latest, then then() once the list shows what it brought."""
+        self._say("This request is newer on the server: getting the latest first.")
+        self.get_latest(then=then)
 
     def _refresh_tasks(self):
         """Reload the My Tasks screen. (The count beside My Tasks in the sidebar is updated with the other counts.)"""

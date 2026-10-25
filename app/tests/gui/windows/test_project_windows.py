@@ -60,7 +60,8 @@ class ProjectWindow(unittest.TestCase):
         dialog._lead_changed()
         dialog._save()
         self.assertEqual(dialog.result, {"name": "Rover", "prefix": "12", "team": {
-            "lead": "cy", "members": [], "restricted": True, "hidden": True, "lead_only_folders": False}})
+            "lead": "cy", "members": [], "restricted": True, "hidden": True, "lead_only_folders": False},
+            "short_ok": False})
 
     def test_making_someone_the_lead_takes_them_off_the_members(self):
         dialog = self.window()
@@ -68,6 +69,45 @@ class ProjectWindow(unittest.TestCase):
         dialog._lead_changed()
         self.assertEqual(dialog.members, [])
         self.assertIn("cy", dialog.team_list.rows)
+
+    def new(self, admin, answer=True):
+        self.box.answer = answer
+        dialog = self.gui.project_dialog.ProjectDialog(FakeParent(), None, [LANDER], TEAM, min_digits=3, admin=admin,
+                                                       me="bea")
+        self.problems = []
+        dialog.problem = SimpleNamespace(configure=lambda text: self.problems.append(text))
+        dialog.name_var.set("Rover")
+        dialog.prefix_var.set("12")
+        return dialog
+
+    def test_a_new_projects_lead_starts_as_whoever_adds_it(self):
+        self.assertEqual(self.new(admin=False).team()["lead"], "bea")
+
+    def test_too_few_digits_are_refused_for_a_member(self):
+        dialog = self.new(admin=False)
+        dialog._save()
+        self.assertIsNone(dialog.result)
+        self.assertIn("at least 3 starting digits", self.problems[-1])
+
+    def test_an_admin_is_warned_and_may_proceed(self):
+        asked = []
+        test = self
+
+        class Confirm:
+            def __init__(self, *args, **kwargs):
+                asked.append(kwargs.get("confirm_text"))
+
+            def show(self):
+                return test.proceed
+        self.gui.project_dialog.confirm_dialogs.ConfirmDialog = Confirm
+        self.proceed = False                                        # Cancel
+        dialog = self.new(admin=True)
+        dialog._save()
+        self.assertIsNone(dialog.result)
+        self.proceed = True                                         # Proceed
+        dialog = self.new(admin=True)
+        dialog._save()
+        self.assertEqual((asked, dialog.result["short_ok"]), (["Proceed", "Proceed"], True))
 
     def test_nothing_changed(self):
         dialog = self.window()
@@ -99,9 +139,15 @@ class ProjectsWindow(unittest.TestCase):
         dialog = self.window(CY)
         team = {"lead": "cy", "members": ["bea", "dee"], "restricted": True, "hidden": False, "lead_only_folders": False}
         self.gui.projects_dialog.project_dialog.ProjectDialog = lambda *a, **k: SimpleNamespace(
-            show=lambda: {"name": "Rover", "prefix": "12", "team": team})
+            show=lambda: {"name": "Rover", "prefix": "12", "team": team, "short_ok": False})
         dialog._edit(dialog.projects[0])
-        self.assertEqual(dialog.result, ("edit", "Rover", "Rover", "12", team))
+        self.assertEqual(dialog.result, ("edit", "Rover", "Rover", "12", team, False))
+
+    def test_new_project_is_for_admins_or_anyone_when_the_org_allows(self):
+        self.assertFalse(self.window(BEA).may_add)
+        member = self.gui.projects_dialog.ProjectsDialog(FakeParent(), "C:/vault", [LANDER], TEAM, BEA, legacy=False,
+                                                         may_add=True)
+        self.assertTrue(member.may_add and not member.admin)
 
 
 if __name__ == "__main__":

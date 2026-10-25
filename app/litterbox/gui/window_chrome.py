@@ -165,9 +165,82 @@ def set_app_id():
         pass
 
 
+TITLE_BAR = 40             # room for the title bar and frame, which a window's size doesn't count (at 100%)
+EDGE = 8                    # kept free around a window that has to shrink to fit (at 100%)
+NO_LIMIT = 100000           # the desktop's size when it can't be told
+
+
+def work_area(window):
+    """(left, top, right, bottom) in screen pixels of the desktop the window is on, less the taskbar. On Windows,
+    the monitor the window (or, before it shows, its parent) is on; elsewhere the whole screen."""
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class MonitorInfo(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                            ("dwFlags", wintypes.DWORD)]
+
+            user32 = ctypes.windll.user32
+            user32.GetAncestor.restype = wintypes.HWND
+            user32.MonitorFromWindow.restype = wintypes.HANDLE
+            hwnd = user32.GetAncestor(wintypes.HWND(window.winfo_id()), 2)          # GA_ROOT
+            monitor = user32.MonitorFromWindow(hwnd, 2)                               # MONITOR_DEFAULTTONEAREST
+            info = MonitorInfo()
+            info.cbSize = ctypes.sizeof(MonitorInfo)
+            if monitor and user32.GetMonitorInfoW(wintypes.HANDLE(monitor), ctypes.byref(info)):
+                work = info.rcWork
+                return work.left, work.top, work.right, work.bottom
+        except Exception:
+            pass
+    try:
+        return 0, 0, int(window.winfo_screenwidth()), int(window.winfo_screenheight())
+    except Exception:                       # can't be told: no limit
+        return 0, 0, NO_LIMIT, NO_LIMIT
+
+
+def window_scaling(window):
+    """How much CustomTkinter enlarges this window's size (the monitor's scaling); 1.0 if it can't be told."""
+    try:
+        value = float(ctk.ScalingTracker.get_window_scaling(window))
+        return value if value > 0 else 1.0
+    except Exception:
+        return 1.0
+
+
+def fitted(window, width, height, area=None):
+    """(width, height) at 100%, made small enough that the window, title bar and all, fits on its desktop."""
+    left, top, right, bottom = area or work_area(window)
+    scale = window_scaling(window)
+    room_w = int((right - left) / scale) - 2 * EDGE
+    room_h = int((bottom - top) / scale) - TITLE_BAR - 2 * EDGE
+    return max(min(width, room_w), 200), max(min(height, room_h), 150)
+
+
+def set_size(window, width, height):
+    """Give a window this size (at 100%), or less if the screen is too small for it."""
+    width, height = fitted(window, width, height)
+    window.geometry(f"{width}x{height}")
+
+
+def min_size(window, width, height):
+    """The smallest a window may be made (at 100%), but never more than fits on the screen."""
+    window.minsize(*fitted(window, width, height))
+
+
 def place_over(window, parent, width, height, down=3):
     """Size a window and put it over its parent: centred across, and a third (down=3) or a quarter (down=4) of the
-    way down. It never starts above or left of the parent."""
-    x = parent.winfo_rootx() + max((parent.winfo_width() - width) // 2, 0)
-    y = parent.winfo_rooty() + max((parent.winfo_height() - height) // down, 0)
+    way down. It never starts above or left of the parent, and is made smaller and moved if that is what it takes to
+    keep all of it, title bar to buttons, on the parent's desktop."""
+    area = work_area(parent)
+    width, height = fitted(window, width, height, area)
+    scale = window_scaling(window)
+    real_w, real_h = round(width * scale), round(height * scale)          # what the screen sees: x and y aren't scaled
+    x = parent.winfo_rootx() + max((parent.winfo_width() - real_w) // 2, 0)
+    y = parent.winfo_rooty() + max((parent.winfo_height() - real_h) // down, 0)
+    left, top, right, bottom = area
+    edge, title = round(EDGE * scale), round(TITLE_BAR * scale)
+    x = max(left + edge, min(x, right - real_w - edge))
+    y = max(top + edge, min(y, bottom - real_h - title - edge))
     window.geometry(f"{width}x{height}+{x}+{y}")

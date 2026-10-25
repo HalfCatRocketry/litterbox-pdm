@@ -39,6 +39,7 @@ from litterbox.gui.main_window.actions.revise_actions import ReviseActions
 from litterbox.gui.main_window.background_jobs import BackgroundJobs
 from litterbox.gui.main_window.detail_pane import DetailPane
 from litterbox.gui.main_window.file_rules import FileRules
+from litterbox.gui.main_window.git_identity_check import GitIdentityCheck
 from litterbox.gui.main_window.home_actions import HomeActions
 from litterbox.gui.main_window.home_view import HomeView
 from litterbox.gui.main_window.layout import WindowLayout
@@ -71,7 +72,7 @@ AUTO_GET_LATEST_ON_START = False
 class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateChecks, OrgSwitching, BackgroundJobs,
           HomeView, HomeActions, PartsList, TaskActions, TeamAdmin, CreateActions, CheckoutActions, CheckinActions, ReleaseActions,
           ReviseActions, OpenActions, ReferenceActions, DetailsActions, ExportActions, GenerateActions, DocumentActions,
-          SolidWorksWatch, FileRules, RecordUpgrade, ToolboxSetting, ProblemReports, ctk.CTk):
+          SolidWorksWatch, FileRules, RecordUpgrade, ToolboxSetting, GitIdentityCheck, ProblemReports, ctk.CTk):
     """The main Litterbox window. Each area lives in its own file (the classes above); this file starts the window
     and holds the small helpers every area uses."""
 
@@ -97,8 +98,8 @@ class App(WindowLayout, Menus, Sidebar, StatusBar, DetailPane, TextSize, UpdateC
         self.title(f"Litterbox {version.display()}")
         self.text_size = ui_scale.text_size(self.settings)
         scaling.set_text_size(self.text_size)
-        self.geometry("1220x760")
-        self.minsize(860, 540)
+        window_chrome.set_size(self, 1220, 760)
+        window_chrome.min_size(self, 860, 540)
         self.scale = scaling.scale_of(self)
         self.icons = icon_images.IconImages(self, window_chrome.ASSETS_DIR, window_chrome.ICON_SETTING["choice"])
 

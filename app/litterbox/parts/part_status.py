@@ -57,6 +57,7 @@ class PartStatus:
     purchasing: dict = field(default_factory=dict)  # supplier, supplier_pn, unit_cost, lead_time_days (purchasing_info.py)
     currency: str = ""                  # the team's currency (core/currency.py), for showing unit_cost; "" for none
     bom_file_needed: bool = False       # its released revision's BOM file still needs saving (record_exports.bom_flagged)
+    incoming: bool = False              # its request is as the server has it, newer than this copy (incoming_requests.py)
 
 
 def released_revisions(record):

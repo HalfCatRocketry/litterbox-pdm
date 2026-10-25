@@ -33,7 +33,7 @@ class PartPickerDialog(modal_dialog.ModalDialog):
         width, height = 640, 520
         self.title("Add Parts")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(480, 380)
+        window_chrome.min_size(self, 480, 380)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)

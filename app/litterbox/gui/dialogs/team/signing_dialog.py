@@ -21,7 +21,7 @@ class SigningDialog(ctk.CTkToplevel):
         window_chrome.set_window_icon(self)
         self.repo = repo
         self.title("Signing")
-        self.geometry("560x420")
+        window_chrome.set_size(self, 560, 420)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(2, weight=1)

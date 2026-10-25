@@ -85,7 +85,7 @@ class CommentDialog(modal_dialog.ModalDialog):
         width, height = 560, min(560, 300 + 22 * len(lines))
         self.title(title)
         window_chrome.place_over(self, parent, width, height)
-        self.minsize(420, 300)
+        window_chrome.min_size(self, 420, 300)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)

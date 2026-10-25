@@ -29,7 +29,7 @@ class DocTypesDialog(modal_dialog.ModalDialog):
         width, height = 640, 520
         self.title("Document Types")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(520, 420)
+        window_chrome.min_size(self, 520, 420)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)

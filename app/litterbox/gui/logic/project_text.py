@@ -6,6 +6,9 @@ it (checked as you type), and the questions before a project is added, changed o
 from litterbox.core import part_number
 from litterbox.core import projects as project_rules
 
+SHORT_NOTE = ("As an Admin you may go ahead anyway. Anyone else is refused digits this few (Team > Vault Settings... "
+              "sets the minimum).")
+
 
 def project_lines(projects):
     """One line per project for the window's list."""

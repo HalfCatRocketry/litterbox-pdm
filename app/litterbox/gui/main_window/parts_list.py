@@ -32,6 +32,7 @@ from litterbox.parts import part_status
 from litterbox.team import team_identity
 from litterbox.user import settings
 from litterbox.vault import project_visibility
+from litterbox.workflows import incoming_requests
 
 FIRST_COLUMN = "#0"             # the tick box and status icon
 
@@ -302,12 +303,13 @@ class PartsList:
             if project_visibility.apply(repo, who):           # a hidden project's parts came or went
                 rows = part_status.get_status(repo)
             folders = home_data.load(repo)                    # Home's folders, projects and ECO titles
+            incoming = incoming_requests.read(repo) if behind else {}   # My Tasks without Get Latest
             if diagnostics.DEBUG:
                 diagnostics.LOG(f"Refreshed the list in {time.monotonic() - started:.1f}s")
-            return rows, who, behind, docs, folders
+            return rows, who, behind, docs, folders, incoming
 
         def show(result):
-            rows, who, behind, docs, folders = result
+            rows, who, behind, docs, folders, self.incoming_requests = result
             self.home_trees, self.home_projects, self.eco_titles = folders
             self._load_personal()                             # this org's (the org may have just changed)
             self.doc_rows = docs
@@ -319,6 +321,9 @@ class PartsList:
             self._check_file_rules()
             self._check_record_upgrade()
             self._check_toolbox_setting()
+            self._check_git_identity()
+            for then in self.__dict__.pop("_after_refresh", []):     # waiting for this list (get_latest's `then`)
+                then()
 
         self.run_task(work, "Up to date", on_success=show, refresh=False, is_refresh=True, label="Refreshing the list",
                       kind="refresh")
@@ -391,13 +396,20 @@ class PartsList:
             self._render_home()
         return len(rows)
 
-    def get_latest(self):
+    def get_latest(self, then=None):
+        """Get Latest. `then()` is called once the list has been refreshed with what it brought."""
         repo = self.repo()
         others = [f for row in getattr(self, "rows", []) if row.kind != "mine" for f in row.files]
         if not self._closed_in_solidworks(others):         # a download may replace a file open in SolidWorks
             return
+
+        def got(changed):
+            if then is not None:
+                self.__dict__.setdefault("_after_refresh", []).append(then)
+            self._warn_open_files(changed)
+
         self.run_task(lambda: get_latest.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
-                      on_success=lambda changed: self._warn_open_files(changed))
+                      on_success=got)
 
     def download_all(self):
         """Download every CAD file of the vault, not just the ones you use. Get Latest then keeps them all current."""

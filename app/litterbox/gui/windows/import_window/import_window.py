@@ -77,7 +77,7 @@ class ImportWindow(PickPage, TablePage, CellEditing, Finishing, modal_dialog.Mod
         width, height = 1140, 720
         self.title(self.heading)
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(900, 560)
+        window_chrome.min_size(self, 900, 560)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)

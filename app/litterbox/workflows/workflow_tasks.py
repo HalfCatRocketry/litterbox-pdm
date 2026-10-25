@@ -42,6 +42,7 @@ class Task:
     rejected: dict = field(default_factory=dict)           # who rejected it, when and why ({"by", "at", "comment"})
     document: str = ""              # the document a Remove document link request takes off
     requested_by_id: str = ""
+    incoming: bool = False          # the server has it newer than this copy: acting on it gets the latest first
 
     @property
     def pns(self):
@@ -94,7 +95,8 @@ def _task(batch_id, members, key, me):
                 changes={str(m.pn): dict(getattr(m, key).get("change") or {}) for m in members},
                 earlier={str(m.pn): _earlier(m, getattr(m, key)) for m in members},
                 draft=draft, rejected=dict(rejected), document=first.get("document", ""),
-                requested_by_id=first.get("requested_by_id", ""))
+                requested_by_id=first.get("requested_by_id", ""),
+                incoming=any(getattr(m, "incoming", False) for m in members))
 
 
 def _earlier(row, request):

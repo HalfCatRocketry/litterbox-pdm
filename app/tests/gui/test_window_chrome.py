@@ -49,5 +49,60 @@ class WindowEffects(unittest.TestCase):
         self.assertTrue(window.destroyed)
 
 
+class Placed:
+    """A window or its parent, as place_over sees it."""
+
+    def __init__(self, x=0, y=0, width=0, height=0):
+        self.x, self.y, self.width, self.height, self.geometries, self.minimum = x, y, width, height, [], None
+
+    def winfo_rootx(self):
+        return self.x
+
+    def winfo_rooty(self):
+        return self.y
+
+    def winfo_width(self):
+        return self.width
+
+    def winfo_height(self):
+        return self.height
+
+    def geometry(self, text):
+        self.geometries.append(text)
+
+    def minsize(self, width, height):
+        self.minimum = (width, height)
+
+
+class FittingOnScreen(unittest.TestCase):
+    def setUp(self):
+        self.chrome = load_gui_with_fakes(FakeBox()).window_chrome
+
+    def place(self, area, scale, width=1060, height=800, parent=(0, 0, 1920, 1040)):
+        window = Placed()
+        replace(self, self.chrome, "work_area", lambda _w: area)
+        replace(self, self.chrome, "window_scaling", lambda _w: scale)
+        self.chrome.place_over(window, Placed(*parent), width, height, down=4)
+        return window.geometries[-1]
+
+    def test_a_window_that_fits_keeps_its_size(self):
+        self.assertEqual(self.place((0, 0, 1920, 1040), 1.0), "1060x800+430+60")
+
+    def test_a_window_too_tall_for_a_scaled_screen_shrinks_and_stays_on_it(self):
+        # 1080p at 150%: 1040 pixels free above the taskbar is 693 at 100%, less the title bar and edges
+        size, x, y = self.place((0, 0, 1920, 1040), 1.5).replace("+", " ").split()
+        width, height = map(int, size.split("x"))
+        self.assertEqual(height, 693 - self.chrome.TITLE_BAR - 2 * self.chrome.EDGE)
+        self.assertLessEqual(int(y) + round(height * 1.5) + round(self.chrome.TITLE_BAR * 1.5), 1040)
+        self.assertEqual(width, 1060)
+
+    def test_the_minimum_size_never_exceeds_the_screen(self):
+        window = Placed()
+        replace(self, self.chrome, "work_area", lambda _w: (0, 0, 1280, 700))
+        replace(self, self.chrome, "window_scaling", lambda _w: 1.25)
+        self.chrome.min_size(window, 900, 620)
+        self.assertEqual(window.minimum, (900, 560 - self.chrome.TITLE_BAR - 2 * self.chrome.EDGE))
+
+
 if __name__ == "__main__":
     unittest.main()

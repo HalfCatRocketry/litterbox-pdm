@@ -22,8 +22,8 @@ class LegendDialog(ctk.CTkToplevel):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.title("Status icons")
-        self.geometry("560x560")
-        self.minsize(420, 360)
+        window_chrome.set_size(self, 560, 560)
+        window_chrome.min_size(self, 420, 360)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         ctk.CTkLabel(self, text="What the icons in the parts list mean", font=ctk.CTkFont(size=16, weight="bold"),

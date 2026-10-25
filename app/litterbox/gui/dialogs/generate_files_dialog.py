@@ -35,7 +35,7 @@ class GenerateFilesDialog(modal_dialog.ModalDialog):
         width, height = 640, 600
         self.title("Generate STEP/PDF")
         window_chrome.place_over(self, parent, width, height, down=4)
-        self.minsize(520, 480)
+        window_chrome.min_size(self, 520, 480)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(7, weight=1)

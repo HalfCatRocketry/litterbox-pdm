@@ -32,7 +32,7 @@ class FolderPickerDialog(modal_dialog.ModalDialog):
         width, height = 480, 560
         self.title("Add to Folder")
         window_chrome.place_over(self, parent, width, height)
-        self.minsize(380, 400)
+        window_chrome.min_size(self, 380, 400)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
