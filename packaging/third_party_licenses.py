@@ -17,6 +17,7 @@ import importlib.metadata
 import re
 import shutil
 import sys
+import sysconfig
 from pathlib import Path
 
 from packaging.requirements import Requirement
@@ -94,6 +95,14 @@ def _licence_of(dist):
     return text.strip()
 
 
+def python_licence():
+    """Python's LICENSE.txt: beside python.exe on Windows, in the standard library's folder elsewhere."""
+    for path in (Path(sys.base_prefix) / "LICENSE.txt", Path(sysconfig.get_paths()["stdlib"]) / "LICENSE.txt"):
+        if path.is_file():
+            return path
+    raise SystemExit("Python's LICENSE.txt was not found, so it can't go in the build.")
+
+
 def write(out, root, build_tools=BUILD_TOOLS):
     """Fill `out` (made afresh) with the licences, and README.txt listing them. `root` is the repository."""
     out, root = Path(out), Path(root)
@@ -113,7 +122,7 @@ def write(out, root, build_tools=BUILD_TOOLS):
 
     put("Litterbox", {"LICENSE.txt": root / "LICENSE"}, "Litterbox", "MIT")
     python = f"Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    put(python, {"LICENSE.txt": Path(sys.base_prefix) / "LICENSE.txt"},
+    put(python, {"LICENSE.txt": python_licence()},
         f"Python {python.split('-')[1]}", "PSF-2.0, with Tcl/Tk, OpenSSL, zlib and the rest its build includes")
     names = runtime_requirements((root / "requirements.txt").read_text(encoding="utf-8"))
     dists = with_dependencies(names) + [importlib.metadata.distribution(name) for name in build_tools]
