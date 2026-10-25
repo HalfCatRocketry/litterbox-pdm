@@ -29,6 +29,7 @@ from litterbox.git import runner
 from litterbox.user import settings
 
 ADDRESS = "contact+litterbug@halfcatrocketry.com"
+PRIVACY_URL = "https://github.com/HalfCatRocketry/litterbox-pdm/blob/main/PRIVACY.md"     # what is done with reports
 REPORTS_DIR = settings.LOG_FILE.parent / "reports"
 KEEP = 5                            # older reports are deleted when a new one is made
 LOG_BYTES = 2_000_000               # at most this much of each log file goes in (its end)
@@ -160,7 +161,7 @@ def contents_text(items):
     """CONTENTS.txt: each file in the report and what it holds, what was taken out, and what is never in one."""
     lines = ["This Litterbox problem report holds:", ""]
     lines += [f"{item.name}\n    {item.what}" for item in items]
-    lines += [f"{CONTENTS}\n    This list.", "", TAKEN_OUT, NEVER_IN]
+    lines += [f"{CONTENTS}\n    This list.", "", TAKEN_OUT, NEVER_IN, "", f"What is done with reports: {PRIVACY_URL}"]
     return "\n".join(lines) + "\n"
 
 

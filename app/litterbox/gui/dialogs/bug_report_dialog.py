@@ -1,13 +1,15 @@
 """
 bug_report_dialog.py - Help > Report a problem: exactly what goes in the report (each file, about how big, and what
 it holds), tick boxes to leave out the log or the settings, and the comment it needs (what you were doing when the
-problem happened). show() gives (comment, leave_out), or None for Cancel.
+problem happened), with a link to the privacy policy (what is done with reports). show() gives (comment,
+leave_out), or None for Cancel.
 
 `list_contents(leave_out)` gives the report's items (user/bug_report.contents for the open vault), so the list shown
 is the one the report is made from.
 """
 
 import tkinter as tk
+import webbrowser
 
 import customtkinter as ctk
 
@@ -23,7 +25,7 @@ LOG, SETTINGS = "log", "settings"           # user/bug_report.LOG and SETTINGS
 class BugReportDialog(modal_dialog.ModalDialog):
     FOCUS = "comment"
 
-    def __init__(self, parent, address, problems=0, list_contents=None, taken_out="", never_in=""):
+    def __init__(self, parent, address, problems=0, list_contents=None, taken_out="", never_in="", privacy_url=""):
         super().__init__(parent)
         window_chrome.set_window_icon(self)
         self.result = None
@@ -52,9 +54,16 @@ class BugReportDialog(modal_dialog.ModalDialog):
                                                 (bug_report_text.INCLUDE_SETTINGS, self.include_settings)), start=4):
             ctk.CTkCheckBox(self, text=text, variable=variable, command=self._show_items).grid(
                 row=row, column=0, sticky="w", padx=20, pady=(6, 0))
-        ctk.CTkLabel(self, text=f"{taken_out} {never_in}".strip(), anchor="w", justify="left",
-                     wraplength=width - 40, text_color=theme.MUTED).grid(row=6, column=0, sticky="ew", padx=20,
-                                                                          pady=(8, 0))
+        notes = ctk.CTkFrame(self, fg_color="transparent")
+        notes.grid(row=6, column=0, sticky="ew", padx=20, pady=(8, 0))
+        notes.columnconfigure(0, weight=1)
+        ctk.CTkLabel(notes, text=f"{taken_out} {never_in}".strip(), anchor="w", justify="left",
+                     wraplength=width - 40, text_color=theme.MUTED).grid(row=0, column=0, sticky="ew")
+        if privacy_url:
+            link = ctk.CTkLabel(notes, text=bug_report_text.PRIVACY_LINK, anchor="w", text_color=theme.LINK,
+                                cursor="hand2")
+            link.grid(row=1, column=0, sticky="w", pady=(2, 0))
+            link.bind("<Button-1>", lambda event: webbrowser.open(privacy_url))
         ctk.CTkLabel(self, text=bug_report_text.PROMPT + ":", anchor="w").grid(
             row=7, column=0, sticky="ew", padx=20, pady=(12, 2))
         self.comment = ctk.CTkTextbox(self, fg_color=theme.BG_PANEL, wrap="word", height=90,

@@ -83,6 +83,7 @@ class MakingTheReport(unittest.TestCase):
             for name in listed:
                 self.assertIn(name, contents)
             self.assertIn("Never in a report", contents)
+            self.assertIn(bug_report.PRIVACY_URL, contents)
 
     def test_leaving_things_out(self):
         names = lambda leave_out: [item.name for item in bug_report.contents(str(self.vault), leave_out)]

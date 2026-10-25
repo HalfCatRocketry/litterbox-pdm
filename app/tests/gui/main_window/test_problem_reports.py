@@ -45,6 +45,7 @@ class ReportWiring(unittest.TestCase):
         list_contents(("log",))
         self.assertEqual(listed, [("C:/Litterbox/vault", ("log",))])
         self.assertIn("Never in a report", made[0][5])
+        self.assertTrue(made[0][6].endswith("/PRIVACY.md"))                # the window links to the privacy policy
 
     def test_what_is_left_out_is_left_out_of_the_report(self):
         self.answer_dialog(("It froze", ("log",)))

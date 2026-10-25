@@ -29,7 +29,7 @@ class ProblemReports:
         repo, org = self.repo(), self.org
         answer = bug_report_dialog.BugReportDialog(
             parent or self, bug_report.ADDRESS, len(problems), lambda leave_out: bug_report.contents(repo, leave_out),
-            bug_report.TAKEN_OUT, bug_report.NEVER_IN).show()
+            bug_report.TAKEN_OUT, bug_report.NEVER_IN, bug_report.PRIVACY_URL).show()
         if answer is None:
             return
         comment, leave_out = answer

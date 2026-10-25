@@ -9,6 +9,7 @@ CONTENTS_HEADING = "What goes in the report"
 INCLUDE_LOG = "Include Litterbox's log (often how the problem is found)"
 INCLUDE_SETTINGS = "Include your Litterbox settings and this vault's shared settings"
 OPEN_QUESTION = "Open the report to look at it before you send it?"
+PRIVACY_LINK = "What is done with reports: the privacy policy (opens in your browser)"
 
 
 def intro(address, problems):

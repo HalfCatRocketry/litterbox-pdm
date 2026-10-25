@@ -46,6 +46,7 @@ BANNER_YELLOW = "#d9a520"
 GREEN_TEXT = "#5fd38d"
 
 ERROR = "#e06c75"
+LINK = "#61afef"                    # text that opens a web page when clicked
 
 # Row colors in the list, by the "kind" of status (see litterbox_engine.PartStatus)
 ROW_COLORS = {
