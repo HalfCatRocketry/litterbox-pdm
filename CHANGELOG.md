@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- **The Workflows table scrolls sideways.** When the window is too narrow for every column, a scrollbar under the table brings the rest into view, and resting the mouse on a cell that is cut off shows all of its text (a rejection's full comment, for example).
+- **The user guide walks through creating a new part step by step**, including copying the part number Litterbox gives and pasting it into SolidWorks' Save As.
+
 ## 1.0.1
 
 - **Report a problem links to the privacy policy.** The window has a link to what is done with reports (PRIVACY.md, opened in your browser), and the report's CONTENTS.txt names it too.

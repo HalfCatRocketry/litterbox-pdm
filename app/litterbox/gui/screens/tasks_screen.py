@@ -3,9 +3,11 @@ tasks_screen.py - Workflows: the sign-off requests waiting (a screen of the main
 My Tasks lists the requests you are named to sign or asked for, and your rejected requests waiting to be changed;
 Review opens one (review_dialog.py, or the Workflow window for a rejected one). Admins and superusers also get All
 Workflows: every request, where an Admin can Override Approve or Override Reject, and a superuser can sign for
-anyone.
+anyone. The columns keep their widths (Status takes any room left over); when they don't all fit, the table scrolls
+sideways, and resting the mouse on a cell that doesn't fully show shows all of it.
 """
 
+import tkinter.font as tkfont
 from tkinter import ttk
 
 import customtkinter as ctk
@@ -14,9 +16,11 @@ from litterbox.gui import theme
 from litterbox.gui.logic import task_text
 from litterbox.gui.widgets import release_button
 from litterbox.gui.widgets import table_sorting
+from litterbox.gui.widgets import tooltip
 from litterbox.workflows import workflow_tasks
 
 MY_TASKS, ALL_WORKFLOWS = "My Tasks", "All Workflows"
+PAD = 12                        # room either side of a cell's text
 
 
 # (key, text, colour, hover colour, width) of each list's buttons
@@ -91,12 +95,16 @@ class TaskList(ctk.CTkFrame):
         self.tree = ttk.Treeview(frame, columns=[c[0] for c in task_text.TASK_COLUMNS], show="headings",
                                  selectmode="browse")
         for name, _title, width in task_text.TASK_COLUMNS:
-            self.tree.column(name, width=width, anchor="w")
+            self.tree.column(name, width=width, minwidth=width if name == "status" else 20, anchor="w",
+                             stretch=name == "status")
         table_sorting.TableSorter(self.tree, [(c[0], c[1]) for c in task_text.TASK_COLUMNS])
-        self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
+        self.tree.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=(8, 0))
         scroll = ctk.CTkScrollbar(frame, command=self.tree.yview)
-        scroll.grid(row=0, column=1, sticky="ns", pady=8, padx=(0, 4))
-        self.tree.configure(yscrollcommand=scroll.set)
+        scroll.grid(row=0, column=1, sticky="ns", pady=(8, 0), padx=(0, 4))
+        across = ctk.CTkScrollbar(frame, orientation="horizontal", command=self.tree.xview)
+        across.grid(row=1, column=0, sticky="ew", padx=(8, 0), pady=(0, 4))
+        self.tree.configure(yscrollcommand=scroll.set, xscrollcommand=across.set)
+        tooltip.TableTooltip(self.tree, self._cell_tooltip)
         self.tree.bind("<<TreeviewSelect>>", lambda event: self._update_buttons())
         if not everything:
             self.tree.bind("<Double-1>", lambda event: self._act("review"))
@@ -126,6 +134,22 @@ class TaskList(ctk.CTkFrame):
                 self.tree.selection_set(iid)
         self._show_buttons()
         self._update_buttons()
+
+    def _font(self):
+        return tkfont.Font(font=ttk.Style().lookup("Treeview", "font") or "TkDefaultFont")
+
+    def _cell_tooltip(self, iid, column):
+        """The whole of a cell when it doesn't fully show (a narrow column, or scrolled partly out of sight)."""
+        try:
+            text = str(self.tree.set(iid, self.tree.column(column, "id")))
+            box = self.tree.bbox(iid, column)
+            if not text or not box:
+                return text
+            x, _y, width, _height = box
+            fits = x >= 0 and x + width <= self.tree.winfo_width() and self._font().measure(text) + PAD <= width
+            return "" if fits else text
+        except Exception:
+            return ""
 
     def _show_buttons(self):
         """On All Workflows, the superuser button shows only for a superuser and the overrides only for an Admin."""
