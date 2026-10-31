@@ -68,7 +68,7 @@ class CreateFailures(CreateFixture, unittest.TestCase):
             with mock.patch.object(runner, "run", flaky):
                 with self.assertRaises(create.CreateError) as ctx:
                     create.new_part(self.a, "Lost connection")
-            self.assertIn("can't be reached", str(ctx.exception))
+            self.assertIn("Are you online?", str(ctx.exception))
             self.assertEqual(self.record_names(self.a), ["HCR-00001-001.yaml"])
             self.assert_clean(self.a)
 

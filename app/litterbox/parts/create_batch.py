@@ -133,8 +133,8 @@ def sync_latest(repo):
     try:
         create.sync_vault(repo)
     except LitterboxError as e:
-        raise create.CreateError(f"Could not get the latest records from the vault, so nothing was created. "
-                          f"Are you online?\n\n{e}") from e
+        raise create.CreateError(f"Could not get the latest records from the vault, so nothing was created."
+                          f"{create.online_hint(e)}\n\n{e}") from e
 
 
 @create.friendly
@@ -186,8 +186,8 @@ def create_planned(repo, specs, planned, extra_paths=(), message=None):
             try:
                 create.sync_vault(repo)
             except LitterboxError as sync_error:
-                raise create.CreateError("The parts could not be created, and the vault can't be reached right now. "
-                                  f"Nothing was changed. Are you online?\n\n{sync_error}") from e
+                raise create.CreateError("The parts could not be created, and the latest records could not be got. "
+                                  f"Nothing was changed.{create.online_hint(sync_error)}\n\n{sync_error}") from e
             raise NumbersTaken(f"The numbers could not be pushed (someone else may have just used one):\n\n{e}") from e
         except BaseException:
             _undo_batch(repo, written, committed, pathspec)
@@ -221,8 +221,8 @@ def create_many(repo, specs, org=None, message=None):
     try:
         create.sync_vault(repo)
     except LitterboxError as e:
-        raise create.CreateError(f"Could not get the latest records from the vault, so nothing was created. "
-                          f"Are you online?\n\n{e}") from e
+        raise create.CreateError(f"Could not get the latest records from the vault, so nothing was created."
+                          f"{create.online_hint(e)}\n\n{e}") from e
     org = create.resolve_org(repo, org)
 
     last_error = None
@@ -260,8 +260,8 @@ def create_many(repo, specs, org=None, message=None):
             try:
                 create.sync_vault(repo)
             except LitterboxError as sync_error:
-                raise create.CreateError("The parts could not be created, and the vault can't be reached right now. "
-                                  f"Nothing was changed. Are you online?\n\n{sync_error}") from e
+                raise create.CreateError("The parts could not be created, and the latest records could not be got. "
+                                  f"Nothing was changed.{create.online_hint(sync_error)}\n\n{sync_error}") from e
             continue
         except BaseException:
             _undo_batch(repo, written, committed, pathspec)

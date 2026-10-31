@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 BLOCKS = [
 ("h1", "Foreword"),                     # the owner's words: keep them as written

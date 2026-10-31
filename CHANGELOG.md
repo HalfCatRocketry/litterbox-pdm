@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3
+
+- **Getting the latest no longer trips over a part open in SolidWorks.** Before, any action that gets the latest (Get Latest, Create Part, Check Out, Revise, and others) could fail with "unable to unlink old ..." if a file you had saved but not checked in was open in SolidWorks, even when there was nothing new to get. Now your own changed files are left alone: when nothing is new, nothing is done, and otherwise only the files others changed are updated.
+- **A sync that stopped part-way can't leave the vault stuck.** If one did, every later sync used to fail until it was cleared by hand. Litterbox now clears it itself, and keeps a copy of your changed files in git's stash list.
+- **Clearer messages when getting the latest fails.** "Are you online?" is asked only when the vault's server couldn't be reached. When a file couldn't be updated because another program has it open, the message names the file and says to close it and try again.
+
 ## 1.0.2
 
 - **The Workflows table scrolls sideways.** When the window is too narrow for every column, a scrollbar under the table brings the rest into view, and resting the mouse on a cell that is cut off shows all of its text (a rejection's full comment, for example).

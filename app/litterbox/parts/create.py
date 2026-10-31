@@ -144,8 +144,14 @@ def chosen_project(repo, project):
 
 
 def sync_vault(repo):
-    """Download the latest records. Local edits to checked-out files are set aside and put back."""
+    """Download the latest records. Local edits to checked-out files are left as they are."""
     remote.sync(repo)
+
+
+def online_hint(error):
+    """The words " Are you online?" when a sync failed because the vault's server couldn't be reached, and nothing
+    otherwise (a sync can also fail on this computer, e.g. a file open in SolidWorks)."""
+    return " Are you online?" if isinstance(error, remote.UnreachableError) else ""
 
 
 def describe_number(repo, org, base, variant=None):
@@ -201,8 +207,8 @@ def _create(repo, name, description, org, choose, noncad=False):
     try:
         sync_vault(repo)
     except LitterboxError as e:
-        raise CreateError(f"Could not get the latest records from the vault, so nothing was created. "
-                           f"Are you online?\n\n{e}") from e
+        raise CreateError(f"Could not get the latest records from the vault, so nothing was created."
+                           f"{online_hint(e)}\n\n{e}") from e
     org = resolve_org(repo, org)
 
     last_error = None
@@ -238,8 +244,8 @@ def _create(repo, name, description, org, choose, noncad=False):
                 sync_vault(repo)
             except LitterboxError as sync_error:
                 raise CreateError(
-                    f"{pn} could not be created, and the vault can't be reached right now. "
-                    f"Nothing was changed. Are you online?\n\n{sync_error}") from e
+                    f"{pn} could not be created, and the latest records could not be got. "
+                    f"Nothing was changed.{online_hint(sync_error)}\n\n{sync_error}") from e
             continue
         except BaseException:
             undo_creation(repo, record_path, committed, config_rel)

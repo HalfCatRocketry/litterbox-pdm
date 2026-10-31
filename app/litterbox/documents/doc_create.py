@@ -52,7 +52,8 @@ def new_document(repo, type_key, title, description=""):
     try:
         remote.sync(repo)
     except LitterboxError as e:
-        raise LitterboxError(f"Could not get the latest from the vault, so nothing was created. Are you online?\n\n{e}")
+        raise LitterboxError(f"Could not get the latest from the vault, so nothing was created."
+                             f"{create.online_hint(e)}\n\n{e}") from e
     last_error = None
     for _attempt in range(ATTEMPTS):
         kind = type_for(repo, type_key)                 # read again each time: the vault may have just changed

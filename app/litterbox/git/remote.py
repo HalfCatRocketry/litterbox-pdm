@@ -6,11 +6,16 @@ demand, a pull leaves every changed CAD file as a pointer, so the files that wer
 downloaded again: what you had stays downloaded, and nothing else is. A pull that can't finish (someone
 else changed the same file) is undone, so your copy is never left half-way.
 
-A sync (sync) is what `git pull --rebase --autostash` does, in its two steps: fetch, then rebase. Between them, files
-of a checkout an Admin broke are put back (set_aside_broken_checkouts), so they can't stop the sync. The fetch is the
-only time the vault's server is asked anything.
+A sync (sync) fetches, then brings in what is new without touching your own changed files: if nothing is new, nothing
+is done; otherwise a fast-forward, which only rewrites the files the new commits changed. Only when you have commits of
+your own not yet uploaded (a push failed), or a new commit changes a file you have changed too, does it fall back to
+`git rebase --autostash`, which sets every changed file aside and back. That rewrites them, and Windows won't let git
+rewrite a file another program (SolidWorks) has open. Between the fetch and the rest, files of a checkout an Admin
+broke are put back (set_aside_broken_checkouts), so they can't stop the sync. The fetch is the only time the vault's
+server is asked anything.
 """
 
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +29,10 @@ from litterbox.git import read_only
 from litterbox.git import repository
 from litterbox.git import runner
 from litterbox.util import file_snapshot
+
+
+class UnreachableError(LitterboxError):
+    """The vault's server could not be reached (the fetch failed): offline, or the server is down."""
 
 
 RECOVERED = []          # (folder, [files]) saved by set_aside_broken_checkouts, for the window to tell you about
@@ -91,16 +100,47 @@ def set_aside_broken_checkouts(repo):
 
 
 def sync(repo):
-    """Get the newest commits: fetch, put back the files of a broken checkout, then rebase your own commits (and set
-    your other changes aside and back) on top. Raises LitterboxError if the server can't be reached or the rebase
-    can't finish (it is undone first)."""
-    runner.run(["git", "fetch"], repo)
-    set_aside_broken_checkouts(repo)
+    """Get the newest commits: fetch, put back the files of a broken checkout, then bring in what is new (see the top
+    of this file). Raises UnreachableError if the server can't be reached, and LitterboxError if what is new can't be
+    brought in (a rebase is undone first)."""
     try:
-        runner.run(["git", "rebase", "--autostash"], repo)
-    except LitterboxError:
-        _abort_rebase(repo)                     # never leave your copy half-way through a sync
-        raise
+        runner.run(["git", "fetch"], repo)
+    except LitterboxError as e:
+        raise UnreachableError(str(e)) from e
+    set_aside_broken_checkouts(repo)
+    ahead, behind = (int(n) for n in runner.run(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...@{upstream}"], repo, quiet=True).split())
+    if not behind:
+        return                                  # nothing new: your files are left alone
+    try:
+        if not ahead and not _changes_clash(repo):
+            runner.run(["git", "merge", "--ff-only", "@{upstream}"], repo)
+            return
+        try:
+            runner.run(["git", "rebase", "--autostash"], repo)
+        except LitterboxError:
+            _abort_rebase(repo)                 # never leave your copy half-way through a sync
+            raise
+    except LitterboxError as e:
+        raise _explain_open_files(e) from e
+
+
+def _changes_clash(repo):
+    """Whether a new commit changes a file you have changed (or added) too, which a fast-forward refuses."""
+    incoming = runner.run(["git", "diff", "--name-only", "HEAD..@{upstream}"], repo, quiet=True).splitlines()
+    modified = repository.get_modified(repo) if incoming else set()
+    return any(path.lower() in modified for path in incoming)
+
+
+def _explain_open_files(error):
+    """A sync that couldn't replace a file (git's "unable to unlink old '<file>'") met a file another program, usually
+    SolidWorks, has open. Say so; any other error is returned as it is."""
+    files = list(dict.fromkeys(re.findall(r"unable to unlink old '([^']+)'", str(error))))
+    if not files:
+        return error
+    names = "\n".join(f"  {name}" for name in files)
+    return LitterboxError(f"Could not update these files, because another program (usually SolidWorks) has them "
+                          f"open:\n{names}\n\nClose them and try again.\n\n{error}")
 
 
 def pull(repo):
@@ -123,10 +163,22 @@ def _abort_rebase(repo):
     try:
         states = [runner.run(["git", "rev-parse", "--git-path", name], repo, quiet=True).strip()
                   for name in ("rebase-merge", "rebase-apply")]
-        if any((Path(repo) / state).exists() for state in states):
-            runner.run(["git", "rebase", "--abort"], repo, quiet=True)
+        if not any((Path(repo) / state).exists() for state in states):
+            return
     except LitterboxError as e:
         diagnostics.LOG(f"WARNING: could not undo an unfinished sync: {e}")
+        return
+    try:
+        runner.run(["git", "rebase", "--abort"], repo, quiet=True)
+    except LitterboxError as e:
+        # A rebase that failed before it began (its autostash couldn't clear a file) leaves a folder --abort can't
+        # read. --quit removes it, leaves your files as they are, and saves the autostash to the stash list.
+        try:
+            runner.run(["git", "rebase", "--quit"], repo, quiet=True)
+            diagnostics.LOG("WARNING: an unfinished sync was cleared. A copy of your changed files was kept in git's "
+                            "stash list (git stash list), in case any of them were put back.")
+        except LitterboxError as quit_error:
+            diagnostics.LOG(f"WARNING: could not undo an unfinished sync: {e}\n{quit_error}")
 
 
 def commits_behind(repo):
