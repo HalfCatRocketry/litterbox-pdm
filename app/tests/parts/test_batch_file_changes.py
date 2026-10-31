@@ -72,8 +72,8 @@ class BatchFileChanges(BatchFixture, unittest.TestCase):
             checkin.checkin(self.b, PART, "Bea")
         with self.user("Alex"):
             before = (self.a / cad(self.pns[0])).stat().st_mtime_ns
-            remote.pull(self.a)                                           # git stashes and restores Alex's edits
-            self.assertNotEqual((self.a / cad(self.pns[0])).stat().st_mtime_ns, before)   # so the time did change
+            remote.pull(self.a)                                           # a fast-forward: Alex's edits are left alone
+            self.assertEqual((self.a / cad(self.pns[0])).stat().st_mtime_ns, before)      # so the time didn't change
             done, failed = checkin.checkin_many(self.a, self.pns[:2], "Tweaks", snapshot=snap)
             self.assertEqual((len(done), failed), (2, []))
 
