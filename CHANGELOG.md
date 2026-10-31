@@ -1,5 +1,7 @@
 # Changelog
 
+## 1.0.4
+
 ## 1.0.3
 
 - **Getting the latest no longer trips over a part open in SolidWorks.** Before, any action that gets the latest (Get Latest, Create Part, Check Out, Revise, and others) could fail with "unable to unlink old ..." if a file you had saved but not checked in was open in SolidWorks, even when there was nothing new to get. Now your own changed files are left alone: when nothing is new, nothing is done, and otherwise only the files others changed are updated.
