@@ -8,6 +8,7 @@ saved. With `solidworks_popups: false` the warnings go to the log and the status
 from tkinter import messagebox
 
 from litterbox.cad import cad_programs
+from litterbox.cad import open_documents
 from litterbox.gui.logic import solidworks_text
 from litterbox.user import settings
 
@@ -47,6 +48,9 @@ class SolidWorksWatch:
     def _solidworks_changed(self, changes):
         """Called on the window's thread with the watcher's changes."""
         self._note_solidworks()
+        closed = [c.document.path for c in changes if c.what == open_documents.Change.CLOSED]
+        if closed and hasattr(self, "_mark_stale"):
+            self._mark_stale([], closed)            # opened again, it shows the file on disk
         busy = self.jobs.pending_parts()
         if not busy:
             return

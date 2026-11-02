@@ -1,9 +1,10 @@
 """
 solidworks_text.py - what the window does with what SolidWorks has open (see cad/solidworks/sw_watcher.py): which
-of a set of vault files are open or unsaved, the questions and warnings about them, and making open documents
-writable after a check-out (cad/solidworks/sw_reload.py).
+of a set of vault files are open or unsaved, the questions and warnings about them, making open documents
+writable after a check-out (cad/solidworks/sw_reload.py), and Refresh Read State.
 """
 
+import os
 from pathlib import PurePosixPath
 
 from litterbox.core import file_types
@@ -83,6 +84,53 @@ def writable_failed_text(failed):
     """The status line when some couldn't be made writable: [(path, why)]."""
     return (f"Couldn't make {_file_names([path for path, _why in failed])} writable in SolidWorks: in SolidWorks, "
             "use File > Reload with Read-only unticked")
+
+
+def in_vault(repo, path):
+    """True if this full path is a file inside the vault."""
+    return open_documents.key(path).startswith(open_documents.key(repo) + os.sep)
+
+
+def read_state_plan(found, writable, stale):
+    """Refresh Read State: make each open vault document (OpenDocuments, `found`) match its file on disk
+    (`writable`: {key(path): True if the file may be written}; a document with no entry is left alone). Returns
+    (switch, reload, ask, lock), lists of the program's own paths: `switch` are made writable where they are;
+    `reload` are those a check-out downloaded a newer version of while they were open (`stale`: keys), loaded again
+    so the old copy can't be saved over the new one; `ask` are the ones to reload that have unsaved changes; `lock`
+    are made read-only, because their file is."""
+    switch, reload, ask, lock = [], [], [], []
+    for doc in found:
+        key = open_documents.key(doc.path)
+        if key not in writable:
+            continue
+        if writable[key] and doc.read_only:
+            (reload if key in stale else switch).append(doc.path)
+            if key in stale and doc.unsaved:
+                ask.append(doc.path)
+        elif not writable[key] and not doc.read_only:
+            lock.append(doc.path)
+    return switch, reload, ask, lock
+
+
+def read_only_done_text(paths, unsaved):
+    """The status line after open documents were made read-only (`unsaved`: those with unsaved changes)."""
+    text = f"{_file_names(paths)} {'is' if len(paths) == 1 else 'are'} now read-only in SolidWorks"
+    if unsaved:
+        text += f" (to keep the unsaved changes in {_file_names(unsaved)}, use Save As)"
+    return text
+
+
+def read_only_failed_text(failed):
+    """The status line when some couldn't be made read-only: [(path, why)]."""
+    return (f"Couldn't make {_file_names([path for path, _why in failed])} read-only in SolidWorks: in SolidWorks, "
+            "use File > Reload with Read-only ticked")
+
+
+def read_state_unchanged_text(running):
+    """The status line when Refresh Read State had nothing to do."""
+    if not running:
+        return "SolidWorks isn't running"
+    return "Everything this vault has open in SolidWorks is already read-only or writable as it should be"
 
 
 def still_old(repo, changed, done):

@@ -1,6 +1,7 @@
 """
-Tests for making open SolidWorks documents writable after a check-out (cad/solidworks/sw_reload.py, the words in
-gui/logic/solidworks_text.py and the window's wiring), with a pretend SolidWorks. The real one can only be tried on
+Tests for making open SolidWorks documents writable after a check-out, and Refresh Read State
+(cad/solidworks/sw_reload.py, the words in gui/logic/solidworks_text.py and the window's wiring), with a pretend
+SolidWorks. The real one can only be tried on
 Windows with SolidWorks installed.
 """
 
@@ -70,6 +71,23 @@ class Reload(unittest.TestCase):
         with mock.patch.object(sw_documents, "attach", lambda: None):
             self.assertEqual(sw_reload.make_writable([PRT])[1], [(PRT, "SolidWorks isn't running")])
 
+    def test_everything_open_is_found_and_made_read_only_keeping_unsaved_changes(self):
+        part = WritableDoc(PRT, unsaved=True)
+        self.solidworks(part, WritableDoc(DRW, read_only=True))
+        self.assertEqual([d.path for d in sw_reload.open_all()], [PRT, DRW])
+        self.assertEqual(sw_reload.make_read_only([PRT]), ([PRT], []))
+        self.assertEqual(part.calls, [("set", True)])
+        self.assertTrue(part.unsaved)
+        with mock.patch.object(sw_documents, "attach", lambda: None):
+            self.assertIsNone(sw_reload.open_all())
+
+    def test_a_document_that_stays_writable_is_reported(self):
+        class Stubborn(WritableDoc):
+            def SetReadOnlyState(self, read_only):
+                self.calls.append(("set", read_only))
+        self.solidworks(Stubborn(PRT))
+        self.assertEqual(sw_reload.make_read_only([PRT]), ([], [(PRT, "SolidWorks kept it writable")]))
+
 
 class ComObjects(unittest.TestCase):
     def test_a_property_that_gives_a_com_object_is_not_called(self):
@@ -101,12 +119,29 @@ class Words(unittest.TestCase):
         self.assertEqual(solidworks_text.still_old(repo, ["cad/HCR-00001-001_A.SLDDRW", "cad/x_A.SLDPRT"], [DRW]),
                          ["cad/x_A.SLDPRT"])
 
+    def test_refresh_matches_each_open_vault_file_to_its_file_on_disk(self):
+        key = sw_reload.open_documents.key
+        elsewhere = os.path.abspath(os.path.join("other", "x.SLDPRT"))
+        self.assertTrue(solidworks_text.in_vault(REPO, PRT))
+        self.assertFalse(solidworks_text.in_vault(REPO, elsewhere))
+        self.assertFalse(solidworks_text.in_vault(REPO, REPO + "-old/cad/a.SLDPRT"))
+        found = [doc(PRT, read_only=True), doc(DRW, read_only=True, unsaved=True), doc(ASM, unsaved=True),
+                 doc(elsewhere, read_only=True)]
+        writable = {key(PRT): True, key(DRW): True, key(ASM): False}
+        self.assertEqual(solidworks_text.read_state_plan(found, writable, {key(DRW)}),
+                         ([PRT], [DRW], [DRW], [ASM]))
+        self.assertEqual(solidworks_text.read_state_plan(found, {key(PRT): False, key(ASM): True}, set()),
+                         ([], [], [], []))                              # already right, or not on disk
+        self.assertIn("Save As", solidworks_text.read_only_done_text([ASM], [ASM]))
+        self.assertIn("Read-only ticked", solidworks_text.read_only_failed_text([(ASM, "busy")]))
+
 
 class Wiring(unittest.TestCase):
     """After a check-out the window asks SolidWorks, then makes what it has open writable, then warns about the rest."""
 
     def setUp(self):
-        self.gui = load_gui_with_fakes(FakeBox())
+        self.box = FakeBox()
+        self.gui = load_gui_with_fakes(self.box)
         from litterbox.core.part_number import PN
         from litterbox.parts.part_status import PartStatus
         self.pn = PN("HCR", 1, 1)
@@ -137,6 +172,57 @@ class Wiring(unittest.TestCase):
         replace(self, sw_reload, "open_read_only", lambda paths: None)
         self.app._after_checkout([(self.pn, SimpleNamespace(changed_upstream=[]))])
         self.assertEqual((self.made, self.warned), ([], [[]]))
+
+
+class RefreshWiring(unittest.TestCase):
+    """Refresh Read State: SolidWorks' open vault files are made to match their files on disk."""
+
+    def setUp(self):
+        Wiring.setUp(self)
+        self.locked = []
+        replace(self, sw_reload, "make_read_only",
+                lambda paths: self.locked.append(list(paths)) or (list(paths), []))
+        self.disk = {}
+        real_access, real_isfile = os.access, os.path.isfile
+        replace(self, os, "access", lambda path, mode: self.disk.get(path, real_access(path, mode)))
+        replace(self, os.path, "isfile", lambda path: path in self.disk or real_isfile(path))
+
+    def open_now(self, *docs):
+        replace(self, sw_reload, "open_all", lambda: list(docs))
+
+    def test_a_writable_file_open_read_only_becomes_writable_and_a_read_only_one_read_only(self):
+        self.disk = {PRT: True, DRW: False}
+        self.open_now(doc(PRT, read_only=True), doc(DRW, unsaved=True))
+        self.app.refresh_read_state()
+        self.assertEqual((self.made, self.locked), ([([PRT], [])], [[DRW]]))
+        self.assertIn("HCR-00001-001_A.SLDPRT is now writable", self.said[-1])
+        self.assertIn("HCR-00001-001_A.SLDDRW is now read-only", self.said[-1])
+
+    def test_a_file_check_out_left_stale_is_reloaded_not_switched(self):
+        self.disk = {PRT: True}
+        self.open_now(doc(PRT, read_only=True, unsaved=True))
+        self.box.answer = False                          # No: keep the unsaved changes
+        self.app._mark_stale([PRT], [])
+        self.app.refresh_read_state()
+        self.assertEqual(self.made, [])                                 # never made writable over the newer file
+        self.box.answer = True
+        self.app.refresh_read_state()
+        self.assertEqual(self.made, [([PRT], [PRT])])
+        self.assertEqual(self.app.stale_in_cad, set())
+
+    def test_nothing_to_do_or_solidworks_not_running_says_so(self):
+        self.disk = {PRT: False}
+        self.open_now(doc(PRT, read_only=True))
+        self.app.refresh_read_state()
+        self.assertIn("already", self.said[-1])
+        replace(self, sw_reload, "open_all", lambda: None)
+        self.app.refresh_read_state()
+        self.assertEqual(self.said[-1], "SolidWorks isn't running")
+        self.assertEqual((self.made, self.locked), ([], []))
+
+    def test_it_is_in_the_part_menu_below_open_pdf(self):
+        menu = self.gui.menus.PART_MENU
+        self.assertEqual(menu[menu.index(("Open PDF", "open_pdf")) + 1], ("Refresh Read State", "refresh_read_state"))
 
 
 if __name__ == "__main__":

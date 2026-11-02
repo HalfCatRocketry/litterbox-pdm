@@ -17,6 +17,8 @@ A CadProgram (one instance per program, e.g. cad/solidworks/sw_program.SOLIDWORK
     open_read_only(paths)        [OpenDocument] of these that it has open read-only; None if it isn't running
     make_writable(paths, reload) make those open documents writable, reloading those in `reload` from disk first;
                                  (done, failed) as ([path], [(path, why)])
+    open_all()                   [OpenDocument] of everything it has open; None if it isn't running
+    make_read_only(paths)        make those open documents read-only where they are; (done, failed) as above
 
 A backend reads and copies files, and makes new ones. None of its calls changes an original file:
 
@@ -85,4 +87,10 @@ class CadProgram:
         return None
 
     def make_writable(self, paths, reload=()):
+        return [], [(path, f"Litterbox can't do that in {self.name}") for path in paths]
+
+    def open_all(self):
+        return None
+
+    def make_read_only(self, paths):
         return [], [(path, f"Litterbox can't do that in {self.name}") for path in paths]

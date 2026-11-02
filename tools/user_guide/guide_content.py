@@ -383,6 +383,11 @@ BLOCKS = [
       "ones, Litterbox asks which to open. Files open in the program Windows uses for them. To use another program "
       "for a file type, add it to settings.yaml:"),
 ("code", ["open_with:", "  .pdf: C:\\Program Files\\Adobe\\Acrobat\\Acrobat.exe"]),
+("p", "If SolidWorks shows a part as read-only when it should be editable (or the other way round), choose "
+      "**Refresh Read State** in the Part menu. Every file from the vault that SolidWorks has open is made writable "
+      "if you have it checked out, and read-only if you don't, without closing it. A file that Check Out updated "
+      "while it was open is loaded again instead, so the old copy can't be saved over the new one. Litterbox asks "
+      "first if that would lose unsaved changes."),
 ("h2", "The details pane"),
 ("table", ["Tab", "Contents"], [
     ["Details", "For the chosen revision: its state, who released it (with a workflow, whoever asked for the "

@@ -19,7 +19,8 @@ from litterbox.user import settings
 
 # The menus beside the everyday buttons: (label, App method). The labels are action_rules.BUTTON_ACTIONS keys where
 # the entry depends on the ticked or highlighted parts. None is a line between entries.
-PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), ("Open PDF", "open_pdf"), None,
+PART_MENU = (("Open", "open_part"), ("Open Drawing", "open_drawing"), ("Open PDF", "open_pdf"),
+             ("Refresh Read State", "refresh_read_state"), None,
              ("References...", "show_references"), ("Details", "show_history"), None,
              ("Generate STEP/PDF", "generate_step_pdf"), ("Save Released BOM", "save_released_bom"),
              ("Update Material", "update_material"),

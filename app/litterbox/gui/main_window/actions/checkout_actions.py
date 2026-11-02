@@ -1,8 +1,9 @@
 """
-checkout_actions.py - Check Out (and, after it, making files SolidWorks already has open writable), Undo Checkout
-and Break Checkout.
+checkout_actions.py - Check Out (and, after it, making files SolidWorks already has open writable), Refresh Read
+State, Undo Checkout and Break Checkout.
 """
 
+import os
 from pathlib import Path
 from tkinter import messagebox
 
@@ -10,6 +11,7 @@ from litterbox import diagnostics
 from litterbox.core import file_types
 from litterbox.cad import solidworks_versions
 from litterbox.cad import cad_programs
+from litterbox.cad import open_documents
 from litterbox.gui.logic import checkin_text
 from litterbox.gui.logic import history_text
 from litterbox.gui.logic import solidworks_text
@@ -20,8 +22,10 @@ from litterbox.vault import config
 
 
 class CheckoutActions:
-    """Check Out (and making files SolidWorks already has open writable), Undo Checkout and Break Checkout. One part of
-    the main window (App)."""
+    """Check Out (and making files SolidWorks already has open writable), Refresh Read State, Undo Checkout and Break
+    Checkout. One part of the main window (App)."""
+
+    stale_in_cad = frozenset()      # keys of open files a check-out updated on disk, but that weren't reloaded
 
     def break_checkout(self):
         """Break Checkout... (Admin and Owner): take a part back from whoever has it checked out."""
@@ -78,6 +82,7 @@ class CheckoutActions:
         if ask and not messagebox.askyesno("Reload in SolidWorks", solidworks_text.reload_unsaved_question(ask),
                                            parent=self):
             reload = [path for path in reload if path not in ask]
+            self._mark_stale(ask, [])
         wanted = switch + reload
         if not wanted:
             self._warn_open_files(changed)
@@ -85,6 +90,7 @@ class CheckoutActions:
 
         def finished(result):
             made, failed = result
+            self._mark_stale([path for path, _why in failed if path in reload], made)
             said = []
             if made:
                 said.append(solidworks_text.writable_done_text(made))
@@ -97,6 +103,71 @@ class CheckoutActions:
 
         self.run_task(lambda: cad_programs.make_writable(wanted, reload), "", on_success=finished, refresh=False,
                       is_refresh=True, label="Making open files writable in SolidWorks")
+
+    def _mark_stale(self, stale, fresh):
+        """Remember the open documents (full paths) that still show an older copy than the file on disk, so Refresh
+        Read State reloads them rather than letting them be saved over it; forget those just loaded again."""
+        self.stale_in_cad = ((set(self.stale_in_cad) | {open_documents.key(p) for p in stale})
+                             - {open_documents.key(p) for p in fresh})
+
+    def refresh_read_state(self):
+        """Refresh Read State (Part menu): make every document from this vault that SolidWorks has open read-only or
+        writable to match its file on disk, which is writable only while you have the part checked out (or it isn't
+        in the vault's records yet, like a file just saved under a new name)."""
+        repo = self.repo()
+        if not repo:
+            return
+
+        def look():
+            found = cad_programs.open_all()
+            if found is None:
+                return None
+            found = [doc for doc in found if solidworks_text.in_vault(repo, doc.path)]
+            writable = {open_documents.key(doc.path): os.access(doc.path, os.W_OK)
+                        for doc in found if os.path.isfile(doc.path)}
+            return found, writable
+
+        self.run_task(look, "", on_success=self._refresh_read_state, refresh=False, is_refresh=True,
+                      label="Looking at what SolidWorks has open")
+
+    def _refresh_read_state(self, looked):
+        if looked is None:
+            self._say(solidworks_text.read_state_unchanged_text(False))
+            return
+        found, writable = looked
+        switch, reload, ask, lock = solidworks_text.read_state_plan(found, writable, self.stale_in_cad)
+        if ask and not messagebox.askyesno("Reload in SolidWorks", solidworks_text.reload_unsaved_question(ask),
+                                           parent=self):
+            reload = [path for path in reload if path not in ask]
+        if not switch + reload + lock:
+            self._say(solidworks_text.read_state_unchanged_text(True))
+            return
+        unsaved = [doc.path for doc in found if doc.unsaved and doc.path in lock]
+
+        def change():
+            made = cad_programs.make_writable(switch + reload, reload) if switch + reload else ([], [])
+            locked = cad_programs.make_read_only(lock) if lock else ([], [])
+            return made, locked
+
+        def finished(result):
+            (made, failed), (locked, lock_failed) = result
+            self._mark_stale([path for path, _why in failed if path in reload], made)
+            said = []
+            if made:
+                said.append(solidworks_text.writable_done_text(made))
+            if locked:
+                said.append(solidworks_text.read_only_done_text(locked, [p for p in unsaved if p in locked]))
+            if failed:
+                said.append(solidworks_text.writable_failed_text(failed))
+            if lock_failed:
+                said.append(solidworks_text.read_only_failed_text(lock_failed))
+            if failed or lock_failed:
+                self._log("SolidWorks: couldn't refresh the read state: " +
+                          "; ".join(f"{p} ({why})" for p, why in failed + lock_failed))
+            self._say(". ".join(said), "warn" if failed or lock_failed else "normal")
+
+        self.run_task(change, "", on_success=finished, refresh=False, is_refresh=True,
+                      label="Refreshing the read state in SolidWorks")
 
     def _older_solidworks_ok(self):
         """Warn, once per org each time Litterbox runs, when this computer's SolidWorks is older than the org's.

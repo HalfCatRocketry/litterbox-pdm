@@ -91,6 +91,27 @@ def make_writable(paths, reload=()):
     return done, failed
 
 
+def open_all():
+    """[OpenDocument] of everything the CAD programs have open; None if none of them is running."""
+    found, running = [], False
+    for program in PROGRAMS:
+        docs = program.open_all()
+        if docs is not None:
+            running = True
+            found += docs
+    return found if running else None
+
+
+def make_read_only(paths):
+    """Make these open documents read-only in their programs, keeping unsaved changes: (done, failed)."""
+    done, failed = [], []
+    for program in for_files(paths):
+        program_done, program_failed = program.make_read_only([path for path in paths if program.owns(path)])
+        done += program_done
+        failed += program_failed
+    return done, failed
+
+
 def watchers(on_change):
     """A watcher (start, stop, snapshot) for every program that can say what the person has open."""
     return [w for w in (program.watcher(on_change) for program in PROGRAMS) if w is not None]

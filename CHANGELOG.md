@@ -2,6 +2,9 @@
 
 ## 1.0.4
 
+- **Refresh Read State** (Part menu, below Open PDF) makes everything from the vault that SolidWorks has open match its file: writable if you have it checked out, read-only if you don't. Use it when SolidWorks shows a part as read-only that you should be able to edit, for example after a Save As from a read-only part.
+- **The Add Person window no longer cuts off its OK button.** On a short screen or with large display scaling, the fields scroll while Cancel and OK stay at the bottom, the long labels wrap instead of running off the right edge, and the window can be resized.
+
 ## 1.0.3
 
 - **Getting the latest no longer trips over a part open in SolidWorks.** Before, any action that gets the latest (Get Latest, Create Part, Check Out, Revise, and others) could fail with "unable to unlink old ..." if a file you had saved but not checked in was open in SolidWorks, even when there was nothing new to get. Now your own changed files are left alone: when nothing is new, nothing is done, and otherwise only the files others changed are updated.

@@ -43,5 +43,11 @@ class SolidWorks(CadProgram):
     def make_writable(self, paths, reload=()):
         return sw_reload.make_writable(paths, reload)
 
+    def open_all(self):
+        return sw_reload.open_all()
+
+    def make_read_only(self, paths):
+        return sw_reload.make_read_only(paths)
+
 
 SOLIDWORKS = SolidWorks()

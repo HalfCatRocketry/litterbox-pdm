@@ -34,17 +34,21 @@ class PersonDialog(modal_dialog.ModalDialog):
         width, height = 520, 700
         self.title("Add Person" if person is None else f"Edit {person.name}")
         window_chrome.place_over(self, parent, width, height)
-        self.resizable(False, False)
+        window_chrome.min_size(self, width, 360)
         self.transient(parent)
         self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)   # scrolls on a short screen
+        body.grid(row=0, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
 
         def label(row, text):
-            ctk.CTkLabel(self, text=text, anchor="w", text_color=theme.MUTED).grid(
+            ctk.CTkLabel(body, text=text, anchor="w", justify="left", wraplength=460, text_color=theme.MUTED).grid(
                 row=row, column=0, sticky="ew", padx=20, pady=(8, 0))
 
         def entry(row, value=""):
-            box = ctk.CTkEntry(self, height=32)
-            box.grid(row=row, column=1 - 1, sticky="ew", padx=20)
+            box = ctk.CTkEntry(body, height=32)
+            box.grid(row=row, column=0, sticky="ew", padx=20)
             box.insert(0, value)
             return box
 
@@ -56,7 +60,7 @@ class PersonDialog(modal_dialog.ModalDialog):
         self.host_entry = entry(5, ", ".join(person.host_names) if person else host_name_hint)
         label(6, "Access")
         self.access_var = tk.StringVar(value=(person.access if person else "member").capitalize())
-        self.access_menu = ctk.CTkOptionMenu(self, variable=self.access_var, values=["Member", "Admin"], width=140,
+        self.access_menu = ctk.CTkOptionMenu(body, variable=self.access_var, values=["Member", "Admin"], width=140,
                                              fg_color=theme.GRAY, button_color=theme.GRAY_HOVER)
         self.access_menu.grid(row=7, column=0, sticky="w", padx=20)
         if person is not None and person.access == "owner":
@@ -67,7 +71,7 @@ class PersonDialog(modal_dialog.ModalDialog):
         label(8, "Roles: pick from the list to add; select one in the box and press Remove to take it off")
         self.all_roles = list(roles)
         self.chosen_roles = list(person.roles) if person else []
-        roles_row = ctk.CTkFrame(self, fg_color="transparent")
+        roles_row = ctk.CTkFrame(body, fg_color="transparent")
         roles_row.grid(row=9, column=0, sticky="ew", padx=20)
         roles_row.columnconfigure(1, weight=1)
         pick_box = ctk.CTkFrame(roles_row, fg_color="transparent")
@@ -84,14 +88,14 @@ class PersonDialog(modal_dialog.ModalDialog):
         self.role_tree.grid(row=0, column=1, sticky="ew", padx=(12, 0))
         self._show_roles()
         label(10, "Signing keys (optional): one public key per line, given to you by the person")
-        self.keys_box = ctk.CTkTextbox(self, height=90, fg_color=theme.BG_PANEL)
-        self.keys_box.grid(row=11, column=0, sticky="ew", padx=20)
+        self.keys_box = ctk.CTkTextbox(body, height=90, fg_color=theme.BG_PANEL)
+        self.keys_box.grid(row=11, column=0, sticky="ew", padx=20, pady=(0, 8))
         if person:
             self.keys_box.insert("1.0", "\n".join(person.signing_keys))
         self.problem = ctk.CTkLabel(self, text="", text_color=theme.ERROR, anchor="w", justify="left", wraplength=470)
-        self.problem.grid(row=12, column=0, sticky="ew", padx=20, pady=(8, 0))
+        self.problem.grid(row=1, column=0, sticky="ew", padx=20, pady=(8, 0))
         buttons = ctk.CTkFrame(self, fg_color="transparent")
-        buttons.grid(row=13, column=0, sticky="ew", padx=20, pady=(8, 18))
+        buttons.grid(row=2, column=0, sticky="ew", padx=20, pady=(8, 18))
         buttons.columnconfigure((0, 1), weight=1, uniform="c")
         release_button.ReleaseButton(buttons, text="Cancel", height=38, fg_color=theme.GRAY, hover_color=theme.GRAY_HOVER,
                       command=self._cancel).grid(row=0, column=0, sticky="ew", padx=(0, 6))
