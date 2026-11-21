@@ -33,6 +33,38 @@ class DownloadButtons(unittest.TestCase):
         self.app.download_all()
         self.assertEqual(self.tasks, [])
 
+    def _repair(self, found):
+        repaired = []
+        replace(self, self.gui.file_repair, "find", lambda repo: found)
+        replace(self, self.gui.file_repair, "repair",
+                lambda repo, files: repaired.append(files) or self.gui.file_repair.RepairResult(repaired=list(files)))
+        self.app._popup_parent = lambda: None
+        self.app.run_task = lambda work, done, on_success=None, **kw: self.tasks.append(
+            (work, done, dict(kw, on_success=on_success)))
+        self.app.repair_files()
+        work, _done, kw = self.tasks.pop(0)               # first it looks, without changing anything
+        self.assertEqual((kw["label"], kw["refresh"]), ("Looking for damaged files", False))
+        kw["on_success"](work())
+        return repaired
+
+    def test_repair_files_lists_them_asks_then_repairs_in_the_background(self):
+        self.assertEqual(self._repair(["cad/A.SLDPRT"]), [])        # nothing until the question is answered
+        self.assertTrue(any(c[0] == "askyesno" and "cad/A.SLDPRT" in c[1][1] for c in self.box.calls))
+        work, _done, kw = self.tasks.pop(0)
+        self.assertEqual(kw["label"], "Repairing files")
+        kw["on_success"](work())
+        self.assertTrue(any(c[0] == "showinfo" and "Repaired 1 file" in c[1][1] for c in self.box.calls))
+
+    def test_repair_files_with_nothing_to_repair_just_says_so(self):
+        self._repair([])
+        self.assertEqual(self.tasks, [])
+        self.assertTrue(any(c[0] == "showinfo" and "Nothing needs repairing" in c[1][1] for c in self.box.calls))
+
+    def test_saying_no_to_repair_changes_nothing(self):
+        self.box.answer = False
+        self._repair(["cad/A.SLDPRT"])
+        self.assertEqual(self.tasks, [])
+
     def test_the_setting_is_applied_once_per_vault(self):
         applied = []
         replace(self, self.gui.downloads, "apply_mode", lambda repo, on_demand: applied.append((repo, on_demand)))

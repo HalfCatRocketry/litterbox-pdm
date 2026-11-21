@@ -16,7 +16,8 @@ STATUS = {
     "mine":      ("pencil",   "Checked out by you", "You can change it. Check it in when you are done."),
     "theirs":    ("padlock",  "Checked out by someone else", "Someone else is changing it. You can open it to look."),
     "unclaimed": ("warning",  "Changed, not checked out", "Its files were changed on this computer without "
-                                                          "checking it out."),
+                                                          "checking it out. If you didn't change them, Vault > "
+                                                          "Repair Files puts back the vault's copy."),
     "stray":     ("warning",  "Needs attention", "Its files don't match its record (see Status in the details)."),
     "released":  ("check",    "Released", "Frozen. Revise it to make a new revision."),
     "cots":      ("nut",      "COTS", "A purchased part."),

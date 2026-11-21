@@ -125,6 +125,7 @@ class Menus:
         menu.add_command(label="Refresh", accelerator="F5", command=self.refresh)
         menu.add_command(label="Get Latest", command=self.get_latest)
         menu.add_command(label="Download All...", command=self.download_all)
+        menu.add_command(label="Repair Files...", command=self.repair_files)
         menu.add_command(label="Vault Size...", command=self.show_vault_size)
         menu.add_command(label="Update file rules...",
                          **menu_bar.entry_options(self.file_rules_outdated, self.update_file_rules))

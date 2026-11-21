@@ -136,7 +136,8 @@ BLOCKS = [
 ("p", "Litterbox **downloads on demand**. A new copy gets every part record and its history, and leaves the CAD "
       "files on the host until they are needed. Checking out a part downloads its files. Opening a file downloads "
       "what it needs first (for an assembly, every part it uses). Vault > Download All... gets everything, and "
-      "`download: all` in settings.yaml keeps it that way."),
+      "`download: all` in settings.yaml keeps it that way. If a download was cut off and left a file damaged, "
+      "Vault > Repair Files... puts back the vault's copy (see Problems)."),
 ("p", "If your team uses **hidden projects**, the parts of a hidden project you are not a member of are left out "
       "of your copy (see Projects)."),
 ("tip", "Don't move or rename the vault folder. Every computer keeps vaults under C:\\Litterbox, so SolidWorks "
@@ -908,6 +909,12 @@ BLOCKS = [
     "If an upload is refused because someone else uploaded first, Litterbox gets their changes and tries again. If "
     "that fails, your commits are kept and nothing is left half done; try again later.",
     "If Git LFS's lock cache is damaged, Litterbox moves it aside and continues.",
+    "If SolidWorks says a vault file is damaged, or a part you haven't touched shows **Modified but not checked "
+    "out**, use **Vault > Repair Files...**. It lists every CAD file and document on your computer that doesn't "
+    "match the vault's copy and that you don't have checked out, and after you say yes it puts back the vault's "
+    "copy and downloads it again. Changes in those files are lost; files you have checked out are never touched "
+    "(Undo Checkout is for those). Close the files in SolidWorks first. If nothing is listed, the file may just "
+    "not be downloaded yet: open it from Litterbox, or use Download All.",
     "An action on a part in a restricted project you are not a member of is refused, with the name of the "
     "project's Lead to ask.",
 ]),

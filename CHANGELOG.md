@@ -6,6 +6,7 @@
 - **Clearer reasons when Litterbox can't tell who you are.** If your account can't lock files in the vault (it has Read access, not Write), Litterbox now says so and what to ask for. It also says when Git isn't signed in, or when the host can't find the repository for your account (an invitation not yet accepted, or a different account signed in).
 - **Which name to add for a teammate is clearer.** The Add Person window asks for their user name on the Git host (on GitHub, the login in github.com/<name>, not their display name or email). For someone not on the list yet, Who am I? shows the exact name an Admin should add.
 - **The user guide covers joining a team in more detail**: accepting the invitation, the Write role, organizations that have to approve Git Credential Manager, and what to do when sign-in windows keep coming back.
+- **Repair Files** (Vault menu) puts right CAD files and documents that went wrong on your computer, for example when a download or a sync was cut off part-way. It lists every file that doesn't match the vault's copy and that you don't have checked out, and after you say yes it puts back the vault's copy and downloads it again. Before, nothing in Litterbox could: Download All only fills in files that aren't downloaded yet, and Undo Checkout needs the part checked out. Files you have checked out are never touched.
 
 ## 1.0.4
 

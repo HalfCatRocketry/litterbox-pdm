@@ -7,7 +7,6 @@ usable.
 import time
 import tkinter.font as tkfont
 from concurrent.futures import ThreadPoolExecutor
-from tkinter import messagebox
 
 from litterbox import diagnostics
 from litterbox.core.part_number import parse as parse_pn
@@ -16,7 +15,6 @@ from litterbox.git import remote
 from litterbox.gui import scaling
 from litterbox.gui.logic import action_rules
 from litterbox.gui.logic import home_data
-from litterbox.gui.logic import download_text
 from litterbox.gui.logic import folder_text
 from litterbox.gui.logic import job_text
 from litterbox.gui.logic import list_columns
@@ -429,10 +427,3 @@ class PartsList:
 
         self.run_task(lambda: get_latest.get_latest(repo), "Downloaded the latest changes", label="Getting the latest",
                       on_success=got)
-
-    def download_all(self):
-        """Download every CAD file of the vault, not just the ones you use. Get Latest then keeps them all current."""
-        if not messagebox.askyesno("Download All", download_text.DOWNLOAD_ALL_QUESTION, parent=self):
-            return
-        repo = self.repo()
-        self.run_task(lambda: downloads.download_all(repo), "Downloaded every CAD file", label="Downloading everything")
