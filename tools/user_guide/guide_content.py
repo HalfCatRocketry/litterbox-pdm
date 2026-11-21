@@ -695,6 +695,11 @@ BLOCKS = [
     "at the time are upgraded when they are checked in.",
     "**Vault > Vault Size...** shows how much the vault uses on the host (its history and every version of every "
     "Git LFS file) and how much is downloaded on your computer.",
+    "**Vault > Repair Files...** puts back the vault's copy of any CAD file or document on your computer that "
+    "doesn't match it and that you don't have checked out: a file damaged by a download or sync that was cut off, "
+    "deleted by mistake, or changed without being checked out. It lists the files and asks first, because changes "
+    "in them are lost. Files you have checked out are never touched, and nor is the team's Toolbox. Anyone can use "
+    "it: it changes only your computer, never the vault.",
     "Some features raise the oldest Litterbox version the vault accepts (workflows, projects, documents, the "
     "Toolbox rule, and others). Litterbox tells anyone on an older version to update before they upload anything.",
 ]),
@@ -853,6 +858,12 @@ BLOCKS = [
       "exactly the files it needs: those you open or check out, and what an assembly uses. Files you already have "
       "stay downloaded at each Get Latest. A hidden project's files are left out of the copies of people who aren't "
       "in it (Git's sparse checkout), so they are never downloaded."),
+("p", "Download All and opening a file only download files that are still pointers; a file that is on disk but "
+      "wrong is left alone. **Repair Files** is for those: it finds them with Git (the files in cad and documents "
+      "that differ from the last commit, less those you hold the lock on), puts back the committed version, "
+      "downloads it, and makes it read-only again. It does what `git restore --source=HEAD -- <files>` followed by "
+      "`git lfs pull` would, without touching your checkouts. A file SolidWorks has open can't be replaced: Repair "
+      "names it, repairs the rest, and can be run again after you close it."),
 ("h2", "The job queue"),
 ("p", "Everything that touches the vault or SolidWorks runs in the **background**, so the window never freezes: "
       "you click, the work becomes a **job** in a queue, and you can carry on browsing, ticking, and queueing more."),
