@@ -45,6 +45,37 @@ class TestTeamText(unittest.TestCase):
         self.assertIn("not on this vault's team list", team_text.who_am_i_text(team_identity.resolve(self.d, "stranger")))
         self.assertIn("no team list yet", team_text.who_am_i_text(team_identity.Identity(team_identity.LEGACY, "x")))
 
+    def test_who_am_i_says_which_name_to_add(self):
+        text = team_text.who_am_i_text(team_identity.resolve(self.d, "cubesat-cy"))
+        self.assertIn("with 'cubesat-cy' as your user name on the host", text)
+        self.assertNotIn("as your user name", team_text.who_am_i_text(team_identity.resolve(self.d, "alexs")))
+
+
+class TestProbeFailures(unittest.TestCase):
+    """Why the host couldn't say who you are: only a busy lock is worth waiting for, and each reason says what to do."""
+
+    def test_only_a_busy_lock_is_waited_for(self):
+        self.assertTrue(team_identity.lock_is_busy("Locking .litterbox/whoami failed: Lock exists"))
+        self.assertTrue(team_identity.lock_is_busy("Lock failed: .litterbox/whoami already locked by Alex"))
+        for other in ("error: 403 Forbidden", "fatal: Authentication failed", "Could not resolve host: github.com"):
+            self.assertFalse(team_identity.lock_is_busy(other))
+
+    def test_reasons(self):
+        cases = {"Locking failed: You must have push access to verify locks (403)": "Write role",
+                 "fatal: Authentication failed for 'https://github.com/x/y.git/'": "isn't signed in",
+                 "remote: Repository not found.": "accepted the invitation",
+                 "fatal: unable to access: Could not resolve host: github.com": "Could not resolve host"}
+        for error, words in cases.items():
+            self.assertIn(words, team_identity.probe_failure_text(error), error)
+        self.assertEqual(team_identity.probe_failure_text(""), "Could not ask the host who you are (offline?).")
+
+    def test_a_reason_that_is_a_sentence_reads_as_one(self):
+        who = team_identity.Identity(team_identity.UNVERIFIED, detail=team_identity.HOST_NOT_REACHED)
+        self.assertIn("signed in as. Git couldn't reach", who.message())
+        self.assertTrue(who.message().endswith("You can still look at parts and open files."))
+        short = team_identity.Identity(team_identity.UNVERIFIED, detail="offline?").message()
+        self.assertIn("signed in as (offline?). Connect to the internet", short)
+
     def test_person_form(self):
         form = {"name": " Cy  Ng ", "email": "cy@x.com", "host_names": "cyng, Cy Ng", "roles": "Quality",
                 "keys": "ssh-ed25519 AAA, with comma\nssh-ed25519 BBB", "access": "Member"}

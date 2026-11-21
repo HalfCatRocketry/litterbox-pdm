@@ -328,6 +328,64 @@ class TestIdentityCache(TeamFixture, unittest.TestCase):
         with self.user("Bea"), mock.patch.object(team_identity, "probe_host_name", side_effect=LitterboxError("offline")):
             self.assertEqual(team_identity.current(self.b, refresh=True).state, team_identity.UNVERIFIED)
 
+    def test_a_failed_check_is_not_tried_again_at_every_refresh(self):
+        team_identity.forget_identity(self.b)
+        with self.user("Bea"), mock.patch.object(team_identity, "probe_host_name",
+                                                 side_effect=LitterboxError("not signed in")) as probe:
+            for _ in range(3):
+                who = team_identity.current(self.b)
+                self.assertEqual(who.state, team_identity.UNVERIFIED)
+                self.assertEqual(who.detail, "not signed in")       # the reason is remembered too
+        probe.assert_called_once()
+
+    def test_who_am_i_asks_even_after_a_failure(self):
+        team_identity.forget_identity(self.b)
+        with self.user("Bea"), mock.patch.object(team_identity, "probe_host_name", side_effect=LitterboxError("x")):
+            team_identity.current(self.b)
+        with self.user("Bea"):
+            self.assertEqual(team_identity.current(self.b, refresh=True).state, team_identity.OK)
+        self.assertIsNone(team_identity.recent_probe_failure(self.b))   # a good answer forgets the failure
+        self.assertEqual(team_identity.current(self.b).state, team_identity.OK)
+
+    def test_a_failure_long_ago_is_tried_again(self):
+        team_identity.forget_identity(self.b)
+        long_ago = time.time() - team_identity.PROBE_RETRY_AFTER - 10
+        team_identity.cache_path(self.b).write_text(f'{{"failed_at": {long_ago}, "failure": "x"}}')
+        with self.user("Bea"):
+            self.assertEqual(team_identity.current(self.b).state, team_identity.OK)
+
+    def test_a_failure_keeps_a_name_remembered_before(self):
+        with self.user("Bea"):
+            team_identity.current(self.b, refresh=True)
+        old = time.time() - team_identity.IDENTITY_MAX_AGE - 10
+        team_identity.cache_path(self.b).write_text(f'{{"host_name": "Bea", "checked_at": {old}}}')
+        with self.user("Bea"), mock.patch.object(team_identity, "probe_host_name", side_effect=LitterboxError("x")):
+            self.assertEqual(team_identity.current(self.b).state, team_identity.OK)
+        self.assertEqual(team_identity.read_cache(self.b)[0], "Bea")
+
+    def test_a_refused_lock_is_not_tried_again(self):
+        refused = LitterboxError("Command failed: git lfs lock .litterbox/whoami\n\nerror: 403 Forbidden")
+        with self.user("Bea"), mock.patch.object(team_identity.lfs_locks, "run_lfs", side_effect=refused) as run:
+            with self.assertRaises(team_model.PeopleError) as ctx:
+                team_identity.probe_host_name(self.b)
+        self.assertEqual(run.call_count, 1)
+        self.assertIn("Write role", str(ctx.exception))
+
+    def test_a_busy_whoami_lock_is_waited_for(self):
+        with self.user("Alex"):
+            git(self.a, "lfs", "lock", layout.WHOAMI_FILE)
+        try:
+            with self.user("Bea"), mock.patch.object(team_identity.time, "sleep"), \
+                    mock.patch.object(team_identity.lfs_locks, "run_lfs",
+                                      wraps=team_identity.lfs_locks.run_lfs) as run:
+                with self.assertRaises(team_model.PeopleError) as ctx:
+                    team_identity.probe_host_name(self.b, attempts=3)
+            self.assertEqual(run.call_count, 3)
+            self.assertIn("Could not ask the host who you are", str(ctx.exception))
+        finally:
+            with self.user("Alex"):
+                git(self.a, "lfs", "unlock", "--force", layout.WHOAMI_FILE)
+
     def test_changing_account_is_noticed_by_who_am_i(self):
         with self.user("Bea"):
             self.assertEqual(team_identity.current(self.b).state, team_identity.OK)

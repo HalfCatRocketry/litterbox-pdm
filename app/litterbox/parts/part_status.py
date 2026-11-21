@@ -75,12 +75,13 @@ class VaultState:
     modified: set               # repository.get_modified
 
 
-def read_state(repo):
-    """Look at the vault once: its files, the lock list (from the server) and git's list of changes."""
+def read_state(repo, locks=True):
+    """Look at the vault once: its files, the lock list (from the server) and git's list of changes. locks=False
+    leaves the server alone and shows no locks, as when it can't be reached."""
     repository.validate_repo(repo)
     index = record_files.cad_index(repo)
     with ThreadPoolExecutor(max_workers=2) as pool:      # two independent git calls: do them at the same time
-        locks_job = pool.submit(lfs_locks.get_locks, repo)
+        locks_job = pool.submit(lfs_locks.get_locks if locks else (lambda _repo: {}), repo)
         modified_job = pool.submit(repository.get_modified, repo)
         return VaultState(index, locks_job.result(), modified_job.result())
 

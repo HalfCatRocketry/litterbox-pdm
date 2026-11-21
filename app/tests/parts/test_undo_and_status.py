@@ -90,6 +90,12 @@ class UndoAndStatus(EngineFixture, unittest.TestCase):
             self.assertEqual(docs, part_status.get_status(self.a, documents=True))
             self.assertEqual(rows[0].kind, "mine")
 
+    def test_without_locks_the_server_is_not_asked(self):
+        """While git can't reach the host, the list is shown as when offline: no lock list, so no sign-in window."""
+        with mock.patch.object(lfs_locks, "get_locks", side_effect=AssertionError("asked the server")):
+            state = part_status.read_state(self.a, locks=False)
+        self.assertEqual(state.locks, {})
+
 
 if __name__ == "__main__":
     unittest.main()

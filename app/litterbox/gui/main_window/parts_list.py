@@ -291,15 +291,34 @@ class PartsList:
                 except LitterboxError as e:           # a damaged team file must not hide the parts
                     return team_identity.Identity(team_identity.UNVERIFIED, detail=str(e).splitlines()[0])
 
+            def offline_identity(repo):                   # the host couldn't be reached: only what is remembered
+                try:
+                    who = team_identity.current(repo, probe=False)
+                except LitterboxError as e:
+                    return team_identity.Identity(team_identity.UNVERIFIED, detail=str(e).splitlines()[0])
+                if who.state == team_identity.UNVERIFIED and not who.detail:
+                    who.detail = team_identity.HOST_NOT_REACHED
+                return who
+
             started = time.monotonic()
             self._use_download_setting(repo, on_demand)
+            # Until a fetch from this copy has worked (a new teammate's computer, or a sign-in that failed), the fetch
+            # goes first and alone: git may need a sign-in, and three commands asking at once open three sign-in
+            # windows. Once git has a sign-in the host accepts, the others reuse it, so they run side by side.
+            # If that first fetch fails too, this refresh asks the host nothing more (as when offline): the parts are
+            # shown without the lock list, and who you are comes from what is remembered.
+            reached = remote.has_reached_host(repo)
+            behind = None if reached else remote.commits_behind(repo)
+            online = reached or remote.has_reached_host(repo)
             with ThreadPoolExecutor(max_workers=3) as pool:      # the list, "who am I" and the server are separate
-                who_job = pool.submit(find_out_who)
-                behind_job = pool.submit(remote.commits_behind, repo)
-                state = part_status.read_state(repo)           # one lock list and one git status for both
+                who_job = pool.submit(find_out_who if online else lambda: offline_identity(repo))
+                behind_job = pool.submit(remote.commits_behind, repo) if reached else None
+                state = part_status.read_state(repo, locks=online)     # one lock list and one git status for both
                 rows = part_status.get_status(repo, state=state)
                 docs = part_status.get_status(repo, documents=True, state=state)
-                who, behind = who_job.result(), behind_job.result()
+                who = who_job.result()
+                if behind_job is not None:
+                    behind = behind_job.result()
             if project_visibility.apply(repo, who):           # a hidden project's parts came or went
                 rows = part_status.get_status(repo)
             folders = home_data.load(repo)                    # Home's folders, projects and ECO titles

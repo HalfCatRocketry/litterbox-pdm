@@ -68,6 +68,9 @@ def who_am_i_text(identity):
                      + (f", {', '.join(p.roles)}" if p.roles else "") + ".")
     else:
         lines.append(identity.message())
+    if identity.state == "not_listed" and identity.host_name:
+        lines.append(f"An Admin adds you on the Team screen (Add Person, or Edit for an entry that is already there), "
+                     f"with '{identity.host_name}' as your user name on the host. Then press Who am I? again.")
     return "\n\n".join(lines)
 
 

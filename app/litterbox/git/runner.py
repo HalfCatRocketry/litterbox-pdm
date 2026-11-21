@@ -5,6 +5,7 @@ Every git command Litterbox runs goes through run(), so a test can replace runne
 failed command raises LitterboxError; a commit with nothing in it raises NothingToSaveError.
 """
 
+import os
 import subprocess
 import time
 
@@ -33,6 +34,10 @@ def run(command, repo, quiet=False):
             text=True,
             encoding="utf-8",
             errors="replace",
+            # Git never waits for a password typed on a console nobody can see: a sign-in comes from the Git
+            # credential manager's own window, or the command fails.
+            stdin=subprocess.DEVNULL,
+            env=dict(os.environ, GIT_TERMINAL_PROMPT="0"),
             # Stops a black console window flashing up on Windows
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )

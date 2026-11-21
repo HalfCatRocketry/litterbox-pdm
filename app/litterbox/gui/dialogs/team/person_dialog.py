@@ -56,7 +56,8 @@ class PersonDialog(modal_dialog.ModalDialog):
         self.name_entry = entry(1, person.name if person else "")
         label(2, "Email")
         self.email_entry = entry(3, person.email if person else "")
-        label(4, "Names the host may report for this person (commas between). Use Who am I? on their computer.")
+        label(4, "Their user name on the Git host (on GitHub, the login in github.com/<name>, not their display "
+                 "name or email). Commas between, if more than one. Who am I? on their computer shows it.")
         self.host_entry = entry(5, ", ".join(person.host_names) if person else host_name_hint)
         label(6, "Access")
         self.access_var = tk.StringVar(value=(person.access if person else "member").capitalize())

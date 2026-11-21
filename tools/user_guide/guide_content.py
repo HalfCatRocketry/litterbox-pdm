@@ -9,7 +9,7 @@
 House style: plain and matter-of-fact, and lists of three or more take a comma before the last "and" or "or".
 """
 
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 BLOCKS = [
 ("h1", "Foreword"),                     # the owner's words: keep them as written
@@ -78,7 +78,8 @@ BLOCKS = [
 ("ul", [
     "A Windows computer.",
     "**Git for Windows** (git-scm.com), which includes Git LFS. Install it with the default options.",
-    "An account on your team's Git host with access to the vault's repository. Your team lead adds you.",
+    "An account on your team's Git host with **Write** access to the vault's repository. Your team lead adds you. "
+    "Litterbox locks files to check them out, and the host only lets accounts with Write access lock files.",
     "**SolidWorks**, to model. Without it you can look at parts, open PDFs, run workflows, and manage purchasing "
     "and documents. Anything that reads or writes SolidWorks files needs it.",
 ]),
@@ -111,11 +112,26 @@ BLOCKS = [
 ]),
 ("h2", "Joining your team's vault"),
 ("ol", [
+    "Accept the invitation to the vault's repository that the host sent you (on GitHub, by email or on the "
+    "repository's page).",
     "Get the vault's repository URL from your team lead: the https address from the host's Clone button.",
-    "In Litterbox, choose **File > Add org...** and paste the URL. Litterbox copies the vault into "
-    "C:\\Litterbox\\<repository name> in the background and opens it.",
-    "Your team lead adds you to the team list (Team screen > Add Person) with your host user name. Until then, you "
-    "can look at everything but can't change anything.",
+    "In Litterbox, choose **File > Add org...** and paste the URL. Git may open a sign-in window: sign in with the "
+    "account that was invited. Litterbox copies the vault into C:\\Litterbox\\<repository name> in the background "
+    "and opens it.",
+    "On the Team screen, press **Who am I?**. It shows the user name the host knows you by (on GitHub, your login, "
+    "as in github.com/<name>). Send it to your team lead.",
+    "Your team lead adds you to the team list (Team screen > Add Person) with that user name. Then press Who am I? "
+    "again. Until then, you can look at everything but can't change anything.",
+]),
+("p", "If sign-in windows keep coming back, or Who am I? says the host won't let your account lock files:"),
+("ul", [
+    "Check that you accepted the invitation, and that your role on the repository is **Write** or higher. Read "
+    "access is enough to copy the vault, but not to check anything out.",
+    "If the repository belongs to a GitHub organization that restricts third-party apps, an owner of the "
+    "organization approves **Git Credential Manager** (the organization's Settings > Third-party access). Until "
+    "then, its sign-ins are refused.",
+    "Make sure Git is signed in with the invited account, not another one you also have. To sign in again, remove "
+    "the git:https://github.com entries in Windows Credential Manager (Windows credentials), then press Who am I?.",
 ]),
 ("p", "Litterbox **downloads on demand**. A new copy gets every part record and its history, and leaves the CAD "
       "files on the host until they are needed. Checking out a part downloads its files. Opening a file downloads "
@@ -168,7 +184,11 @@ BLOCKS = [
 ]),
 ("p", "Then set up the team on the **Team** screen:"),
 ("ul", [
-    "**Add Person** for each member: name, email, user name(s) on the Git host, access level, and roles.",
+    "On the Git host, invite each member to the vault's repository with the **Write** role (on GitHub: the "
+    "repository's Settings > Collaborators and teams). Read access isn't enough to check parts out.",
+    "**Add Person** for each member: name, email, user name(s) on the Git host, access level, and roles. The user "
+    "name is the one the host signs them in as: on GitHub, their login (as in github.com/<name>), not their display "
+    "name or email. Who am I? on their computer shows it.",
     "**Roles...** for the jobs people do (Responsible Engineer, Manufacturing, Quality, Manager, Chief, and so on). "
     "Workflows ask for sign-offs by role. **Add the standard roles** adds a common set.",
     "**Part Workflows...** and **Doc Workflows...** if actions need sign-offs (see Sign-off workflows and ECOs).",
@@ -626,7 +646,8 @@ BLOCKS = [
 ("p", "Team > **Roles...** lists the roles the org uses. A role ticked **Superuser** may sign any sign-off; a "
       "role ticked **Team folders** may change the Team folders in Home."),
 ("p", "Litterbox identifies you by the account you are signed in to on the Git host, matched against each "
-      "person's host user names. **Who am I?** checks it. An Admin can require **signed commits** (Vault "
+      "person's host user names (on GitHub, the login; capitals don't matter). **Who am I?** checks it, and shows "
+      "the name to add for someone who isn't on the list yet. An Admin can require **signed commits** (Vault "
       "Settings); each person then sets up a signing key with Signing..., and Litterbox refuses uploads that aren't "
       "signed by a key on the team list."),
 ("p", "When someone can't check a part in, an Admin can **Break Checkout** (Lifecycle menu). That person's changes "

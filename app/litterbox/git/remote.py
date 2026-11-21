@@ -181,11 +181,27 @@ def _abort_rebase(repo):
             diagnostics.LOG(f"WARNING: could not undo an unfinished sync: {e}\n{quit_error}")
 
 
+REACHED_MARK = "litterbox-reached-host"         # in .git: a fetch from this copy has worked at least once
+
+
+def has_reached_host(repo):
+    """True once a fetch from this copy has worked, so git has a sign-in for the host that the host accepts."""
+    return (Path(repo) / ".git" / REACHED_MARK).is_file()
+
+
+def _mark_reached(repo):
+    try:
+        (Path(repo) / ".git" / REACHED_MARK).touch()
+    except OSError:
+        pass
+
+
 def commits_behind(repo):
     """How many changes the vault's server has that this copy hasn't got yet (Get Latest would bring them), after a
     quick fetch that changes no files. None if that can't be told: offline, or no server to compare with."""
     try:
         runner.run(["git", "fetch", "--quiet"], repo, quiet=True)
+        _mark_reached(repo)
         return int(runner.run(["git", "rev-list", "--count", "HEAD..@{upstream}"], repo, quiet=True).strip() or 0)
     except (LitterboxError, ValueError):
         return None

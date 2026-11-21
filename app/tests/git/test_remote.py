@@ -33,6 +33,15 @@ class Behind(TwoUserVault, unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             self.assertIsNone(remote.commits_behind(Path(folder)))
 
+    def test_a_working_fetch_is_remembered(self):
+        """The list's refresh asks the host one thing at a time until a fetch has worked (one sign-in window)."""
+        (self.b / ".git" / remote.REACHED_MARK).unlink(missing_ok=True)
+        with mock.patch.object(runner, "run", side_effect=LitterboxError("Authentication failed")):
+            self.assertIsNone(remote.commits_behind(self.b))
+        self.assertFalse(remote.has_reached_host(self.b))
+        self.assertEqual(remote.commits_behind(self.b), 0)
+        self.assertTrue(remote.has_reached_host(self.b))
+
 
 @SKIP_ON_WINDOWS
 class Sync(TwoUserVault, unittest.TestCase):

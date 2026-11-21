@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5
+
+- **Joining a team no longer brings up sign-in windows over and over.** On a computer where Git wasn't signed in to the host yet, every refresh of the list asked the host three things at once, each able to open its own sign-in window, and Who am I? tried up to five times more when its check failed. Now, until Git has a sign-in the host accepts, Litterbox asks one thing first and waits for it. Who am I? tries again only when someone else's check is in its way. And after a check fails, the list waits ten minutes before checking again (Who am I? still checks straight away).
+- **Clearer reasons when Litterbox can't tell who you are.** If your account can't lock files in the vault (it has Read access, not Write), Litterbox now says so and what to ask for. It also says when Git isn't signed in, or when the host can't find the repository for your account (an invitation not yet accepted, or a different account signed in).
+- **Which name to add for a teammate is clearer.** The Add Person window asks for their user name on the Git host (on GitHub, the login in github.com/<name>, not their display name or email). For someone not on the list yet, Who am I? shows the exact name an Admin should add.
+- **The user guide covers joining a team in more detail**: accepting the invitation, the Write role, organizations that have to approve Git Credential Manager, and what to do when sign-in windows keep coming back.
+
 ## 1.0.4
 
 - **Refresh Read State** (Part menu, below Open PDF) makes everything from the vault that SolidWorks has open match its file: writable if you have it checked out, read-only if you don't. Use it when SolidWorks shows a part as read-only that you should be able to edit, for example after a Save As from a read-only part.
